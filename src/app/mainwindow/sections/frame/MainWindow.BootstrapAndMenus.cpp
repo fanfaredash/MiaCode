@@ -31,6 +31,7 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
+#include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -366,6 +367,9 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         UiText::text(QStringLiteral("menu.bpm_latency")),
         &owner_);
     connect(owner_.latencyDetectorAction_, &QAction::triggered, &owner_, [this]() {
+        miacode::latency::appendLatencyDiagnosticPhase(
+            QStringLiteral("action_triggered"),
+            QStringLiteral("source=tools_menu"));
         owner_.switchToLatencyField();
     });
     editMenu->addAction(owner_.latencyDetectorAction_);
@@ -494,6 +498,13 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         QKeySequence(Qt::CTRL | Qt::Key_Q));
     connect(owner_.transformClearCompleteElementsAction_, &QAction::triggered, &owner_, &MainWindow::onClearCompleteElementsSelection);
     transformMenu->addAction(owner_.transformClearCompleteElementsAction_);
+    owner_.transformResetTapNotesAction_ = new QAction(UiText::text(QStringLiteral("action.transform.reset_tap_notes")), &owner_);
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformResetTapNotesAction_,
+        QStringLiteral("transform.reset_tap_notes"),
+        QKeySequence(Qt::CTRL | Qt::Key_W));
+    connect(owner_.transformResetTapNotesAction_, &QAction::triggered, &owner_, &MainWindow::onResetTapNotesSelection);
+    transformMenu->addAction(owner_.transformResetTapNotesAction_);
     transformMenu->addSeparator();
 
     auto* moreTransformMenu = transformMenu->addMenu(UiText::text(QStringLiteral("action.transform.more")));

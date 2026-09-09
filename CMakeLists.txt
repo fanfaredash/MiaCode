@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "0")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta.15")
+set(MIACODE_VERSION_PRERELEASE "alpha.18")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -43,7 +43,7 @@ if (MSVC)
     set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
         "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
     )
-    add_compile_options(/MP)
+    # Build concurrency is owned by cmake --build --parallel (at most four jobs).
 endif()
 
 set(CMAKE_AUTOMOC ON)
@@ -369,6 +369,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/net/NetBatchUploadDialog.cpp
     src/tools/media/PvBatchCompressionScanner.h
     src/tools/media/PvBatchCompressionScanner.cpp
+    src/tools/media/PvCompressionPolicy.h
+    src/tools/media/PvCompressionPolicy.cpp
     src/tools/media/PvBatchCompressionWorker.h
     src/tools/media/PvBatchCompressionWorker.cpp
     src/tools/media/PvBatchCompressionDialog.h
@@ -1431,6 +1433,22 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/timeline
     )
 
+    miacode_add_dev_tool(app_background_spec TEST
+        SOURCES
+            src/tools/ui/AppBackgroundSpec.cpp
+            src/app/ui/AppBackgroundSettings.cpp
+            src/app/ui/AppBackgroundPainter.cpp
+            src/common/AdoptedWidgetCoordinates.cpp
+            ${_miacode_log_core}
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+        INCLUDES src src/common
+    )
+
+    if (TARGET Qt6::QOffscreenIntegrationPlugin)
+        set_tests_properties(app_background_spec font_combo_width_spec PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>")
+    endif()
+
     miacode_add_dev_tool(plain_code_editor_spec TEST
         SOURCES
             src/tools/editor/PlainCodeEditorSpec.cpp
@@ -1540,6 +1558,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/scene/PreviewChartReviewLayerState.cpp
             src/core/scene/PreviewHeadLayerState.h
             src/core/scene/PreviewHeadLayerState.cpp
+            src/core/scene/PreviewJudgeEffectLayerState.h
+            src/core/scene/PreviewJudgeEffectLayerState.cpp
             src/core/scene/PreviewMarkerDrawOrder.h
             src/core/scene/PreviewMarkerDrawOrder.cpp
             src/core/scene/PreviewAnimatedSpriteHelpers.h
@@ -1553,6 +1573,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/scene/PreviewSceneMath.cpp
             src/core/scene/PreviewSkinSelectors.h
             src/core/scene/PreviewSkinSelectors.cpp
+            src/core/scene/PreviewTouchJudgeLayerState.h
+            src/core/scene/PreviewTouchJudgeLayerState.cpp
             src/common/MuriTypes.h
             src/common/MuriTypes.cpp
             src/timeline/TimelineData.h
@@ -1900,6 +1922,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/preview/PreviewMediaCacheStampSpec.cpp
             src/common/FileContentStamp.h
             src/common/ChartAssetPaths.h
+            src/common/ChartMediaImport.h
         LIBS Qt6::Core
         INCLUDES src src/common
     )
@@ -2023,6 +2046,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/net/NetUploadDiagnostics.cpp
             src/tools/media/PvBatchCompressionScanner.h
             src/tools/media/PvBatchCompressionScanner.cpp
+            src/tools/media/PvCompressionPolicy.h
+            src/tools/media/PvCompressionPolicy.cpp
             src/tools/zip_export/ChartZipPackager.h
             src/tools/zip_export/ChartZipPackager.cpp
             src/common/ChartAssetPaths.h

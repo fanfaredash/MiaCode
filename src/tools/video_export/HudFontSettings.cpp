@@ -120,6 +120,12 @@ QVector<HudFontAreaChoice> hudFontAreaChoices()
             false
         },
         {
+            UiText::text(QStringLiteral("dialog.video_export.option.hud_font_area.center_display")),
+            QStringLiteral("ACHIEVEMENT DX  100.0000%"),
+            miacode::preview::scene::PreviewHudFontArea::CenterDisplay,
+            false
+        },
+        {
             UiText::text(QStringLiteral("dialog.video_export.option.hud_font_area.object_stats")),
             QStringLiteral("DELUXE Rate: 101.0000%  TAP: 128/128"),
             miacode::preview::scene::PreviewHudFontArea::ObjectStats,

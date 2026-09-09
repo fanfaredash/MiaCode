@@ -7,26 +7,26 @@ VideoExportSizePolicy videoExportSizePolicy(VideoExportSizePreset preset)
     VideoExportSizePolicy policy;
     switch (preset) {
     case VideoExportSizePreset::Compact:
-        policy.bitrateCoefficient = 0.055;
-        policy.minBitrateKbps = 1500;
-        policy.maxBitrateKbps = 6000;
+        policy.bitrateCoefficient = 0.070;
+        policy.minBitrateKbps = 1800;
+        policy.maxBitrateKbps = 8000;
         policy.maxRateMultiplier = 1.35;
         policy.bufferMultiplier = 2.0;
         policy.gopSeconds = 4;
         policy.maxAudioBitrateKbps = 160;
-        policy.x264Crf = 23;
+        policy.x264CrfAdjustment = 1;
         policy.usePeakConstrainedVbr = true;
         return policy;
     case VideoExportSizePreset::UltraCompactWithPv:
     case VideoExportSizePreset::UltraCompact:
         policy.bitrateCoefficient = 0.035;
-        policy.minBitrateKbps = 1000;
+        policy.minBitrateKbps = 4000;
         policy.maxBitrateKbps = 4000;
-        policy.maxRateMultiplier = 1.25;
+        policy.maxRateMultiplier = 1.0;
         policy.bufferMultiplier = 2.0;
         policy.gopSeconds = 6;
         policy.maxAudioBitrateKbps = 128;
-        policy.x264Crf = 25;
+        policy.x264CrfAdjustment = 3;
         policy.disableVideoBackground = preset == VideoExportSizePreset::UltraCompact;
         policy.usePeakConstrainedVbr = true;
         return policy;
@@ -55,6 +55,12 @@ int effectiveVideoExportAudioBitrateKbps(VideoExportSizePreset preset, int reque
 {
     const VideoExportSizePolicy policy = videoExportSizePolicy(preset);
     return qBound(96, requestedKbps, policy.maxAudioBitrateKbps);
+}
+
+int effectiveVideoExportX264Crf(VideoExportSizePreset preset, int baseCrf)
+{
+    const VideoExportSizePolicy policy = videoExportSizePolicy(preset);
+    return qBound(16, baseCrf + policy.x264CrfAdjustment, 28);
 }
 
 bool shouldRequestOffscreenPboReadback(

@@ -231,6 +231,21 @@ QVector<SimaiRawField> SimaiDocument::parseRawFields(const QString& text, bool p
     return fields;
 }
 
+QVector<int> SimaiDocument::invalidPropertyLineNumbers(const QString& text)
+{
+    QVector<int> invalidLines;
+    const QStringList lines = text.split(QChar('\n'));
+    for (int i = 0; i < lines.size(); ++i) {
+        QString line = lines.at(i);
+        if (line.endsWith(QChar('\r'))) line.chop(1);
+        const QString trimmed = line.trimmed();
+        if (!trimmed.startsWith(QChar('&'))) continue;
+        const int equals = trimmed.indexOf(QChar('='), 1);
+        if (equals <= 1 || trimmed.mid(1, equals - 1).trimmed().isEmpty()) invalidLines.append(i + 1);
+    }
+    return invalidLines;
+}
+
 QVector<SimaiRawField> SimaiDocument::parseUnmanagedFields(const QString& text, bool prefixDummyIfNeeded)
 {
     const QVector<SimaiRawField> all = parseRawFields(text, prefixDummyIfNeeded);

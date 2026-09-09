@@ -77,6 +77,7 @@ struct SlideHeadModifierState {
     QString rawModifiers;
     bool headBreak = false;
     bool headEx = false;
+    bool headMine = false;
     bool slideHeadUsesTapMaterial = false;
     SlideHeadlessMode headlessMode = SlideHeadlessMode::None;
 };
@@ -173,7 +174,7 @@ bool parseSlideHeadModifierPrefix(const QString& token, int* modifierCount, Slid
 
     while ((1 + *modifierCount) < token.size()) {
         const QChar ch = token.at(1 + *modifierCount);
-        if (ch == QLatin1Char('B') || ch == QLatin1Char('X')) {
+        if (ch == QLatin1Char('B') || ch == QLatin1Char('X') || ch == QLatin1Char('M')) {
             return false;
         }
         const QChar lower = ch.toLower();
@@ -187,6 +188,11 @@ bool parseSlideHeadModifierPrefix(const QString& token, int* modifierCount, Slid
                 return false;
             }
             state->headEx = true;
+        } else if (ch == QLatin1Char('m')) {
+            if (state->headMine) {
+                return false;
+            }
+            state->headMine = true;
         } else if (ch == QLatin1Char('@')) {
             if (state->slideHeadUsesTapMaterial) {
                 return false;
@@ -705,6 +711,12 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             if (close < 0) {
                 break;
             }
+            bool hsOk = false;
+            const double hsMultiplier = lineState->text.mid(index + 4, close - index - 4)
+                .trimmed().toDouble(&hsOk);
+            if (hsOk && !qFuzzyIsNull(hsMultiplier)) {
+                state.hsMultiplier = hsMultiplier;
+            }
             index = close;
             continue;
         }
@@ -797,7 +809,8 @@ bool TimelineQuickModel::parseNoteToken(
     }
 
     const double lineBaseSecond = lineState->render.startSecond;
-    const auto appendNote = [lineState, groupIndices, lineBaseSecond](const TimelineRenderNote& note) {
+    const auto appendNote = [lineState, state, groupIndices, lineBaseSecond](TimelineRenderNote note) {
+        note.hsMultiplier = state->hsMultiplier;
         const int noteIndex = lineState->render.notes.size();
         lineState->render.notes.append(note);
         if (groupIndices != nullptr) {
@@ -968,6 +981,9 @@ bool TimelineQuickModel::parseNoteToken(
         if (modifierState.headEx) {
             note.flags |= TimelineRenderFlagHeadEx;
         }
+        if (modifierState.headMine) {
+            note.flags |= TimelineRenderFlagIsMine;
+        }
         if (modifierState.slideHeadUsesTapMaterial) {
             note.flags |= TimelineRenderFlagSlideHeadUsesTapMaterial;
         }
@@ -978,7 +994,7 @@ bool TimelineQuickModel::parseNoteToken(
             note.flags |= TimelineRenderFlagTrackBreak | TimelineRenderFlagIsBreak;
         }
         if (trackMine) {
-            note.flags |= TimelineRenderFlagTrackMine | TimelineRenderFlagIsMine;
+            note.flags |= TimelineRenderFlagTrackMine;
         }
         appendNote(note);
         return true;

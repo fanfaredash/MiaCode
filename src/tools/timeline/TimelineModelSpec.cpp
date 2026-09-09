@@ -229,7 +229,7 @@ quint32 flagsForMarker(const TimelineNoteMarker& marker)
     if (marker.headlessImmediate) {
         flags |= TimelineRenderFlagHeadlessImmediate;
     }
-    if (marker.isMine) {
+    if (marker.isMine || marker.headMine) {
         flags |= TimelineRenderFlagIsMine;
     }
     if (marker.trackMine) {
@@ -615,7 +615,8 @@ bool sameNote(const TimelineRenderNote& left, const TimelineRenderNote& right)
         && left.lane == right.lane
         && left.endLane == right.endLane
         && left.kind == right.kind
-        && left.flags == right.flags;
+        && left.flags == right.flags
+        && nearlyEqual(left.hsMultiplier, right.hsMultiplier);
 }
 
 bool sameDoubleVector(const QVector<double>& left, const QVector<double>& right);
@@ -810,9 +811,8 @@ int main(int argc, char** argv)
         firework.flags = TimelineRenderFlagIsFirework;
         fireworkLine.notes.append(firework);
         const QVector<TimelineRenderLine> lines{fireworkLine};
-        // Probe windows are fractions of the rendered firework duration so they
-        // follow kTimelineFireworkDurationSeconds instead of going stale every
-        // time the effect is retuned.
+        // The editor timeline keeps its original visibility semantics. The
+        // export-only helper is tested separately below.
         const TimelineVisibleLineRange inTail = timelineRenderVisibleNoteLineRange(
             lines,
             buildNoteVisualEndPrefixMax(lines, false),
@@ -829,6 +829,11 @@ int main(int argc, char** argv)
                QStringLiteral("visible note range keeps firework tail alive inside its rendered duration"));
         expect(afterTail.begin == 1 && afterTail.end == 1,
                QStringLiteral("visible note range drops firework line after tail ends"));
+        expect(nearlyEqual(
+                   timelineRenderNoteExportVisualEndSecond(fireworkLine, firework, false),
+                   miacode::preview_gameplay::kJudgeEffectFireworkTouchTriggerDelaySeconds
+                       + kTimelineFireworkDurationSeconds),
+               QStringLiteral("export visual-end helper includes the touch firework trigger delay and tail"));
     }
 
     {
@@ -1800,19 +1805,28 @@ int main(int argc, char** argv)
 
     {
         TimelineQuickModel model;
-        model.rebuildFromText(QStringLiteral("1m/A1m/1-3[2:1]m,\n1M/A1M/1-3[2:1]M,\nE"), 0.0);
+        model.rebuildFromText(
+            QStringLiteral("1m/A1m/1m-5[8:1]/2-6m[8:1]/3m-7m[8:1],\n1M/A1M/1M-3[2:1],\nE"),
+            0.0);
         const TimelineRenderSnapshot snapshot = model.snapshot();
         expect(snapshot.lines.size() >= 2, QStringLiteral("quick model builds snapshot for mine case-sensitivity repro"));
         if (snapshot.lines.size() >= 2) {
             const QVector<TimelineRenderNote>& lowerNotes = snapshot.lines.at(0).notes;
-            expect(lowerNotes.size() == 3, QStringLiteral("quick model keeps lowercase mine tap, touch, and slide"));
-            if (lowerNotes.size() == 3) {
+            expect(lowerNotes.size() == 5, QStringLiteral("quick model keeps lowercase mine notes and slide variants"));
+            if (lowerNotes.size() == 5) {
                 expect(timelineRenderFlagSet(lowerNotes.at(0), TimelineRenderFlagIsMine),
                        QStringLiteral("quick model marks lowercase tap mine"));
                 expect(timelineRenderFlagSet(lowerNotes.at(1), TimelineRenderFlagIsMine),
                        QStringLiteral("quick model marks lowercase touch mine"));
-                expect(timelineRenderFlagSet(lowerNotes.at(2), TimelineRenderFlagTrackMine),
-                       QStringLiteral("quick model marks lowercase slide track mine"));
+                expect(timelineRenderFlagSet(lowerNotes.at(2), TimelineRenderFlagIsMine)
+                           && !timelineRenderFlagSet(lowerNotes.at(2), TimelineRenderFlagTrackMine),
+                       QStringLiteral("quick model marks only the slide head mine"));
+                expect(!timelineRenderFlagSet(lowerNotes.at(3), TimelineRenderFlagIsMine)
+                           && timelineRenderFlagSet(lowerNotes.at(3), TimelineRenderFlagTrackMine),
+                       QStringLiteral("quick model marks only the slide track mine"));
+                expect(timelineRenderFlagSet(lowerNotes.at(4), TimelineRenderFlagIsMine)
+                           && timelineRenderFlagSet(lowerNotes.at(4), TimelineRenderFlagTrackMine),
+                       QStringLiteral("quick model marks both slide mine components"));
             }
             expect(snapshot.lines.at(1).notes.isEmpty(),
                    QStringLiteral("quick model rejects uppercase M mine variants"));
@@ -2083,6 +2097,163 @@ int main(int argc, char** argv)
         }
         expect(nearlyEqual(finalHoldSeconds, 1.5),
                QStringLiteral("hold duration reverts to [4:3] length after stray-digit insert+delete"));
+    }
+
+    {
+        const QString chart = QStringLiteral("1,1h[4:3],1-5-3-8[8:1],\nE");
+        QTextDocument document(chart);
+        TimelineQuickModel model;
+        model.rebuildFromDocument(&document, 0.0);
+
+        const TimelineExportRange tapRange = model.resolveExportRangeForSelection(
+            &document, 0, 1);
+        double tapVisualEnd = -1.0;
+        for (const TimelineRenderLine& line : model.snapshot().lines) {
+            for (const TimelineRenderNote& note : line.notes) {
+                if (note.kind == TimelineRenderNoteKind::Tap && note.sourceCol == 1) {
+                    tapVisualEnd = timelineRenderNoteExportVisualEndSecond(line, note, true);
+                }
+            }
+        }
+        expect(tapRange.resolved && nearlyEqual(tapRange.startSecond, 0.0)
+                   && qIsFinite(tapVisualEnd)
+                   && nearlyEqual(tapRange.endSecond, tapVisualEnd + 1.0 / 60.0),
+               QStringLiteral("selection export ends a tap after its visual effect tail"));
+
+        const int holdPosition = chart.indexOf(QStringLiteral("1h[4:3]")) + 2;
+        const TimelineExportRange holdRange = model.resolveExportRangeForSelection(
+            &document, holdPosition, holdPosition + 1);
+        double holdVisualEnd = -1.0;
+        for (const TimelineRenderLine& line : model.snapshot().lines) {
+            for (const TimelineRenderNote& note : line.notes) {
+                if (note.kind == TimelineRenderNoteKind::Hold) {
+                    holdVisualEnd = timelineRenderNoteExportVisualEndSecond(line, note, true);
+                }
+            }
+        }
+        expect(holdRange.resolved
+                   && holdRange.startPosition == chart.indexOf(QStringLiteral("1h[4:3]"))
+                   && nearlyEqual(holdRange.startSecond, 0.0)
+                   && qIsFinite(holdVisualEnd)
+                   && nearlyEqual(holdRange.endSecond, holdVisualEnd + 1.0 / 60.0),
+               QStringLiteral("selection export snaps a partial hold selection and uses its visual end"));
+
+        const QString emptyBeatChart = QStringLiteral("1,,,,\nE");
+        QTextDocument emptyBeatDocument(emptyBeatChart);
+        TimelineQuickModel emptyBeatModel;
+        emptyBeatModel.rebuildFromDocument(&emptyBeatDocument, 0.0);
+        const TimelineExportRange emptyBeatRange = emptyBeatModel.resolveExportRangeForSelection(
+            &emptyBeatDocument, 2, 3);
+        expect(emptyBeatRange.resolved && emptyBeatRange.endSecond > 0.0,
+               QStringLiteral("selection export still resolves an explicitly selected empty comma beat"));
+
+        const QString slideChart = QStringLiteral("1-5-3-8[8:1],\nE");
+        QTextDocument slideDocument(slideChart);
+        TimelineQuickModel slideModel;
+        slideModel.rebuildFromDocument(&slideDocument, 0.0);
+        const int slidePosition = slideChart.indexOf(QStringLiteral("5-3")) + 1;
+        const TimelineExportRange slideRange = slideModel.resolveExportRangeForSelection(
+            &slideDocument, slidePosition, slidePosition + 1);
+        double slideVisualEnd = -1.0;
+        for (const TimelineRenderLine& line : slideModel.snapshot().lines) {
+            for (const TimelineRenderNote& note : line.notes) {
+                if (note.kind == TimelineRenderNoteKind::Slide) {
+                    slideVisualEnd = qMax(
+                        slideVisualEnd,
+                        timelineRenderNoteExportVisualEndSecond(line, note, true));
+                }
+            }
+        }
+        expect(slideRange.resolved
+                   && slideRange.startPosition == slideChart.indexOf(QStringLiteral("1-5-3-8[8:1]"))
+                   && slideRange.endPositionExclusive == slideChart.indexOf(QLatin1Char(','), slideRange.startPosition) + 1,
+               QStringLiteral("selection export treats a chained slide as one comma-delimited object"));
+        expect(qIsFinite(slideVisualEnd)
+                   && nearlyEqual(slideRange.endSecond, slideVisualEnd + 1.0 / 60.0),
+               QStringLiteral("selection export ends one frame after the final slide visual"));
+    }
+
+    {
+        const QString chart = QStringLiteral(
+            "{16}2-6[8:1],,,, 2/1-5[8:1],,,, 1/8-4[8:1],,,, 8/7-3[8:1],,,,\n"
+            "{16}1h[16:12]/7,,,, ,,,, {32},,,,4x,5x,6x,7x, {16}8x-4[8:1]*-4[8:1],,,,\n"
+            "{16}8bx<5s1^4b[16:25]/A6/B6/Cf/B2/A2,,,, ,,,, ,,,, ,,,,\n"
+            "{16},,,, ,,,, ,,,, ,,,,\nE");
+        QTextDocument document(chart);
+        TimelineQuickModel model;
+        model.rebuildFromDocument(&document, 0.0);
+
+        const int selectionStart = chart.indexOf(QStringLiteral("{16}1h[16:12]/7"));
+        const int selectionEnd = chart.indexOf(QStringLiteral("{16}8bx<5s"))
+            + QStringLiteral("{16}8bx<5s").size();
+        const TimelineExportRange range = model.resolveExportRangeForSelection(
+            &document, selectionStart, selectionEnd);
+
+        double previousVisualEnd = -std::numeric_limits<double>::infinity();
+        double selectedFirstSecond = std::numeric_limits<double>::infinity();
+        double selectedLastVisualEnd = 0.0;
+        for (const TimelineRenderLine& line : model.snapshot().lines) {
+            for (const TimelineRenderNote& note : line.notes) {
+                const int position = line.startPosition + qMax(0, note.sourceCol - 1);
+                const double startSecond = timelineRenderAbsoluteSecond(line, note.secondOffset);
+                const double visualEnd = timelineRenderNoteBodyEndSecond(line, note, true);
+                if (position < range.startPosition) {
+                    previousVisualEnd = qMax(
+                        previousVisualEnd,
+                        timelineRenderNoteBodyEndSecond(line, note, false));
+                } else if (position < range.endPositionExclusive) {
+                    selectedFirstSecond = qMin(selectedFirstSecond, startSecond);
+                    selectedLastVisualEnd = qMax(
+                        selectedLastVisualEnd,
+                        timelineRenderNoteExportVisualEndSecond(line, note, true));
+                }
+            }
+        }
+        expect(range.resolved && qIsFinite(previousVisualEnd) && qIsFinite(selectedFirstSecond)
+                   && range.startSecond >= previousVisualEnd
+                   && (previousVisualEnd > selectedFirstSecond
+                       ? nearlyEqual(range.startSecond, previousVisualEnd)
+                       : range.startSecond <= selectedFirstSecond),
+               QStringLiteral("selection export skips earlier notes still visible before the selected first note"));
+        expect(nearlyEqual(range.endSecond, selectedLastVisualEnd + 1.0 / 60.0),
+               QStringLiteral("selection export ends one frame after the final selected judge tail"));
+    }
+
+    {
+        const QString chart = QStringLiteral("1-5[8:1],1-5[8:1],,,,,,,,,\nE");
+        QTextDocument document(chart);
+        TimelineQuickModel model;
+        model.rebuildFromDocument(&document, 0.0);
+        const int slidePosition = chart.indexOf(QStringLiteral("1-5[8:1]"));
+        const TimelineExportRange range = model.resolveExportRangeForSelection(
+            &document, slidePosition, slidePosition + 1);
+        expect(range.resolved && range.startSecond < 0.5,
+               QStringLiteral("selection export ignores a preceding slide track but keeps the slide-head boundary"));
+    }
+
+    {
+        const QString chart = QStringLiteral("1,1,<HS*2>1\nE");
+        QTextDocument document(chart);
+        TimelineQuickModel model;
+        model.rebuildFromDocument(&document, 0.0);
+        const int fastNotePosition = chart.indexOf(QStringLiteral("<HS*2>1"))
+            + QStringLiteral("<HS*2>").size();
+        const TimelineExportRange range = model.resolveExportRangeForSelection(
+            &document, fastNotePosition, fastNotePosition + 1);
+        expect(range.resolved && range.startSecond > 0.6,
+               QStringLiteral("selection export uses each note's HS multiplier for its lead-in"));
+    }
+
+    {
+        const QString original = QStringLiteral("<HS*1>1\n1\nE");
+        const int hsPosition = original.indexOf(QStringLiteral("<HS*1>")) + 4;
+        expect(incrementalMatchesRebuild(
+                   original,
+                   hsPosition,
+                   1,
+                   QStringLiteral("2"),
+                   0.0),
+               QStringLiteral("incremental HS edits match a full rebuild, including downstream note state"));
     }
 
     if (failed > 0) {

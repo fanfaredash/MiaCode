@@ -45,6 +45,8 @@ QString hudFontAreaKey(miacode::preview::scene::PreviewHudFontArea area)
         return QStringLiteral("chart_info");
     case PreviewHudFontArea::Timestamp:
         return QStringLiteral("timestamp");
+    case PreviewHudFontArea::CenterDisplay:
+        return QStringLiteral("center_display");
     case PreviewHudFontArea::ObjectStats:
         return QStringLiteral("object_stats");
     case PreviewHudFontArea::DebugInfo:

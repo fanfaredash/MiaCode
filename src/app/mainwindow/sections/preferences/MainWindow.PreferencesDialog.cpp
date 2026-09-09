@@ -16,6 +16,7 @@
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "app/ui/AppBackgroundSettings.h"
+#include "app/ui/AppBackgroundPainter.h"
 #include "app/ui/EditableValueLabel.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
@@ -577,6 +578,7 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
                 QStringLiteral("transform.rotate_ccw_45"),
                 QStringLiteral("transform.rotate_cw_45"),
                 QStringLiteral("transform.clear_complete_elements"),
+                QStringLiteral("transform.reset_tap_notes"),
                 QStringLiteral("transform.subdivision_up"),
                 QStringLiteral("transform.subdivision_down"),
                 QStringLiteral("transform.subdivision_half_up"),
@@ -843,6 +845,10 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
         owner_.transformClearCompleteElementsAction_,
         QStringLiteral("transform.clear_complete_elements"),
         QKeySequence(Qt::CTRL | Qt::Key_Q));
+    applyConfiguredShortcut(
+        owner_.transformResetTapNotesAction_,
+        QStringLiteral("transform.reset_tap_notes"),
+        QKeySequence(Qt::CTRL | Qt::Key_W));
     applyConfiguredShortcut(
         owner_.transformRaiseSubdivisionAction_,
         QStringLiteral("transform.subdivision_up"),
@@ -1371,14 +1377,25 @@ void MainWindow::PreferencesSection::onPreferences()
     backgroundLayout->setVerticalSpacing(8);
 
     miacode::ui::AppBackgroundSettings selectedBackgroundSettings = state_.appBackgroundSettings_;
+    QTimer backgroundPreviewTimer;
+    backgroundPreviewTimer.setSingleShot(true);
+    backgroundPreviewTimer.setInterval(33);
+    connect(&backgroundPreviewTimer, &QTimer::timeout, &dialog, [&]() {
+        owner_.applyAppBackgroundSettings(selectedBackgroundSettings, false);
+    });
+    bool backgroundSliderPersistPending = false;
     const auto persistBackgroundSettings = [&]() {
+        backgroundPreviewTimer.stop();
+        backgroundSliderPersistPending = false;
         selectedBackgroundSettings = miacode::ui::normalizedAppBackgroundSettings(selectedBackgroundSettings);
         owner_.applyAppBackgroundSettings(selectedBackgroundSettings, true);
     };
-    bool backgroundSliderPersistPending = false;
     const auto persistBackgroundSettingsAfterSliderInput = [&](QSlider* slider) {
         if (slider != nullptr && slider->isSliderDown()) {
             backgroundSliderPersistPending = true;
+            if (!backgroundPreviewTimer.isActive()) {
+                backgroundPreviewTimer.start();
+            }
             return;
         }
         persistBackgroundSettings();
@@ -1390,6 +1407,7 @@ void MainWindow::PreferencesSection::onPreferences()
         backgroundSliderPersistPending = false;
         persistBackgroundSettings();
     };
+    connect(&dialog, &QDialog::finished, &dialog, [&](int) { flushBackgroundSliderSettings(); });
     const auto createBackgroundComboRow = [](QComboBox* combo, QWidget* parent) -> QWidget* {
         auto* row = new QWidget(parent);
         auto* rowLayout = new QHBoxLayout(row);
@@ -1464,7 +1482,7 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* backgroundImageLabel =
         new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.image")), backgroundGroup);
     auto* backgroundImageRow = new QWidget(backgroundGroup);
-    auto* backgroundImageRowLayout = new QHBoxLayout(backgroundImageRow);
+    auto* backgroundImageRowLayout = new QVBoxLayout(backgroundImageRow);
     backgroundImageRowLayout->setContentsMargins(0, 0, 0, 0);
     backgroundImageRowLayout->setSpacing(8);
     auto* backgroundImageEdit = new QLineEdit(backgroundImageRow);
@@ -1472,17 +1490,23 @@ void MainWindow::PreferencesSection::onPreferences()
     backgroundImageEdit->setText(selectedBackgroundSettings.imagePath);
     backgroundImageEdit->setMinimumWidth(0);
     backgroundImageEdit->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    auto* backgroundImageButtonRow = new QWidget(backgroundImageRow);
+    auto* backgroundImageButtonLayout = new QHBoxLayout(backgroundImageButtonRow);
+    backgroundImageButtonLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundImageButtonLayout->setSpacing(8);
     auto* chooseBackgroundButton = miacode::ui::createDialogPushButton(
         UiText::text(QStringLiteral("dialog.preferences.background.choose")),
-        backgroundImageRow);
+        backgroundImageButtonRow);
     auto* clearBackgroundButton = miacode::ui::createDialogPushButton(
         UiText::text(QStringLiteral("dialog.preferences.background.clear")),
-        backgroundImageRow);
+        backgroundImageButtonRow);
     styleRegisteredDialogButton(chooseBackgroundButton);
     styleRegisteredDialogButton(clearBackgroundButton);
-    backgroundImageRowLayout->addWidget(backgroundImageEdit, 1);
-    backgroundImageRowLayout->addWidget(chooseBackgroundButton, 0);
-    backgroundImageRowLayout->addWidget(clearBackgroundButton, 0);
+    backgroundImageButtonLayout->addWidget(chooseBackgroundButton, 0);
+    backgroundImageButtonLayout->addWidget(clearBackgroundButton, 0);
+    backgroundImageButtonLayout->addStretch(1);
+    backgroundImageRowLayout->addWidget(backgroundImageEdit);
+    backgroundImageRowLayout->addWidget(backgroundImageButtonRow);
     connect(chooseBackgroundButton, &QPushButton::clicked, &dialog, [&]() {
         const QString initialDir = selectedBackgroundSettings.imagePath.isEmpty()
             ? QString()
@@ -1494,6 +1518,11 @@ void MainWindow::PreferencesSection::onPreferences()
             UiText::text(QStringLiteral("dialog.preferences.background.image_filter")));
         if (filePath.isEmpty()) {
             return;
+        }
+        if (QDir::cleanPath(filePath) == selectedBackgroundSettings.imagePath) {
+            if (auto* painter = miacode::ui::appBackgroundPainterForWidget(&owner_)) {
+                painter->reloadSource();
+            }
         }
         selectedBackgroundSettings.imagePath = QDir::cleanPath(filePath);
         backgroundImageEdit->setText(selectedBackgroundSettings.imagePath);
@@ -1509,6 +1538,9 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* backgroundOpacityLabel =
         new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.opacity")), backgroundGroup);
     auto* backgroundOpacitySlider = new QSlider(Qt::Horizontal, backgroundGroup);
+    const QString backgroundOpacityHint = UiText::text(QStringLiteral("dialog.preferences.background.opacity_hint"));
+    backgroundOpacityLabel->setToolTip(backgroundOpacityHint);
+    backgroundOpacitySlider->setToolTip(backgroundOpacityHint);
     backgroundOpacitySlider->setRange(0, 80);
     backgroundOpacitySlider->setValue(qRound(selectedBackgroundSettings.opacity * 100.0));
     backgroundOpacitySlider->setSingleStep(1);
@@ -1555,14 +1587,15 @@ void MainWindow::PreferencesSection::onPreferences()
             const std::function<void(int)>& setter) -> OverlayRow {
             auto* slider = new QSlider(Qt::Horizontal, overlayGroup);
             miacode::ui::EditableValueLabel* valueLabel = nullptr;
-            slider->setRange(miacode::ui::kAppBackgroundOverlayAlphaMin, miacode::ui::kAppBackgroundOverlayAlphaMax);
+            slider->setRange(0, 100);
+            slider->setToolTip(UiText::text(QStringLiteral("dialog.preferences.background.overlay_hint")));
             slider->setSingleStep(1);
-            slider->setPageStep(10);
-            slider->setValue(value);
+            slider->setPageStep(5);
+            slider->setValue(qRound(value * 100.0 / 255.0));
             auto* label = new QLabel(labelText, overlayGroup);
             overlayFormLayout->addRow(
                 label,
-                miacode::ui::createSliderValueRow(slider, &valueLabel, QString(), overlayGroup));
+                miacode::ui::createSliderValueRow(slider, &valueLabel, QStringLiteral("%"), overlayGroup));
             return OverlayRow{label, slider, valueLabel, setter};
         };
 
@@ -1571,7 +1604,7 @@ void MainWindow::PreferencesSection::onPreferences()
             OverlayRow row = addOverlaySliderRow(labelText, value, setter);
             QSlider* rowSlider = row.slider;
             connect(row.slider, &QSlider::valueChanged, &overlayDialog, [&, setter, rowSlider](int sliderValue) {
-                setter(sliderValue);
+                setter(qRound(sliderValue * 255.0 / 100.0));
                 persistBackgroundSettingsAfterSliderInput(rowSlider);
             });
             connect(row.slider, &QSlider::sliderReleased, &overlayDialog, flushBackgroundSliderSettings);
@@ -1642,9 +1675,9 @@ void MainWindow::PreferencesSection::onPreferences()
                     continue;
                 }
                 QSignalBlocker blocker(overlayRows[index].slider);
-                overlayRows[index].slider->setValue(values[index]);
+                overlayRows[index].slider->setValue(qRound(values[index] * 100.0 / 255.0));
                 if (overlayRows[index].valueLabel != nullptr) {
-                    overlayRows[index].valueLabel->setText(QString::number(values[index]));
+                    overlayRows[index].valueLabel->setText(QString::number(qRound(values[index] * 100.0 / 255.0)) + QStringLiteral("%"));
                 }
             }
         };
@@ -1669,6 +1702,7 @@ void MainWindow::PreferencesSection::onPreferences()
         overlayLayout->addWidget(buttonRow);
         overlayDialog.resize(560, 0);
         overlayDialog.exec();
+        flushBackgroundSliderSettings();
     };
 
     auto* backgroundOverlayLabel =
@@ -1681,6 +1715,9 @@ void MainWindow::PreferencesSection::onPreferences()
         UiText::text(QStringLiteral("dialog.preferences.background.overlay_button")),
         backgroundOverlayRow);
     styleRegisteredDialogButton(backgroundOverlayButton);
+    const QString backgroundOverlayHint = UiText::text(QStringLiteral("dialog.preferences.background.overlay_hint"));
+    backgroundOverlayLabel->setToolTip(backgroundOverlayHint);
+    backgroundOverlayButton->setToolTip(backgroundOverlayHint);
     backgroundOverlayRowLayout->addWidget(backgroundOverlayButton, 0);
     backgroundOverlayRowLayout->addStretch(1);
     connect(backgroundOverlayButton, &QPushButton::clicked, &dialog, openBackgroundOverlayDialog);
@@ -1788,12 +1825,15 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
     bool selectedAutoCompletionEnabled = state_.editorAutoCompletionEnabled_;
     bool selectedScrollBeyondLastLineEnabled = state_.editorScrollBeyondLastLineEnabled_;
+    bool selectedEditorSelectionBeatDisplayEnabled = state_.editorSelectionBeatDisplayEnabled_;
+    bool selectedEditorPreventMultiClickSelectionEnabled =
+        state_.editorPreventMultiClickSelectionEnabled_;
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
     bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
 
     // Row order (top to bottom): font size, line spacing, auto-completion,
-    // scroll beyond last line, header display, IME block, and ignore muri issue prompts.
-    // out, so it trails the prioritised rows.
+    // scroll beyond last line, selection beat display, header display, IME block,
+    // ignore muri issue prompts, and repeated-click selection.
     auto* editorFontSizeLabel = new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_font_size")), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
     auto* fontSizeRowLayout = new QHBoxLayout(fontSizeRow);
@@ -1952,6 +1992,26 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(scrollBeyondLastLineLabel, scrollBeyondLastLineCombo);
 
+    auto* selectionBeatDisplayLabel = new QLabel(
+        UiText::text(QStringLiteral("preferences.editor_selection_beat_display")), editorGroup);
+    auto* selectionBeatDisplayCombo = new QComboBox(editorGroup);
+    selectionBeatDisplayCombo->addItem(UiText::text(QStringLiteral("preferences.off")));
+    selectionBeatDisplayCombo->addItem(UiText::text(QStringLiteral("preferences.on")));
+    selectionBeatDisplayCombo->setCurrentIndex(selectedEditorSelectionBeatDisplayEnabled ? 1 : 0);
+    styleRegisteredDialogCombo(selectionBeatDisplayCombo, 12);
+    selectionBeatDisplayCombo->setToolTip(
+        UiText::text(QStringLiteral("preferences.editor_selection_beat_display_hint")));
+    connect(selectionBeatDisplayCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+            [&](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedEditorSelectionBeatDisplayEnabled = (index == 1);
+        owner_.applyEditorSelectionBeatDisplayEnabled(selectedEditorSelectionBeatDisplayEnabled, true);
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
+    });
+    editorLayout->addRow(selectionBeatDisplayLabel, selectionBeatDisplayCombo);
+
     // Header display controls what the difficulty-page header edits next to Lv:
     // the chart-wide offset (default) or the per-difficulty designer.
     const auto headerTopDisplayLabel = [](EditorHeaderTopDisplay mode) -> QString {
@@ -2038,9 +2098,24 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(chineseInputLabel, chineseInputCombo);
 
-    // Ignore muri issue prompts sits below IME block (last row) per the 2026-06-19 review.
+    // Ignore muri issue prompts sits below IME block per the 2026-06-19 review.
     editorLayout->addRow(QString(), ignoreMuriIssuePromptsCheckbox);
 
+    auto* preventMultiClickSelectionCheckbox = new QCheckBox(
+        UiText::text(QStringLiteral("preferences.prevent_multi_click_selection")), editorGroup);
+    preventMultiClickSelectionCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    preventMultiClickSelectionCheckbox->setChecked(
+        selectedEditorPreventMultiClickSelectionEnabled);
+    preventMultiClickSelectionCheckbox->setToolTip(
+        UiText::text(QStringLiteral("preferences.prevent_multi_click_selection_hint")));
+    connect(preventMultiClickSelectionCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedEditorPreventMultiClickSelectionEnabled = checked;
+        owner_.applyEditorPreventMultiClickSelectionEnabled(
+            selectedEditorPreventMultiClickSelectionEnabled, true);
+        owner_.statusBar()->showMessage(
+            UiText::text(QStringLiteral("status.preferences_updated")));
+    });
+    editorLayout->addRow(QString(), preventMultiClickSelectionCheckbox);
 
     // The preferences dialog font spin-box reuses the editor.font_* shortcut
     // IDs so a single binding controls both the editor and the dialog.

@@ -340,6 +340,8 @@ void MainWindow::EditorSection::loadPortableState()
     state_.editorOverwriteModeEnabled_ = false;
     state_.editorAutoCompletionEnabled_ = true;
     state_.editorScrollBeyondLastLineEnabled_ = true;
+    state_.editorSelectionBeatDisplayEnabled_ = true;
+    state_.editorPreventMultiClickSelectionEnabled_ = false;
     state_.editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
         state_.editorTextFontPointSize_ > 0 ? state_.editorTextFontPointSize_ : editorFont().pointSize(),
@@ -376,6 +378,10 @@ void MainWindow::EditorSection::loadPortableState()
         ui.value("editor_auto_close_brackets").toBool(true));
     state_.editorScrollBeyondLastLineEnabled_ =
         ui.value("editor_scroll_beyond_last_line").toBool(true);
+    state_.editorSelectionBeatDisplayEnabled_ =
+        ui.value("editor_selection_beat_display").toBool(true);
+    state_.editorPreventMultiClickSelectionEnabled_ =
+        ui.value("editor_prevent_multi_click_selection").toBool(false);
     // 顶部显示 — which field pair the difficulty header shows ("offset" default,
     // "designer" for the per-difficulty &des_N edit).
     state_.editorHeaderTopDisplay_ =
@@ -409,6 +415,9 @@ void MainWindow::EditorSection::loadPortableState()
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
     applyEditorAutoCompletionEnabled(state_.editorAutoCompletionEnabled_, false);
     applyEditorScrollBeyondLastLineEnabled(state_.editorScrollBeyondLastLineEnabled_, false);
+    applyEditorSelectionBeatDisplayEnabled(state_.editorSelectionBeatDisplayEnabled_, false);
+    applyEditorPreventMultiClickSelectionEnabled(
+        state_.editorPreventMultiClickSelectionEnabled_, false);
     applyEditorHeaderTopDisplay(state_.editorHeaderTopDisplay_, false);
     applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
@@ -805,6 +814,10 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
     ui.insert("editor_scroll_beyond_last_line", state_.editorScrollBeyondLastLineEnabled_);
+    ui.insert("editor_selection_beat_display", state_.editorSelectionBeatDisplayEnabled_);
+    ui.insert(
+        "editor_prevent_multi_click_selection",
+        state_.editorPreventMultiClickSelectionEnabled_);
     ui.insert(
         "editor_header_top_display",
         state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
@@ -969,6 +982,10 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
     ui.insert("editor_scroll_beyond_last_line", state_.editorScrollBeyondLastLineEnabled_);
+    ui.insert("editor_selection_beat_display", state_.editorSelectionBeatDisplayEnabled_);
+    ui.insert(
+        "editor_prevent_multi_click_selection",
+        state_.editorPreventMultiClickSelectionEnabled_);
     ui.insert(
         "editor_header_top_display",
         state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
@@ -1083,6 +1100,22 @@ void MainWindow::EditorSection::applyEditorScrollBeyondLastLineEnabled(
     }
     if (ui_.copyAreaEditor_ != nullptr) {
         ui_.copyAreaEditor_->setScrollBeyondLastLineEnabled(enabled);
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
+void MainWindow::EditorSection::applyEditorPreventMultiClickSelectionEnabled(
+    bool enabled,
+    bool persistPreference)
+{
+    state_.editorPreventMultiClickSelectionEnabled_ = enabled;
+    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+        editor->setPreventMultiClickSelectionEnabled(enabled);
+    }
+    if (ui_.copyAreaEditor_ != nullptr) {
+        ui_.copyAreaEditor_->setPreventMultiClickSelectionEnabled(enabled);
     }
     if (persistPreference) {
         persistEditorTextFontPreference();
@@ -1384,6 +1417,8 @@ void MainWindow::EditorSection::syncCopyAreaEditorAppearance()
     ui_.copyAreaEditor_->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
     ui_.copyAreaEditor_->setAutoCompletionEnabled(state_.editorAutoCompletionEnabled_);
     ui_.copyAreaEditor_->setScrollBeyondLastLineEnabled(state_.editorScrollBeyondLastLineEnabled_);
+    ui_.copyAreaEditor_->setPreventMultiClickSelectionEnabled(
+        state_.editorPreventMultiClickSelectionEnabled_);
     ui_.copyAreaEditor_->refreshLineNumberAreaLayout();
 }
 
@@ -1460,9 +1495,30 @@ void MainWindow::applyEditorAutoCompletionEnabled(bool enabled, bool persistPref
     editorSection_->applyEditorAutoCompletionEnabled(enabled, persistPreference);
 }
 
+void MainWindow::EditorSection::applyEditorSelectionBeatDisplayEnabled(bool enabled, bool persistPreference)
+{
+    state_.editorSelectionBeatDisplayEnabled_ = enabled;
+    if (owner_.documentSection_ != nullptr) {
+        owner_.documentSection_->updateEditorStatus();
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
 void MainWindow::applyEditorScrollBeyondLastLineEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorScrollBeyondLastLineEnabled(enabled, persistPreference);
+}
+
+void MainWindow::applyEditorSelectionBeatDisplayEnabled(bool enabled, bool persistPreference)
+{
+    editorSection_->applyEditorSelectionBeatDisplayEnabled(enabled, persistPreference);
+}
+
+void MainWindow::applyEditorPreventMultiClickSelectionEnabled(bool enabled, bool persistPreference)
+{
+    editorSection_->applyEditorPreventMultiClickSelectionEnabled(enabled, persistPreference);
 }
 
 void MainWindow::applyEditorImeInputDisabled(bool disabled, bool persistPreference)

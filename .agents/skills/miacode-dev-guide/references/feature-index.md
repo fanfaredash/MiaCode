@@ -30,6 +30,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   token and mask an old file). Result is passed to
   `QuickShellBootstrap::setShowWelcomeDialogOnStartup`, which fires `MainWindow::showWelcomeDialog()`
   from its post-show hook. Dialog body: `sections/preferences/MainWindow.WelcomeDialog.cpp` (see §2).
+  Extensions can request the same dialog through `miacode.app.openWelcomeDialog()` / the
+  `app.openWelcomeDialog` Open Bridge method. The host queues that request until the startup
+  callbacks and any other modal startup prompts have settled, and `MainWindow::showWelcomeDialog()`
+  suppresses nested duplicates.
 - CLI export: `wantsCliVideoExport`, `runCliVideoExport`.
 - **Export** worker (this is the export subprocess — keep): `wantsCliVideoExportWorker`,
   `runCliVideoExportWorker`.
@@ -94,7 +98,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`MainWindow::PreferencesSection::onPreferences`, `MainWindow.PreferencesDialog.cpp`) AND in the
   first-run welcome dialog (`PreferencesSection::showWelcomeDialog`, `MainWindow.WelcomeDialog.cpp`)
   — both drive the same setters; the welcome dialog keeps its self-contained `WelcomeLayoutPreview`
-  schematic. The welcome dialog also exposes a 中文输入法 radio group (关闭输入法 default / 开启输入法 /
+  schematic and also offers a compact app-background row (enable, image path, choose, clear) backed
+  by `applyAppBackgroundSettings`. The welcome dialog also exposes a 中文输入法 radio group (关闭输入法 default / 开启输入法 /
   转换全角字符) wired to `applyEditorHalfWidthInputEnabled` + `applyEditorImeInputDisabled` — the same
   two prefs as the Preferences 中文输入 combo (2026-06-19). A round "?" help badge
   (`QLabel#WelcomeHelpBadge`, styled in `preferencesDialogStyleSheet` so it re-themes, +
@@ -143,9 +148,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `parseRawFields`, `serializeRawFields`, `ensureDifficulty`, `removeDifficulty`).
 - Timing metadata: `src/core/chart/document/SimaiTimingMetadata.{h,cpp}` (`buildTimingMetadata`,
   `buildTimingMetadataFromRawText`, `parseInlineTimeSignatureComment`).
-- Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFlow.cpp`
+- Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFileFlow.cpp`
   (`onNewFile`, `onOpenFile`, `openStartupTarget`, `onSaveFile`, `runAutosaveCheck`,
-  `loadDocument`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`).
+  `loadDocument`) plus `MainWindow.DocumentUi.cpp` (`rebuildFieldSidebar`,
+  `populateMetadataPage`, `populateDifficultyPage`). On Windows, `onOpenFile` uses
+  `promptForSimaiFile` with the visible QuickShell root HWND as the native picker owner.
 - Crash recovery + abnormal-exit autosave prompt: `src/common/CrashRecovery.{h,cpp}`
   (crash-handler snapshot → `<chart>.crash_recovery`; **per-instance session marker**
   `<AppConfigLocation>/sessions/session-<pid>.marker` — records `pid` + process `created`
@@ -180,6 +187,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   changes without mutating the `QTextDocument` or its undo history. Preference key
   `ui.editor_scroll_beyond_last_line`, default on, is exposed in Preferences → Editor and applied
   to both the main chart editor and full-copy editor.
+- Repeated-click selection suppression: `PlainCodeEditor::setPreventMultiClickSelectionEnabled`
+  converts double-click events into ordinary caret-placement clicks, preventing automatic word /
+  paragraph selection without changing drag or keyboard selection. Preference key
+  `ui.editor_prevent_multi_click_selection`, default off, is a checkbox in Preferences → Editor
+  and applies to both the main chart editor and full-copy editor.
 - Bracket-completion dropdown ("tab 补全"): typing `( [ {` pops a simai-aware suggestion list under
   the caret; typing `h` pops the full-bracket hold durations (`[8:1]` …). Candidate
   data + scans: `src/editor/SimaiCompletionCatalog.{h,cpp}` (pure — `candidatesForOpening` for the
@@ -249,6 +261,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `SimaiDocument::parseUnmanagedFields` (not `parseRawFields`) so a manually typed managed key
   (`des`/`des_N`/`lv_N`/`inote_N`/title/artist/first/video) can't bypass the model and emit a
   duplicate/divergent line.
+  **Metadata attention validation:** `SimaiDocument::invalidPropertyLineNumbers` identifies
+  property-looking lines that are not complete `&key=value` assignments. The metadata editor
+  underlines those lines and blocks field commit; `DocumentSection::rebuildFieldSidebar` marks
+  the metadata row while title, artist, top-level designer, jacket image, or property syntax is
+  incomplete. Required text fields are reported missing only when both the parsed TXT document
+  model and the corresponding metadata-page input are blank, preventing load-order false alerts;
+  property syntax uses live widget text only for uncommitted edits on the metadata page.
   **Export-side fallback contract (sync set):** the exported "谱师名义" (intro banner designer +
   chart-info-HUD `chartDesigner`) uses per-difficulty `&des_N`, falling back to top `&des` when
   the per-difficulty name is **blank including whitespace** — gate on `designer.trimmed().isEmpty()`,
@@ -316,12 +335,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `.StrictChecks.cpp` (see `SimaiNativeParser.cpp:1584`).
 - Validation UI: `sections/validation/MainWindow.ValidationFlow.cpp` (`runValidateSimai*`,
   `addValidationError`, `addValidationDecoration`).
+- Difficulty level completeness is a validation-UI concern rather than chart-token syntax:
+  `ValidationSection::currentDifficultyLevelMissing` adds “未填写难度” to the syntax tab and
+  error summary from the live `difficultyLevelEdit_`; changing the field refreshes that panel.
 - Note-modifier sync set (one patch touches all): native parser (`.cpp`/`.TouchTap`/`.Slide`) →
   marker flags (`src/timeline/TimelineData.h`) → mirror (`TimelineQuickModel.cpp` +
   `TimelineRenderData.h` flags) → transform (`ChartBatchTransform.cpp`, must NOT `return false` on
   unknowns) + normalization round-trip (`ChartNormalization.cpp`) → skin selectors + timeline icons
   → specs (`SimaiParserSpec`, `ChartBatchTransformSpec`, `TimelineModelSpec`) + diagnostics docs.
-- **Mine notes** (`m` suffix): `isMine`/`trackMine`/`headMine`; mine OVERRIDES break/each (one
+- **Mine notes** (`m` modifier): `isMine` for ordinary notes; slide head/path are independent
+  (`1m-5[...]` → `headMine`, `1-5m[...]` → `trackMine`, both modifiers → both flags). Mine
+  OVERRIDES break/each (one
   `<base>_mine.png` per type, skinSTD only); suppressed in SFX (`PreviewSfxTimeline.buildTimeline`) +
   Muri (`MuriAnalyzer`, `MuriRuntimeModelBuilder`); counted in stats. Docs:
   `docs/MINE_NOTE_RESEARCH_AND_MIACODE_PORT_HANDOFF_ZH.md` §7.
@@ -335,7 +359,21 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 ## 5. Timeline, cursor mapping, preview sync
 
 - Quick model: `src/timeline/TimelineQuickModel.{h,cpp}` (lightweight parse, cursor anchors,
-  preview-follow buckets, incremental edit apply; owns comma-only `C` anchor lookup).
+  preview-follow buckets, incremental edit apply; owns comma-only `C` anchor lookup and chart-editor
+  selection range export resolution. The selection export action is available only for a non-empty
+  chart-editor selection and opens the existing export dialog's 导出区间 page with calculated values.
+  Its resolver supports tap/touch, hold, slide/wifi, touch hold, firework touch effects, comma timing,
+  multi-line and mixed-subdivision selections, chained slide expressions, and incremental `<HS*N>`
+  state. Selection edges snap to complete comma-delimited objects and complete segment expressions;
+  the range includes preview lead-in, object body, judge/effect tail, and explicitly selected empty
+  comma intervals, then ends one frame after the final selected visual. The action applies the in-memory chart to export
+  without silently writing it, and restores the originating selection without taking editor focus.
+  The context-menu entry is a standalone group immediately below Cut/Copy/Paste. Its wiring is in
+  `src/editor/PlainCodeEditor.{h,Input.cpp}` and
+  `src/app/mainwindow/sections/{frame/MainWindow.FrameBootstrap.cpp,export/MainWindow.ExportFlow.cpp}`;
+  export-page integration is in `src/tools/export_page/ExportLauncherPage.{h,cpp}` and
+  `src/tools/video_export/VideoExportDialog.{h,cpp}`. No separate logging scope is introduced;
+  existing document/export/status and diagnostic channels are reused.
 - Widget timeline: `src/timeline/TimelineView.{h,cpp}` + `.Core/.Interaction/.Paint.cpp`
   (include-split). Visible-range paint, playhead/cursor, waveform, follow-preview.
 - Scene-state + Quick surface: `src/timeline/TimelineSceneState*`, `TimelineSceneStateBuilder.*`,
@@ -443,6 +481,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Settings host + batch page: `VideoExportDialog.{h,cpp}` (single-export dialog and the shared
   tab host), `BatchExportPanel.{h,cpp}` + `BatchExportSelectionState.cpp` (embedded batch queue
   form), `VideoExportPreferences.h`. The former `BatchVideoExportDialog` is deleted.
+  The dialog's selected-range playback monitor treats MainWindow's asynchronous preview startup
+  (`previewStartupSyncPending_`, deferred `pendingPreviewPlaybackStart_`, and late-video startup)
+  as active transport; its pause callback cancels an uncommitted start through the Stop path.
+  Omitting those states makes the first 33 ms range tick disarm itself before playback commits,
+  leaving “播放导出片段” running past the selected end.
 - Controller + pipeline: `VideoExportController.{h,cpp}` (⚠ ~5000 lines — see god-file list),
   `VideoExportQuickRenderBackend.*`, `VideoExportAudioRenderPlan.*`, `VideoExportAudioBackend.h`,
   `BassExportAudioBackend.*`, `LegacyExportAudioBackend.*`, `RawVideoPipeTransport.*`,
@@ -490,7 +533,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `exportConfirmed()` and the panel STAYS OPEN; the export button doubles as 取消导出 while
   running via `setEmbeddedExportRunning`). **Embedded fixed-frame internals (2026-06-12):** the
   in-panel transport strip (`previewStrip_`) is HIDDEN — the preview-area transport on the right
-  is the only seek surface; `previewTimer_` runs for the panel's whole life and
+  remains the general seek surface; the 导出区间 tab additionally owns a full-width
+  `PlayExportRangeButton` that starts at the selected export start, shares the same host preview
+  callbacks, honors the negative-time intro lead-in when a full-range export enables it, and
+  auto-pauses/seeks exactly at the selected export end (no second media backend);
+  `previewTimer_` runs for the panel's whole life and
   `onRangePreviewTick`'s embedded branch mirrors the main preview's authoritative clock into the
   range tab's current-time readout + the 设为起点/终点 seed (those also re-read the clock at
   click time); each tab page is re-hosted in a vertical-only `QScrollArea`
@@ -951,9 +998,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   are REMOVED). The export dialog's standalone **字体 tab is GONE**; the 视频设置 dialog
   (`onPreviewVideoSettings` → `openPreviewSettingsDialog`) dropped its skin/judge-line rows + the
   音乐 + 字体 tabs and now reads **视频 / 游戏 / 性能** (性能 = 预览刷新率). `buildExportInjectedSettings`
-  keeps only 判定效果 / slide 层叠 / 中心显示. ⚠ **W1 note:** the preview-settings
+  keeps only 判定效果 / slide 层叠 / 中心显示. The 视频 page alone owns **保存为本地预设 /
+  应用本地预设** for outer/inner background brightness and square-layout scale. The same actions
+  appear on the video-export dialog's 视频 page and share `app.preview.numeric_preset`; applying it
+  updates the export task's sliders, so the rendered video uses those values. A missing preset applies
+  the compiled numeric defaults. ⚠ **W1 note:** the preview-settings
   `createDialogMenuButton` must keep the `ensurePolished()`+`setFixedHeight(qMax(sizeHint,30)+4)`
-  or its dropdowns clip their bottom border (`qt-ui-layout-pitfalls` W1).) The **default** (no custom font) HUD
+  or its dropdowns clip their bottom border (`qt-ui-layout-pitfalls` W1).) HUD font
+  picker areas are independently persisted under `app.video_export.hud_font_paths`: chart info,
+  bottom-left timestamp, center display, object stats, and debug info. Center display rendering
+  must use `PreviewHudFontArea::CenterDisplay`; do not route it through the timestamp area.
+  The **default** (no custom font) HUD
   family is **"Xiaolai Mono"** — embedded resource `:/fonts/xiaolai_mono.ttf`
   (`resources/fonts.qrc` → `assets/fonts/XiaolaiMono-Regular.subset.ttf`), loaded in
   `PreviewHudState.cpp::previewHudTimestampFont` (replaced the old JetBrains Mono, 2026-06-19).
@@ -1009,6 +1064,45 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   is a no-op in transparent mode. The custom backdrop replaces only the blurred backdrop; the
   card's jacket slot still shows the 曲绘. Batch export (`BatchVideoExportDialog`) and the CLI
   keep spec defaults (jacket/blur/DX).
+
+## 8d. Majdata Net download + online preview — `src/tools/net/`
+
+- Query/resource transport and parsing: `NetClient.{h,cpp}`. The batch-download UI and worker are
+  `NetBatchDownloadDialog.*` / `NetBatchDownloadWorker.*`; pure list sorting (highest numeric level,
+  upload time, or displayed download status; both directions) is owned by `sortNetDownloadJobs` and
+  covered by `net_client_spec`.
+- The result table intentionally omits the internal chart ID column. Its eight visible data columns
+  initialize once at `5:20:15:15:10:18:7:10` (selection/title/artist/designer/levels/uploaded/
+  status/online preview), then preserve user-resized widths across refreshes. Online Preview is the
+  final column. Online preview downloads the
+  canonical `maidata.txt` / `track.mp3` / `bg.jpg` triplet into a process-lifetime `QTemporaryDir`,
+  keyed by chart ID + remote hash, then hands its `maidata.txt` to
+  `MainWindow::openOnlinePreviewAtPath` through an owner-guarded callback.
+- The sort combo spans the user-ID and Tag input group so its long option labels do not inflate the
+  user-ID column and squeeze the Tag field. A nested row spanning the remaining columns keeps **Test
+  Connection** immediately beside the combo; the filter inputs, combo, and button share one measured
+  W1-safe height. The Test Connection action performs an eight-second probe against the real
+  Majdata chart-list HTTPS endpoint. Its inline status distinguishes normal/slow responses,
+  timeouts, general failures, and Net/Cloudflare blocking; full HTTP/network diagnostics go to the
+  existing log. The default-enabled **Download PV** checkbox sits directly below the extra-ZIP
+  option. Normal batch downloads append the Majdata `video` resource as `pv.mp4`; the endpoint's
+  documented 404 means that chart simply has no optional PV and does not fail the otherwise
+  complete chart. Online preview always caches
+  the canonical three-file triplet and, while Download PV is checked, also requires/fetches
+  `pv.mp4` before treating an existing cache entry as complete. A PV top-up skips already complete
+  cached resources, so it requests the missing video directly. Per-row online-preview actions use a
+  compact painted play icon centered in the final cell (tooltip/accessibility text retains the
+  localized label).
+  Canceling an in-flight resource changes that chart's displayed status to Canceled before the
+  worker finishes, so it cannot remain visually stuck on a Downloading status. Table status cells
+  stay terse (Pending / Downloading / Loading preview / Retrying / Packaging / Done / Failed /
+  Paused / Canceled); filenames and error explanations belong only in the diagnostic log. All
+  dialog push buttons have Qt auto-default/default activation disabled, so Return/Enter never
+  triggers query, start/repeat download, cancellation, log toggling, or close by stale focus.
+- Online-preview document state is owned by `DocumentSection`: it reuses the ordinary file-backed
+  parser/audio/preview path but does not enter recent files, last-session restore, or crash-recovery
+  tracking. Saving an online preview routes through Save As so the transient cache is not treated as
+  the user's persistent source file. The temporary root removes itself when the process exits.
 
 ## 9. Latency settings (BPM / offset / clock_count) — `src/tools/latency/`
 
@@ -1140,23 +1234,55 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - `ChartBatchTransform.{h,cpp}` (`transformChartText`, `toggleBreak/Ex/FireworkForSelection`,
   `randomRotateForSelection`), `ChartNormalization.{h,cpp}` (`normalizeChartText`),
-  `Non384SnapTable.*`. MainWindow entries: `onMirror*`, `onRotate*`, `onNormalizeWholeChart`,
-  `onToggle*Selection`.
+  `Non384SnapTable.*`. Selection skeleton transforms `clearCompleteElementsInSelection` and
+  `resetTapNotesInSelection` live in `PlainCodeEditor.Input.cpp`; the latter replaces every
+  occupied selected beat with one lane-1 tap while preserving timing directives, whitespace,
+  comments, and empty beats. MainWindow entries: `onMirror*`, `onRotate*`,
+  `onNormalizeWholeChart`, `onToggle*Selection`, `onClearCompleteElementsSelection`, and
+  `onResetTapNotesSelection`; shortcuts are registry-backed (`Ctrl+Q` / `Ctrl+W` defaults).
 
 ## 12. Toolbox media utilities
 
-- `sections/dialogs/MainWindow.Dialogs.cpp` + `MainWindow.DialogsSection.cpp` — prepend
+- `sections/dialogs/MainWindow.Dialogs.MediaTools.cpp` + `MainWindow.DialogsSection.cpp` — prepend
   silence/black, compress bg video, convert track to 44100 Hz (`onPrependTrackSilence`,
   `onPrependPvBlack`, `onCompressBackgroundVideo`, `onConvertTrackTo44100Hz`). These four open
   from a single popup, `onMediaProcessingTools()` (one button + one-line description each),
   reached via the toolbox's "音频/视频处理 / Audio/Video Processing" entry — not a hover submenu.
+  The two track-audio operations resolve the canonical `track.{mp3,wav,flac,ogg}` candidates and
+  preserve the selected input format in both the processed file and `track_bak.<extension>`.
   The shared `runFfmpegBlocking(... totalDurationSeconds, error)` helper drives a determinate
   progress bar by parsing ffmpeg `-progress pipe:1` `out_time_us=` against the expected output
   duration (falls back to an indeterminate bar when duration is unknown).
+- `src/tools/media/PvCompressionPolicy.{h,cpp}` is the shared single-file/batch compression
+  contract. It plans x264 two-pass bitrate against a `19,500,000`-byte working target, rejects
+  output at or above the decimal `20,000,000`-byte hard limit, removes audio, and uses ffmpeg
+  timestamp passthrough without `-r` or a frame-rate filter so source frame rate is preserved.
+  `PvBatchCompressionWorker.cpp` and `MainWindow.Dialogs.MediaTools.cpp` both use this policy and
+  retry once with a measured-size bitrate correction when the first output reaches the hard limit.
+- The metadata page's PV row (`MainWindow.FrameBootstrap.cpp`) provides import and delete actions.
+  `DialogsSection::onDeleteBackgroundVideo` releases the preview decoder synchronously, removes
+  local `bg.mp4`/`pv.mp4` candidates, clears an explicit `&video=` field, and reloads the preview.
 - Toolbox menu itself is built in `sections/frame/MainWindow.FrameBootstrap.cpp` (`toolboxMenu_`).
   BPM & Latency was dropped from the toolbox (still in the top Tools menu via
   `latencyDetectorAction_`); Copy Area is gated off by the local `kCopyAreaIntegratedIntoToolbox`
   constant (feature kept: `copyAreaPanel_`/`fullCopyAreaAction_`/`setFullCopyAreaVisible`).
+
+### Application custom background (2026-09-08)
+
+- Settings/serialization: `src/app/ui/AppBackgroundSettings.{h,cpp}`. Image opacity and
+  per-theme area covers are independent; legacy blur/card-alpha keys are ignored on load
+  and omitted on save. Cards retain an opaque theme surface.
+- Native rendering: `AppBackgroundPainter` caches image pixels by source, canvas size,
+  scale, alignment, and DPR. Opacity/cover changes reuse the raster. Each surface starts
+  from the application window color before image composition, preventing nested opacity
+  accumulation. Adopted surfaces use `AdoptedWidgetCoordinates` for global mapping.
+- QuickShell passes client geometry separately from frame geometry; frame geometry still
+  owns dialog positioning. `QuickShellMain.qml` renders the same background settings.
+- Choosing the same image again calls `reloadSource`; a source revision refreshes QML too.
+  A full decode determines whether translucent theme surfaces are enabled.
+- Preferences: slider previews are coalesced at 33 ms, with persistence on release; area
+  covers display percentages while the persisted alpha values remain 0..255.
+- Regression owner: `src/tools/ui/AppBackgroundSpec.cpp` / `app_background_spec`.
 
 ## Update this file when
 

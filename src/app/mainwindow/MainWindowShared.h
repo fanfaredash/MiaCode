@@ -180,6 +180,7 @@ inline constexpr int kOutlineItemBookmarkCountRole = Qt::UserRole + 5;
 // bookmark rows: int — largest bookmark line in the same difficulty group;
 // sizes the line badge uniformly so bookmark names align vertically.
 inline constexpr int kOutlineItemMaxLineRole = Qt::UserRole + 6;
+inline constexpr int kOutlineItemAttentionRole = Qt::UserRole + 7;
 
 class OutlineItemDelegate : public QStyledItemDelegate {
 public:
@@ -254,6 +255,7 @@ public:
         if (isDifficulty && !iconOnly) {
             paintDifficultyFoldChevron(painter, option, index);
         }
+        if (index.data(kOutlineItemAttentionRole).toBool()) paintAttentionDot(painter, option);
     }
 
     QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option, const QModelIndex& index) const override
@@ -298,6 +300,29 @@ public:
     }
 
 private:
+    void paintAttentionDot(QPainter* painter, const QStyleOptionViewItem& option) const
+    {
+        const bool dark = UiTheme::colors().dark;
+        const QPointF center(option.rect.left() + 9.0, option.rect.center().y());
+        const QColor attention = dark ? QColor("#D8B65A") : QColor("#C58A25");
+        QRadialGradient glow(center, 5.0);
+        QColor halo = attention;
+        halo.setAlpha(68);
+        QColor edge = attention;
+        edge.setAlpha(0);
+        glow.setColorAt(0.0, attention.lighter(118));
+        glow.setColorAt(0.38, halo);
+        glow.setColorAt(1.0, edge);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(glow);
+        painter->drawEllipse(center, 5.0, 5.0);
+        painter->setBrush(attention.lighter(112));
+        painter->drawEllipse(center, 1.8, 1.8);
+        painter->restore();
+    }
+
     // One selection language for every level: the persistent "you are here"
     // row gets a borderless fill plus a 3px accent bar on its left edge;
     // hovering any other row shows a weaker flat fill. The QListWidget

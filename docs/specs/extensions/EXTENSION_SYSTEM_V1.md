@@ -185,7 +185,7 @@ Core:
 - API discovery: `api.list`, `api.has`, `api.describe`, `api.describeNamespace`, `api.call`, `api.invoke`, `api.request`
 - DevTools diagnostics: `devtools.snapshot`, `devtools.diagnose`, `devtools.recentCalls`
 - Open Bridge discovery/calls: `open.list`, `open.describe`, `open.call`, `open.forbiddenTargets`, `open.describeForbiddenTarget`
-- SDK convenience wrappers over Open Bridge/host methods: `app.openAboutDialog`, `editor.undo`, `editor.redo`, `editor.cut`, `editor.copy`, `editor.paste`, `editor.selectAll`, `ui.registerPetOverlay`
+- SDK convenience wrappers over Open Bridge/host methods: `app.openAboutDialog`, `app.openWelcomeDialog`, `editor.undo`, `editor.redo`, `editor.cut`, `editor.copy`, `editor.paste`, `editor.selectAll`, `ui.registerPetOverlay`
 - internal command discovery with `commands.getInternalCommands` and allowlisted `commands.executeInternal`
 - checked menu-command state controlled by the owning extension through `commands.setChecked`
 
@@ -218,7 +218,8 @@ Validation/timeline/preview/UI:
 - timeline markers, bands, vertical lines, and clear
 - preview playback controls and speed
 - preview render-state query
-- preview mine-note skin selection (`setMineSkinEnabled`), without changing mine semantics
+- preview mine-note skin and SFX selection (`setMineSkinEnabled`, `setMineSfxEnabled`), without changing mine semantics
+- preview judge-hit effect visibility (`setJudgeEffectsEnabled`), without changing note judgment or firework-note visuals
 - preview text overlays: add/update/remove/clear/list/render/hit-test
 - controlled pet overlays with extension-local resources
 - bottom-tab extension views

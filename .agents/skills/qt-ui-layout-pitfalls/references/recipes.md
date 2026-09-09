@@ -356,25 +356,23 @@ screen, scale factor, or workspace geometry changes.
 bound bridge surface. The macOS build additionally proves that `QuickShellNativeSurfaceHost`
 binds the workspace surface and the completion popup uses the shared mapper.
 
-### Z8. Application-modal dialog falls behind the visible QuickShell window
+### Z8. Windows-native file-picker buttons need repeated clicks
 
-**Symptom:** the dialog is no longer visible, but every click on the application only plays
-the platform task-dialog warning sound. The application is not frozen: Qt's modal gate is
-still correctly rejecting input while the blocking window sits behind the main window.
+**Symptom:** the Windows file picker is visible, but Select/Open/Save/Cancel only takes effect
+after repeated clicks when QuickShell is active.
 
 **Root cause:** QuickShell's visible top level is a `QQuickWindow`, while `MainWindow` is a
-hidden native QWidget backend marked `miacode.dialog_parentless`. Detached dialogs therefore
-have application modality but no native owner relationship to the visible root. A one-shot
-`raise()` at show time does not survive activation changes or Windows Z-order repair.
+hidden QWidget backend. The shared stacking recovery sees the `QFileDialog` wrapper as a
+blocking dialog and schedules `raise()`/`activateWindow()` for it or for its outer modal. The
+actual interactive window is the system file-picker HWND, so that recovery can steal its
+activation between mouse-down and mouse-up.
 
-**Recipe:** install the shared `UiDialogs::DialogStackingGuard`, register the live QuickShell
-root through `setApplicationDialogTransientParent()`, and bind shown top-level dialogs whose
-native owner is absent or hidden to that root with `QWindow::setTransientParent()`. Preserve an
-existing visible owner so nested dialogs remain above their parent dialog. On application or
-root-window activation, re-raise and activate only the visible blocking modal; showing a
-non-modal dialog must not steal focus. Keep the root in
-a `QPointer`, because QuickShell teardown destroys it before the application object. Do not
-use `Qt::WindowStaysOnTopHint`: the dialog should stay above MiaCode, not above other apps.
+**Recipe:** keep the existing native `QFileDialog` call path. Classify a Windows-native
+`QFileDialog` by its `DontUseNativeDialog` option and exclude it from transient-parent binding,
+show-time activation, and modal stacking recovery while it is open. Continue binding and
+recovering ordinary ownerless application dialogs, preserving visible owners for nested
+dialogs. Do not replace the native picker with a Qt widget dialog and do not use
+`Qt::WindowStaysOnTopHint`.
 
 ---
 

@@ -8,6 +8,7 @@
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFileDialog>
 #include <QEvent>
 #include <QEventLoop>
 #include <QGuiApplication>
@@ -97,6 +98,26 @@ inline bool hasVisibleProtectedPreviewDialog()
     return false;
 }
 
+inline bool isWindowsNativeFileDialog(const QDialog* dialog)
+{
+#ifdef Q_OS_WIN
+    const auto* fileDialog = qobject_cast<const QFileDialog*>(dialog);
+    return fileDialog != nullptr && !fileDialog->testOption(QFileDialog::DontUseNativeDialog);
+#else
+    Q_UNUSED(dialog);
+    return false;
+#endif
+}
+
+inline bool isVisibleWindowsNativeFileDialog(const QWidget* widget)
+{
+    const auto* dialog = qobject_cast<const QDialog*>(widget);
+    return dialog != nullptr
+        && isWindowsNativeFileDialog(dialog)
+        && dialog->isVisible()
+        && !dialog->windowState().testFlag(Qt::WindowMinimized);
+}
+
 inline bool isVisibleBlockingModalDialog(const QWidget* widget)
 {
     const auto* dialog = qobject_cast<const QDialog*>(widget);
@@ -104,6 +125,26 @@ inline bool isVisibleBlockingModalDialog(const QWidget* widget)
         && dialog->isModal()
         && dialog->isVisible()
         && !dialog->windowState().testFlag(Qt::WindowMinimized);
+}
+
+inline bool hasVisibleWindowsNativeFileDialog()
+{
+    const auto topLevelWidgets = QApplication::topLevelWidgets();
+    for (QWidget* widget : topLevelWidgets) {
+        if (isVisibleWindowsNativeFileDialog(widget)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool hasOpenWindowsNativeFileDialog()
+{
+    if (hasVisibleWindowsNativeFileDialog()) {
+        return true;
+    }
+    const auto* activeModal = qobject_cast<const QDialog*>(QApplication::activeModalWidget());
+    return isWindowsNativeFileDialog(activeModal);
 }
 
 inline QList<QPointer<QDialog>> visibleBlockingModalDialogs()
@@ -230,8 +271,6 @@ inline bool shouldUseDetachedParent(QWidget* parent)
     return parent != nullptr && parent->property("miacode.dialog_parentless").toBool();
 }
 
-class DialogStackingGuard;
-
 inline QPointer<QWindow>& applicationDialogTransientParentStorage()
 {
     static QPointer<QWindow> window;
@@ -246,7 +285,7 @@ inline QWindow* applicationDialogTransientParent()
 inline void bindDialogToApplicationTransientParent(QDialog* dialog)
 {
     QWindow* transientParent = applicationDialogTransientParent();
-    if (dialog == nullptr || transientParent == nullptr) {
+    if (dialog == nullptr || transientParent == nullptr || isWindowsNativeFileDialog(dialog)) {
         return;
     }
     dialog->winId();
@@ -275,7 +314,7 @@ public:
         app->installEventFilter(this);
         QObject::connect(app, &QGuiApplication::applicationStateChanged, this,
             [this](Qt::ApplicationState state) {
-                if (state == Qt::ApplicationActive) {
+                if (state == Qt::ApplicationActive && !hasOpenWindowsNativeFileDialog()) {
                     restoreBlockingModalDialog();
                 }
             });
@@ -289,7 +328,10 @@ protected:
             return QObject::eventFilter(watched, event);
         }
         if (auto* dialog = qobject_cast<QDialog*>(watched);
-            dialog != nullptr && dialog->isWindow() && event->type() == QEvent::Show) {
+            dialog != nullptr
+            && !isWindowsNativeFileDialog(dialog)
+            && dialog->isWindow()
+            && event->type() == QEvent::Show) {
             QPointer<QDialog> dialogGuard(dialog);
             QTimer::singleShot(0, dialog, [dialogGuard]() {
                 if (dialogGuard.isNull() || !dialogGuard->isVisible()) {
@@ -302,7 +344,9 @@ protected:
                 dialogGuard->raise();
                 dialogGuard->activateWindow();
             });
-        } else if (watched == transientParent && event->type() == QEvent::WindowActivate) {
+        } else if (watched == transientParent
+            && event->type() == QEvent::WindowActivate
+            && !hasOpenWindowsNativeFileDialog()) {
             restoreBlockingModalDialog();
         }
         return QObject::eventFilter(watched, event);
@@ -312,6 +356,9 @@ private:
     void restoreBlockingModalDialog()
     {
         QTimer::singleShot(0, this, []() {
+            if (hasOpenWindowsNativeFileDialog()) {
+                return;
+            }
             const QList<QPointer<QDialog>> dialogs = visibleBlockingModalDialogs();
             if (dialogs.isEmpty() || dialogs.constFirst().isNull()) {
                 return;

@@ -21,6 +21,9 @@ public:
     void onReadTitleFromTrack();
     void onReadArtistFromTrack();
     void onExtractBackgroundFromTrack();
+    void onImportBackgroundImage();
+    void onImportBackgroundVideo();
+    void onDeleteBackgroundVideo();
 
 private:
     enum class MediaBlankTarget {
@@ -32,6 +35,7 @@ private:
     QString resolveCurrentChartDirectory() const;
     void releasePreviewMediaForFileOperation();
     void reloadPreviewMediaAfterFileOperation(bool reloadTrack);
+    void importBackgroundMedia(bool video);
     void onPrependMediaBlank(MediaBlankTarget target);
     // Shows an export-style "done" dialog naming the produced file, with an
     // "Open Folder" button that reveals its containing directory.

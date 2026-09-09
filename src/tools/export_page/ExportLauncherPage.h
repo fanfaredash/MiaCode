@@ -62,7 +62,7 @@ public:
     // BEFORE the switch reset it to 0. Seeds the badge default (decision D4):
     // previous active difficulty → kept page selection →
     // projectLastOpenedDifficultyId_ → first existing difficulty.
-    void onPageEntered(int previousActiveDifficultyId);
+    void onPageEntered(int previousActiveDifficultyId, double rangeStart = -1.0, double rangeEnd = -1.0);
 
     // Called unconditionally from every page-leave path (same idempotent
     // pattern as LatencyDetectionPage::onPageLeft): tears down the embedded
@@ -119,6 +119,9 @@ private:
     QList<QToolButton*> badgeButtons_;
     int selectedDifficultyId_ = 0;
     bool pageSessionActive_ = false;
+    double pendingRangeStart_ = -1.0;
+    double pendingRangeEnd_ = -1.0;
+    int pendingRangeDifficultyId_ = 0;
 
     QList<QToolButton*> subNavButtons_;
     int currentSubPage_ = SubPageVideo;

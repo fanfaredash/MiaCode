@@ -127,7 +127,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
         case MuriJudgeSpriteKind::SlideStraight: {
             const TimelineNoteMarker* marker = markerByKey.value(event.markerKey, nullptr);
             bool useRightImage = false;
-            if (marker == nullptr || !buildJudgeOverlayStraightPlacement(*marker, true, &placement, &useRightImage)) {
+            if (marker == nullptr || !buildJudgeOverlayStraightPlacement(*marker, &placement, &useRightImage)) {
                 continue;
             }
             image = useRightImage

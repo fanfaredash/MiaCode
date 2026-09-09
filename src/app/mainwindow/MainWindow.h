@@ -188,6 +188,7 @@ public:
         QString* details = nullptr
     );
     bool openStartupTarget(const QString& path);
+    bool openOnlinePreviewAtPath(const QString& path);
     void setQuickShellRootWindow(QWindow* window);
     void cancelChartAudioDrop();
     void handleAudioDrop(const QStringList& audioPaths);
@@ -299,6 +300,7 @@ private slots:
     void onToggleFireworkSelection();
     void onRandomRotateSelection();
     void onClearCompleteElementsSelection();
+    void onResetTapNotesSelection();
     void onRaiseSubdivisionSelection();
     void onLowerSubdivisionSelection();
     void onRaiseSubdivisionHalfStepSelection();
@@ -325,6 +327,9 @@ private slots:
     void onReadTitleFromTrack();
     void onReadArtistFromTrack();
     void onExtractBackgroundFromTrack();
+    void onImportBackgroundImage();
+    void onImportBackgroundVideo();
+    void onDeleteBackgroundVideo();
     // Opens the "manage per-difficulty designers" dialog (rows for &des_1..7
     // plus the "all difficulties share one designer" toggle). See
     // DocumentSection::openPerDifficultyDesignerDialog() in DocumentFlow.
@@ -401,6 +406,7 @@ private:
     };
 
     #include "MainWindowPrivateMethodsA.inc"
+    void showExtensionRequestedWelcomeDialogWhenReady();
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
     void applyPreviewPlaybackRate(double rate);
@@ -487,6 +493,8 @@ private:
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
     void applyEditorScrollBeyondLastLineEnabled(bool enabled, bool persistPreference);
+    void applyEditorSelectionBeatDisplayEnabled(bool enabled, bool persistPreference);
+    void applyEditorPreventMultiClickSelectionEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
     void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
     // Transient Alt-hold override: while the preview is paused, holding Alt

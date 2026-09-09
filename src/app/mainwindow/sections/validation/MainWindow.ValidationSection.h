@@ -67,6 +67,8 @@ public:
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
 
 private:
+    bool currentDifficultyLevelMissing() const;
+    void addMissingDifficultyLevelError();
     bool isMuriDiagnosticsTabActive() const;
     void rebuildMuriDiagnosticsPanel();
     void refreshEditorExtraSelectionsForReason(const QString& reason);

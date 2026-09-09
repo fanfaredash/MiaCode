@@ -518,7 +518,7 @@ void QuickShellNativeSurfaceHost::refreshSurfaceStyles()
     }
 
     QRect canvasGeometry = shellWindow != nullptr
-        ? shellWindow->property("miacode.quick_root_window_frame_geometry").toRect()
+        ? shellWindow->property("miacode.quick_root_window_content_geometry").toRect()
         : QRect();
     if (!canvasGeometry.isValid() && shellWindow != nullptr) {
         canvasGeometry = QRect(shellWindow->mapToGlobal(QPoint(0, 0)), shellWindow->size());
@@ -640,10 +640,13 @@ void QuickShellNativeSurfaceHost::refreshBottomTabsSurfaceVisibility()
     }
 }
 
-void QuickShellNativeSurfaceHost::updateRootWindowFrameGeometry(const QRect& geometry)
+void QuickShellNativeSurfaceHost::updateRootWindowFrameGeometry(const QRect& geometry, const QRect& contentGeometry)
 {
     if (contentProvider_ != nullptr) {
         contentProvider_->shellSetRootWindowFrameGeometry(geometry);
+        if (QWidget* shellWindow = contentProvider_->shellWindowWidget()) {
+            shellWindow->setProperty("miacode.quick_root_window_content_geometry", contentGeometry);
+        }
     }
     refreshSurfaceStyles();
 }

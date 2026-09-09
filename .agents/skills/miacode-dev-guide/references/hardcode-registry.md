@@ -42,11 +42,17 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   path — bar + comma tiers only; that path has no separate quarter-note subdivision lines).
 - `VideoExportRuntimePolicy.{h,cpp}` (`src/tools/video_export/`) — export PBO env precedence + worker
   crash-retry policy (`kVideoExportWorkerMaxCrashRetries = 1`) and file-size preset policy
-  (bitrate coefficient/min/max, peak-rate/buffer multipliers, GOP seconds, audio cap, x264 CRF,
-  and whether export suppresses video backgrounds).
+  (bitrate coefficient/min/max, peak-rate/buffer multipliers, GOP seconds, audio cap, relative
+  x264 CRF adjustment, and whether export suppresses video backgrounds). The relative adjustment
+  preserves the Fast/High Quality gap: Compact adds 1 and the ultra-compact modes add 3. Both
+  ultra-compact modes use a fixed 4000 kbps video target and peak-rate ceiling; non-standard x264
+  exports apply the bitrate/VBV limits alongside CRF so the size policy covers software encoders.
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
+- `src/app/mainwindow/sections/editor/MainWindow.EditorDisplay.cpp` — built-in editor preference
+  defaults and `preferences.json` persistence. `ui.editor_prevent_multi_click_selection` defaults
+  to `false` and is applied to both `PlainCodeEditor` instances.
 - `src/editor/SimaiCompletionCatalog.cpp` — bracket-completion suggestion lists. Fixed,
   product-decided order (do NOT sort): `[` durations `{8:1] 4:1] 16:3] 384:1]}`, `{`
   subdivisions `{16} 24} 32}}`. `(` BPM list is dynamic (scanned `(<n>)` markers +
@@ -87,6 +93,12 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   mapping (`Fast`/`High Quality`), application of the runtime size policy, and ffmpeg fallback.
 - `src/tools/video_export/RawVideoPipeTransport.cpp` — pipe queue depth / buffer sizing
   (`maxBufferedFrames` derived from frame size, ×2; `requestedBufferBytes` `2 * max(frameBytes,1MiB)`).
+- `src/tools/media/PvCompressionPolicy.{h,cpp}` — shared current-chart and batch-PV compression
+  policy. The hard limit is decimal `20,000,000` bytes and the two-pass x264 working target is
+  `19,500,000` bytes; an oversized first result gets one measured-size bitrate correction with a
+  `0.98` safety ratio. Output is video-only (`-an`), keeps source frame timestamps/frame rate via
+  `-fps_mode passthrough`, and never adds `-r` or a frame-rate filter. Keep these contracts shared
+  between `MainWindow.Dialogs.MediaTools.cpp` and `PvBatchCompressionWorker.cpp`.
 - `src/app/mainwindow/MainWindow.cpp` + `sections/window/*.cpp` — preview panel spacing, fullscreen
   overlay timing/opacity/reveal geometry, bottom-tab resize bounds (hot zone `8 px`, content scale
   `kBottomTabsContentScaleMin/Max = 0.5..4.0` in `MainWindow.WindowShell.cpp`), fixed `30 Hz`
@@ -98,8 +110,10 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   SYNC-PAIR mirrored as `kMaxContentScale` in `TimelineSceneStateBuilder.cpp` and the literal `4.0`
   in `TimelineView.cpp`/`TimelineView.Core.cpp`/`TimelineQuickStateBridge.cpp` `setContentScale`
   clamps — change all together. See `cross-chain-linkage.md`.
-- `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp` — toolbox media-prepend ffmpeg
-  defaults (`1920x1080@30`, x264 `CRF 18 veryfast`; silence stereo `44100 Hz` libmp3lame `-q:a 2`).
+- `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.MediaTools.cpp` — toolbox media-prepend
+  ffmpeg defaults (`1920x1080@30`, x264 `CRF 18 veryfast`; silence stereo `44100 Hz`); audio
+  output encoders follow the resolved track format (`libmp3lame -q:a 2`, `pcm_s16le`, `flac`,
+  or `libvorbis -q:a 6`).
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp` — issue-row padding /
   min height / ignored-row opacity.
 - `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp` —
@@ -129,3 +143,10 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 Preview effect tuning in `src/core/scene/*.cpp`; latency scan parameters; export encoder/bitrate
 heuristics; parser geometry/timing assumptions; duplicated filename/asset literals outside
 `src/common/`.
+
+### Application background controls (2026-09-08)
+
+`AppBackgroundSettings.h` owns image opacity (0..0.8, default 0.2) and theme cover
+alpha bounds (0..255). Cards are opaque; blur is not an active setting.
+`MainWindow.PreferencesDialog.cpp` coalesces live slider previews at 33 ms and
+converts cover percentages to the existing 8-bit persisted alpha values.

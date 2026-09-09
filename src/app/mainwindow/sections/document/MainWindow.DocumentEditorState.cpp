@@ -604,7 +604,7 @@ void MainWindow::DocumentSection::markCurrentFieldDirty()
     // produces a recovery file. Cheap: bounded memcpy + atomic store,
     // no disk I/O. The 2-second debounced .bak write below is for
     // routine autosave; this is the per-edit safety net.
-    if (!state_.currentFilePath_.isEmpty()) {
+    if (!state_.currentFilePath_.isEmpty() && !state_.onlinePreviewDocument_) {
         miacode::crash_recovery::updateSnapshot(
             state_.currentFilePath_,
             currentDocumentTextForAutosave());

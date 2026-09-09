@@ -36,8 +36,9 @@ Implications:
 - Head-material flags `$ $$ @ ? !` are mirrored data — keep `SimaiNativeParser`,
   `TimelineQuickModel`, `core/scene/PreviewSkinSelectors`, timeline icons, and chart-transform
   token preservation aligned in one patch.
-- The mine modifier `m` (note property `isMine` tap/hold/touch/touch_hold + `trackMine`/`headMine`
-  slide; timeline flags `TimelineRenderFlagIsMine`/`TrackMine`) is the same mirrored-data set as
+- The mine modifier `m` (note property `isMine` tap/hold/touch/touch_hold; slide head/path are
+  independent: `1m-5[...]` → `headMine`, `1-5m[...]` → `trackMine`; timeline flags
+  `TimelineRenderFlagIsMine`/`TrackMine`) is the same mirrored-data set as
   above PLUS suppression: parser (`SimaiNativeParser.{cpp,TouchTap,Slide}`) ↔ mirror
   (`TimelineQuickModel`) ↔ `ChartBatchTransform` (must accept+emit it, not `return false`) ↔
   `ChartNormalization` round-trip ↔ skin selectors (`PreviewSkinSelectors` + the touch/touch-hold
@@ -50,6 +51,9 @@ Implications:
   through the bundled extension, so every preview selector/layer must fall back to normal art when
   it is false without clearing the mine flags. In that normal-art mode, EX mine heads must also
   restore the normal EX overlay (`3xm` renders like `3x`, not `3`).
+- `PreviewRenderState::showJudgeEffects` is a presentation-only master switch for the ordinary
+  judge-hit layers (`PreviewJudgeEffectLayerState` plus the touch sparkle layer). The extension API method
+  `preview/setJudgeEffectsEnabled` controls it; note judgment and `f` firework visuals are unchanged.
 - Negative HS (`<HS*-N>`, ON by default — `SimaiNativeParser::g_allowNegativeHs` defaults true;
   opt-out `MIACODE_PREVIEW_REJECT_NEGATIVE_HS` at boot sets it false): sign lives in `PreviewTapTiming.directionSign`
   (magnitude/sign split in `previewTapTimingForEffectiveFlowSpeed`); `sampleTapApproach` reverse
@@ -349,6 +353,9 @@ persistence, export snapshot, and any analyzer entry that reconstructs runtime M
 `MainWindow::load/savePortableState` (app-scoped shared), `load/saveProjectRenderState` (chart-local
 only), `VideoExportPreferences` (export-only). Apply via `PreviewRuntime` setters + `PreviewQuickSceneRoot`
 layers; reconstruct on export via `buildVideoExportTaskFromSnapshot` + `VideoExportController`.
+The three video-page numeric values share one local preset at `app.preview.numeric_preset`; both the
+preview-settings 视频 page and video-export 视频 page save/apply it, and neither gameplay page is part
+of that preset.
 
 ## 10. Parser output feeds Muri on both paths
 
@@ -452,7 +459,10 @@ switch — the panel is recreated); teardown is in `endExportPreviewSession`
 (`teardownExportPreviewAuditionScene` — stop + clear flag + invalidate snapshot; no cache/restore,
 the destination field reinstalls its own preview). Unlike latency, audio levels are NOT
 mode-switched (export uses the user's normal mix). Export progress is status-bar-only and never
-touches the transport — preview and a running export are independent. Review together:
+touches the transport — preview and a running export are independent. Entering/re-entering the
+export page always starts a fresh audition at the 片头 head when 片头 is enabled (otherwise chart
+time 0); only video-panel recreation while remaining on the export page preserves its position.
+Review together:
 `MainWindow.ExportSnapshot.cpp`, `MainWindow.ExportFlow.cpp` (lifecycle),
 `PreviewTimelineFlow.cpp` (`hasPreviewableChart`), `MainWindow.ExportWorker.cpp` +
 `WindowSection.cpp` (progress decoupling). Supersedes the reverted "导出效果预览".
@@ -497,8 +507,6 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
 `TimelineQuickStateBridge.cpp` — change all together (also `hardcode-registry.md`). This scale is
 **UI-only** (in-app timeline panel); it has no video-export consumer.
 
-## Update this file when
-
 ### QuickShell modal-dialog native ownership
 
 - The visible QuickShell top level is a `QQuickWindow`; `MainWindow` remains a hidden native
@@ -511,8 +519,13 @@ is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
   `QWindow::setTransientParent`, then restores a visible blocking modal when the application
   or root window activates. Existing visible dialog owners are preserved for nested dialogs;
   non-modal dialogs are never force-activated by the stacking guard.
+- Windows-native `QFileDialog`s are explicitly outside this recovery path. Their Qt wrapper
+  must not be rebound or reactivated while the system picker HWND is handling input; the
+  native picker continues to use the existing Qt call sites and options.
 - Keep this behavior in the shared dialog layer. Do not add per-dialog
   `Qt::WindowStaysOnTopHint`: that would place MiaCode dialogs above unrelated applications.
+
+## Update this file when
 
 - A behavior starts/stops being mirrored across two paths; a new serialized export field is added;
   a duplicated lookup is centralized/split; a timing rule starts affecting a new subsystem.

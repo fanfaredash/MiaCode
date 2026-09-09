@@ -485,9 +485,8 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     };
     double startSecond = 0.0;
     if (owner_.exportPreviewEntrySeedSecond_ >= 0.0) {
-        // One-shot seed carried in on page entry / re-entry
-        // (performSwitchToExportField) so switching to the export page preserves
-        // progress like a difficulty-tab switch does.
+        // Page entry always seeds chart time 0. If 片头 is enabled,
+        // refreshExportIntroState below moves from there to the intro head.
         startSecond = clampToDuration(owner_.exportPreviewEntrySeedSecond_);
     } else if (owner_.lastExportAuditionDifficultyId_ == difficultyId) {
         // Re-installing the SAME difficulty WITHOUT a page switch — the 视频导出 →

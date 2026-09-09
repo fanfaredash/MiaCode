@@ -216,6 +216,9 @@ struct PreviewRenderState {
     bool showObjectStatsHud = false;
     bool showChartInfoHud = false;
     bool fixHudTextLayout = false;
+    // Presentation-only switch exposed to extensions. It controls the judge
+    // effect layers without changing note judgment or firework-note visuals.
+    bool showJudgeEffects = true;
     // Presentation-only switch exposed to extensions. Mine semantics remain
     // intact while their dedicated sprites/guides are replaced by normal art.
     bool useMineSkin = true;

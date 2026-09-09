@@ -1623,6 +1623,18 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             onAbout();
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
+        if (method == QStringLiteral("app/openWelcomeDialog")) {
+            // Extension activation runs from the backend's deferred startup
+            // refresh. Queue the modal once more so the visible QuickShell root
+            // and its post-show hooks are ready before the tutorial opens.
+            QPointer<MainWindow> windowGuard(this);
+            QTimer::singleShot(250, this, [windowGuard]() {
+                if (!windowGuard.isNull()) {
+                    windowGuard->showExtensionRequestedWelcomeDialogWhenReady();
+                }
+            });
+            return okValue(QJsonObject{{QStringLiteral("queued"), true}});
+        }
         if (method == QStringLiteral("window/showInputBox")) {
             bool ok = false;
             const QString title = params.value(QStringLiteral("title")).toString(UiText::text(QStringLiteral("extension.dialog.input_title")));
@@ -2612,6 +2624,7 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 {QStringLiteral("canvasHeight"), canvasSize.height()},
                 {QStringLiteral("layoutSquareScale"), previewLayoutSquareScale_},
                 {QStringLiteral("skinVariant"), static_cast<int>(previewSkinVariant_)},
+                {QStringLiteral("judgeEffectsEnabled"), previewCanvas_ == nullptr || previewCanvas_->showJudgeEffects()},
                 {QStringLiteral("mineSkinEnabled"), previewCanvas_ == nullptr || previewCanvas_->useMineSkin()},
                 {QStringLiteral("mineSfxEnabled"), previewAudioSettings_.mineSfxEnabled},
                 {QStringLiteral("outlineVariant"), static_cast<int>(previewOutlineVariant_)},
@@ -2635,6 +2648,13 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             const bool enabled = params.value(QStringLiteral("enabled")).toBool(true);
             if (previewCanvas_ != nullptr) {
                 previewCanvas_->setUseMineSkin(enabled);
+            }
+            return okValue(QJsonObject{{QStringLiteral("enabled"), enabled}});
+        }
+        if (method == QStringLiteral("preview/setJudgeEffectsEnabled")) {
+            const bool enabled = params.value(QStringLiteral("enabled")).toBool(true);
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->setShowJudgeEffects(enabled);
             }
             return okValue(QJsonObject{{QStringLiteral("enabled"), enabled}});
         }

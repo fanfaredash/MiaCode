@@ -213,14 +213,14 @@ void PvBatchCompressionDialog::populateTable()
         table_->setItem(row, 3, new QTableWidgetItem(QDir::toNativeSeparators(job.directoryPath)));
         const QString statusKey = !hasVideo
             ? QStringLiteral("media_tools.batch_pv_no_video")
-            : (job.originalBytes <= kPvCompressionTargetBytes
+            : (job.originalBytes < kPvCompressionTargetBytes
                    ? QStringLiteral("media_tools.batch_pv_already_small")
                    : QStringLiteral("media_tools.batch_pv_pending"));
         table_->setItem(row, 4, new QTableWidgetItem(UiText::text(statusKey)));
     }
     const bool hasJobs = !jobs_.isEmpty();
     const bool hasCompressibleVideo = std::any_of(jobs_.cbegin(), jobs_.cend(), [](const PvCompressionJob& job) {
-        return !job.videoPath.isEmpty() && job.originalBytes > kPvCompressionTargetBytes;
+        return !job.videoPath.isEmpty() && job.originalBytes >= kPvCompressionTargetBytes;
     });
     removeSelectedButton_->setEnabled(!busy_ && hasJobs);
     clearQueueButton_->setEnabled(!busy_ && hasJobs);
@@ -271,7 +271,7 @@ void PvBatchCompressionDialog::setBusy(bool busy)
             ? UiText::text(QStringLiteral("media_tools.batch_pv_cancel"))
             : UiText::text(QStringLiteral("media_tools.batch_pv_start")));
     const bool hasCompressibleVideo = std::any_of(jobs_.cbegin(), jobs_.cend(), [](const PvCompressionJob& job) {
-        return !job.videoPath.isEmpty() && job.originalBytes > kPvCompressionTargetBytes;
+        return !job.videoPath.isEmpty() && job.originalBytes >= kPvCompressionTargetBytes;
     });
     compressButton_->setEnabled(hasCompressibleVideo);
     closeButton_->setText(
@@ -283,7 +283,7 @@ void PvBatchCompressionDialog::startCompression()
 {
     const int videoCount = static_cast<int>(std::count_if(
         jobs_.cbegin(), jobs_.cend(), [](const PvCompressionJob& job) {
-            return !job.videoPath.isEmpty() && job.originalBytes > kPvCompressionTargetBytes;
+            return !job.videoPath.isEmpty() && job.originalBytes >= kPvCompressionTargetBytes;
         }));
     if (videoCount == 0) {
         return;

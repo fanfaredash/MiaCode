@@ -37,13 +37,20 @@ QString formatSpeed(qint64 bytes, qint64 elapsedMs)
     return QStringLiteral("%1 KiB/s").arg(bytesPerSecond / 1024.0, 0, 'f', 1);
 }
 
-QList<NetBatchResourceSpec> requiredResources()
+QList<NetBatchResourceSpec> requestedResources(bool downloadVideo)
 {
-    return {
+    QList<NetBatchResourceSpec> resources = {
         {QStringLiteral("track"), QStringLiteral("track.mp3"), QStringLiteral("track.mp3")},
         {QStringLiteral("image?fullImage=true"), QStringLiteral("bg.jpg"), QStringLiteral("bg.jpg")},
         {QStringLiteral("chart"), QStringLiteral("maidata.txt"), QStringLiteral("maidata.txt")},
     };
+    if (downloadVideo) {
+        // Majdata's video endpoint returns 404 when a chart has no PV. Treat
+        // that documented absence as an optional resource rather than making
+        // the otherwise complete chart fail.
+        resources.append({QStringLiteral("video"), QStringLiteral("pv.mp4"), QStringLiteral("pv.mp4"), true});
+    }
+    return resources;
 }
 
 }  // namespace
@@ -64,6 +71,9 @@ void NetBatchDownloadWorker::run()
     bool paused = false;
     qint64 totalBytes = 0;
     qint64 totalNetworkMs = 0;
+    const QString activeStatus = UiText::text(request_.onlinePreview
+            ? QStringLiteral("net.online_preview_loading")
+            : QStringLiteral("net.downloading"));
 
     emit log(UiText::text(QStringLiteral("net.background_download_thread_started")));
     for (int row = 0; row < request_.jobs.size() && !isCanceled() && !paused; ++row) {
@@ -73,24 +83,33 @@ void NetBatchDownloadWorker::run()
             continue;
         }
 
-        emit rowStatus(row, UiText::text(QStringLiteral("net.downloading")));
+        emit rowStatus(row, activeStatus);
         emit summary(UiText::text(QStringLiteral("net.downloading_1")).arg(job.chart.title));
         emit log(UiText::text(QStringLiteral("net.start_chart_1_2")).arg(job.chart.title, job.chart.id));
 
         QString error;
-        job.outputDirectoryPath = chartDirectoryPathForTitle(request_.outputDirectory, job.chart.title, job.chart.id);
+        if (job.outputDirectoryPath.trimmed().isEmpty()) {
+            job.outputDirectoryPath = chartDirectoryPathForTitle(request_.outputDirectory, job.chart.title, job.chart.id);
+        }
         if (!QDir().mkpath(job.outputDirectoryPath)) {
             error = UiText::text(QStringLiteral("net.could_not_create_chart_folder"));
         }
 
         bool resourcesOk = error.isEmpty();
         QList<NetBatchResourceStats> resourceStats;
-        for (const NetBatchResourceSpec& resource : requiredResources()) {
+        for (const NetBatchResourceSpec& resource : requestedResources(request_.downloadVideo)) {
             if (!resourcesOk || paused || isCanceled()) {
                 break;
             }
-            emit rowStatus(row, UiText::text(QStringLiteral("net.downloading_1_2")).arg(resource.label));
             const QString outputPath = QDir(job.outputDirectoryPath).filePath(resource.fileName);
+            const QFileInfo existingFile(outputPath);
+            if (request_.onlinePreview && existingFile.isFile() && existingFile.size() > 0) {
+                emit log(UiText::text(QStringLiteral("net.skip_existing_file_1_2"))
+                             .arg(resource.fileName)
+                             .arg(existingFile.size()));
+                continue;
+            }
+            emit rowStatus(row, activeStatus);
             resourcesOk = downloadResourceToFile(client, row, job.chart.id, resource, outputPath, &error, &paused, &resourceStats);
         }
 
@@ -99,12 +118,15 @@ void NetBatchDownloadWorker::run()
             break;
         }
         if (isCanceled()) {
+            emit rowStatus(row, UiText::text(QStringLiteral("net.canceled")));
             break;
         }
         if (!resourcesOk) {
             ++failed;
             job.errorMessage = error.isEmpty() ? UiText::text(QStringLiteral("net.resource_download_failed")) : error;
-            emit rowStatus(row, UiText::text(QStringLiteral("net.failed_1")).arg(job.errorMessage));
+            emit rowStatus(row, UiText::text(QStringLiteral("net.failed")));
+            emit log(UiText::text(QStringLiteral("net.chart_failed_1_2"))
+                         .arg(job.chart.title, job.errorMessage));
         } else {
             bool chartDone = true;
             if (request_.createZip) {
@@ -120,14 +142,14 @@ void NetBatchDownloadWorker::run()
             }
             if (chartDone) {
                 ++succeeded;
-                emit rowStatus(row,
-                    request_.createZip ? UiText::text(QStringLiteral("net.done_folder_zip"))
-                                       : UiText::text(QStringLiteral("net.done_folder")));
+                emit rowStatus(row, UiText::text(QStringLiteral("net.done_folder")));
                 emit log(UiText::text(QStringLiteral("net.chart_complete_1_2")).arg(job.chart.title, job.outputDirectoryPath));
             } else {
                 ++failed;
                 job.errorMessage = error;
-                emit rowStatus(row, UiText::text(QStringLiteral("net.package_failed_1")).arg(error));
+                emit rowStatus(row, UiText::text(QStringLiteral("net.failed")));
+                emit log(UiText::text(QStringLiteral("net.chart_failed_1_2"))
+                             .arg(job.chart.title, job.errorMessage));
             }
         }
 
@@ -201,10 +223,17 @@ bool NetBatchDownloadWorker::downloadResourceToFile(
         if (result.ok) {
             return true;
         }
+        if (resource.optional && result.statusCode == 404) {
+            emit log(UiText::text(QStringLiteral("net.optional_resource_not_available_1"))
+                         .arg(resource.label));
+            return true;
+        }
         if (errorMessage != nullptr) {
             *errorMessage = result.errorMessage;
         }
-        emit rowStatus(row, UiText::text(QStringLiteral("net.retrying_1")).arg(resource.label));
+        emit rowStatus(row, UiText::text(request_.onlinePreview
+                ? QStringLiteral("net.online_preview_loading")
+                : QStringLiteral("net.retrying")));
         if (!waitUnlessCanceled(cancelRequested_, 800)) {
             return false;
         }

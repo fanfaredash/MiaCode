@@ -3,9 +3,6 @@
 #include <QApplication>
 #include <QEvent>
 #include <QFileInfo>
-#include <QGraphicsBlurEffect>
-#include <QGraphicsPixmapItem>
-#include <QGraphicsScene>
 #include <QImageReader>
 #include <QPainter>
 #include <QPaintEvent>
@@ -13,8 +10,10 @@
 #include <QStyleOption>
 #include <QUrl>
 #include <QVariant>
+#include <QtMath>
 
 #include "common/DebugLog.h"
+#include "common/AdoptedWidgetCoordinates.h"
 
 namespace miacode::ui {
 
@@ -26,7 +25,6 @@ constexpr auto kAppBackgroundEnabledProperty = "miacode.appBackgroundEnabled";
 constexpr auto kAppBackgroundImagePathProperty = "miacode.appBackgroundImagePath";
 constexpr auto kAppBackgroundSourceUrlProperty = "miacode.appBackgroundSourceUrl";
 constexpr auto kAppBackgroundOpacityProperty = "miacode.appBackgroundOpacity";
-constexpr auto kAppBackgroundBlurProperty = "miacode.appBackgroundBlur";
 constexpr auto kAppBackgroundToolbarAlphaDarkProperty = "miacode.appBackgroundToolbarAlphaDark";
 constexpr auto kAppBackgroundToolbarAlphaLightProperty = "miacode.appBackgroundToolbarAlphaLight";
 constexpr auto kAppBackgroundStatusAlphaDarkProperty = "miacode.appBackgroundStatusAlphaDark";
@@ -62,20 +60,17 @@ QString backgroundSettingsSignature(const AppBackgroundSettings& settings)
 {
     const AppBackgroundOverlaySettings& overlays = settings.overlays;
     return QStringLiteral(
-               "enabled=%1 image=%2 opacity=%3 blur=%4 overlays=%5,%6,%7,%8,%9,%10,%11,%12,"
-               "%13,%14,%15,%16 size_mode=%17 position=%18")
+               "enabled=%1 image=%2 opacity=%3 overlays=%4,%5,%6,%7,%8,%9,"
+               "%10,%11,%12,%13,%14,%15 size_mode=%16 position=%17")
         .arg(settings.enabled ? 1 : 0)
         .arg(settings.imagePath)
         .arg(settings.opacity, 0, 'f', 6)
-        .arg(settings.blur)
         .arg(overlays.toolbarAlphaDark)
         .arg(overlays.toolbarAlphaLight)
         .arg(overlays.statusAlphaDark)
         .arg(overlays.statusAlphaLight)
         .arg(overlays.panelAlphaDark)
         .arg(overlays.panelAlphaLight)
-        .arg(overlays.cardAlphaDark)
-        .arg(overlays.cardAlphaLight)
         .arg(overlays.editorHeaderAlphaDark)
         .arg(overlays.editorHeaderAlphaLight)
         .arg(overlays.inputAlphaDark)
@@ -142,15 +137,12 @@ void AppBackgroundPainter::setSettings(const AppBackgroundSettings& settings)
     if (normalized.enabled == settings_.enabled
         && normalized.imagePath == settings_.imagePath
         && qFuzzyCompare(normalized.opacity + 1.0, settings_.opacity + 1.0)
-        && normalized.blur == settings_.blur
         && normalized.overlays.toolbarAlphaDark == settings_.overlays.toolbarAlphaDark
         && normalized.overlays.toolbarAlphaLight == settings_.overlays.toolbarAlphaLight
         && normalized.overlays.statusAlphaDark == settings_.overlays.statusAlphaDark
         && normalized.overlays.statusAlphaLight == settings_.overlays.statusAlphaLight
         && normalized.overlays.panelAlphaDark == settings_.overlays.panelAlphaDark
         && normalized.overlays.panelAlphaLight == settings_.overlays.panelAlphaLight
-        && normalized.overlays.cardAlphaDark == settings_.overlays.cardAlphaDark
-        && normalized.overlays.cardAlphaLight == settings_.overlays.cardAlphaLight
         && normalized.overlays.editorHeaderAlphaDark == settings_.overlays.editorHeaderAlphaDark
         && normalized.overlays.editorHeaderAlphaLight == settings_.overlays.editorHeaderAlphaLight
         && normalized.overlays.inputAlphaDark == settings_.overlays.inputAlphaDark
@@ -171,13 +163,30 @@ void AppBackgroundPainter::setSettings(const AppBackgroundSettings& settings)
 
     unchangedSettingsLogGate_.reset();
     logBackgroundDiag(QStringLiteral(
-        "action=set_settings enabled=%1 opacity=%2 blur=%3 image_path=%4")
+        "action=set_settings enabled=%1 opacity=%2 image_path=%3")
         .arg(normalized.enabled ? 1 : 0)
         .arg(normalized.opacity)
-        .arg(normalized.blur)
         .arg(quotedDiag(normalized.imagePath)));
+    const bool imageChanged = normalized.imagePath != settings_.imagePath
+        || normalized.sizeMode != settings_.sizeMode
+        || normalized.position != settings_.position;
     settings_ = normalized;
+    if (imageChanged) {
+        invalidateCache();
+    }
+    ensureSourceLoaded();
+    updateApplicationActiveFlag();
+    requestSurfaceUpdates();
+}
+
+void AppBackgroundPainter::reloadSource()
+{
+    sourceImage_ = QImage();
+    loadedPath_.clear();
+    sourceLoadAttempted_ = false;
     invalidateCache();
+    ensureSourceLoaded();
+    ++sourceRevision_;
     updateApplicationActiveFlag();
     requestSurfaceUpdates();
 }
@@ -188,8 +197,11 @@ void AppBackgroundPainter::setCanvasGeometryGlobal(const QRect& geometry)
     if (canvasGeometryGlobal_ == normalized) {
         return;
     }
+    const bool sizeChanged = canvasGeometryGlobal_.size() != normalized.size();
     canvasGeometryGlobal_ = normalized;
-    invalidateCache();
+    if (sizeChanged) {
+        invalidateCache();
+    }
     requestSurfaceUpdates();
 }
 
@@ -201,6 +213,7 @@ void AppBackgroundPainter::invalidateCache()
     if (settings_.imagePath != loadedPath_) {
         sourceImage_ = QImage();
         loadedPath_.clear();
+        sourceLoadAttempted_ = false;
     }
 }
 
@@ -215,7 +228,7 @@ bool AppBackgroundPainter::paintBackgroundForSurface(QWidget* surface, QPainter&
         return false;
     }
 
-    const QPixmap pixmap = renderedPixmap(canvasSize());
+    const QPixmap pixmap = renderedPixmap(canvasSize(), surface->devicePixelRatioF());
     if (pixmap.isNull()) {
         if (logCount < 20) {
             ++logCount;
@@ -233,10 +246,10 @@ bool AppBackgroundPainter::paintBackgroundForSurface(QWidget* surface, QPainter&
 
     const QPoint canvasTopLeft = canvasGeometryGlobal_.isValid()
         ? canvasGeometryGlobal_.topLeft()
-        : window_->mapToGlobal(QPoint(0, 0));
-    const QPoint sourceTopLeft = surface->mapToGlobal(QPoint(0, 0)) - canvasTopLeft;
+        : mapWidgetPointToGlobal(window_, QPoint());
+    const QPoint sourceTopLeft = mapWidgetPointToGlobal(surface, QPoint()) - canvasTopLeft;
     const QRect sourceRect(sourceTopLeft, surface->size());
-    const QRect clippedSource = sourceRect.intersected(pixmap.rect());
+    const QRect clippedSource = sourceRect.intersected(QRect(QPoint(), canvasSize()));
     if (clippedSource.isEmpty()) {
         if (logCount < 20) {
             ++logCount;
@@ -255,7 +268,18 @@ bool AppBackgroundPainter::paintBackgroundForSurface(QWidget* surface, QPainter&
     }
 
     const QRect targetRect(clippedSource.topLeft() - sourceTopLeft, clippedSource.size());
-    painter.drawPixmap(targetRect, pixmap, clippedSource);
+    painter.save();
+    // Each native surface reconstructs the same window backdrop. Start from the
+    // window color so nested surfaces do not accumulate the image opacity.
+    painter.fillRect(targetRect, qApp->palette().color(QPalette::Window));
+    painter.setOpacity(painter.opacity() * settings_.opacity);
+    const qreal dpr = pixmap.devicePixelRatio();
+    painter.drawPixmap(QRectF(targetRect), pixmap,
+                       // All surfaces sample the same physical-pixel grid, including
+                       // odd logical origins at fractional display scales.
+                       QRectF(qRound(clippedSource.x() * dpr), qRound(clippedSource.y() * dpr),
+                              clippedSource.width() * dpr, clippedSource.height() * dpr));
+    painter.restore();
     if (logCount < 20) {
         ++logCount;
         logBackgroundDiag(QStringLiteral(
@@ -282,9 +306,8 @@ bool AppBackgroundPainter::eventFilter(QObject* watched, QEvent* event)
         switch (event->type()) {
         case QEvent::Resize:
         case QEvent::LayoutRequest:
-        case QEvent::StyleChange:
         case QEvent::DevicePixelRatioChange:
-            invalidateCache();
+            // Raster reuse is keyed by canvas size and DPR, not theme/layout events.
             requestSurfaceUpdates();
             break;
         default:
@@ -296,12 +319,13 @@ bool AppBackgroundPainter::eventFilter(QObject* watched, QEvent* event)
 
 bool AppBackgroundPainter::ensureSourceLoaded()
 {
-    if (!sourceImage_.isNull() && loadedPath_ == settings_.imagePath) {
-        return true;
+    if (sourceLoadAttempted_ && loadedPath_ == settings_.imagePath) {
+        return !sourceImage_.isNull();
     }
 
+    sourceLoadAttempted_ = true;
     sourceImage_ = QImage();
-    loadedPath_.clear();
+    loadedPath_ = settings_.imagePath;
     if (settings_.imagePath.isEmpty() || !QFileInfo::exists(settings_.imagePath)) {
         logBackgroundDiag(QStringLiteral(
             "action=source_load_failed reason=missing_path image_path=%1")
@@ -309,7 +333,8 @@ bool AppBackgroundPainter::ensureSourceLoaded()
         return false;
     }
 
-    QImage image(settings_.imagePath);
+    QImageReader reader(settings_.imagePath);
+    QImage image = reader.read();
     if (image.isNull()) {
         logBackgroundDiag(QStringLiteral(
             "action=source_load_failed reason=qimage_null image_path=%1")
@@ -325,29 +350,6 @@ bool AppBackgroundPainter::ensureSourceLoaded()
         .arg(sourceImage_.width())
         .arg(sourceImage_.height()));
     return true;
-}
-
-QImage AppBackgroundPainter::blurredImage(const QImage& image) const
-{
-    if (settings_.blur <= 0 || image.isNull()) {
-        return image;
-    }
-
-    QGraphicsScene scene;
-    QGraphicsPixmapItem item(QPixmap::fromImage(image));
-    QGraphicsBlurEffect effect;
-    effect.setBlurRadius(static_cast<qreal>(settings_.blur));
-    effect.setBlurHints(QGraphicsBlurEffect::PerformanceHint);
-    item.setGraphicsEffect(&effect);
-    scene.addItem(&item);
-
-    QImage result(image.size(), QImage::Format_ARGB32_Premultiplied);
-    result.fill(Qt::transparent);
-    QPainter painter(&result);
-    scene.render(&painter, QRectF(QPointF(0, 0), image.size()), QRectF(QPointF(0, 0), image.size()));
-    scene.removeItem(&item);
-    item.setGraphicsEffect(nullptr);
-    return result;
 }
 
 QSize AppBackgroundPainter::canvasSize() const
@@ -426,7 +428,7 @@ QRect AppBackgroundPainter::targetRectForImage(const QSize& imageSize, const QSi
     return QRect(alignedTopLeft(drawSize, canvasSize), drawSize);
 }
 
-QPixmap AppBackgroundPainter::renderedPixmap(const QSize& canvasSize)
+QPixmap AppBackgroundPainter::renderedPixmap(const QSize& canvasSize, qreal dpr)
 {
     if (!settings_.enabled
         || settings_.opacity <= 0.0
@@ -448,30 +450,16 @@ QPixmap AppBackgroundPainter::renderedPixmap(const QSize& canvasSize)
 
     if (!cachedPixmap_.isNull()
         && cachedWidgetSize_ == canvasSize
-        && cachedSettings_.enabled == settings_.enabled
         && cachedSettings_.imagePath == settings_.imagePath
-        && qFuzzyCompare(cachedSettings_.opacity + 1.0, settings_.opacity + 1.0)
-        && cachedSettings_.blur == settings_.blur
-        && cachedSettings_.overlays.toolbarAlphaDark == settings_.overlays.toolbarAlphaDark
-        && cachedSettings_.overlays.toolbarAlphaLight == settings_.overlays.toolbarAlphaLight
-        && cachedSettings_.overlays.statusAlphaDark == settings_.overlays.statusAlphaDark
-        && cachedSettings_.overlays.statusAlphaLight == settings_.overlays.statusAlphaLight
-        && cachedSettings_.overlays.panelAlphaDark == settings_.overlays.panelAlphaDark
-        && cachedSettings_.overlays.panelAlphaLight == settings_.overlays.panelAlphaLight
-        && cachedSettings_.overlays.cardAlphaDark == settings_.overlays.cardAlphaDark
-        && cachedSettings_.overlays.cardAlphaLight == settings_.overlays.cardAlphaLight
-        && cachedSettings_.overlays.editorHeaderAlphaDark == settings_.overlays.editorHeaderAlphaDark
-        && cachedSettings_.overlays.editorHeaderAlphaLight == settings_.overlays.editorHeaderAlphaLight
-        && cachedSettings_.overlays.inputAlphaDark == settings_.overlays.inputAlphaDark
-        && cachedSettings_.overlays.inputAlphaLight == settings_.overlays.inputAlphaLight
-        && cachedSettings_.overlays.codeEditorAlphaDark == settings_.overlays.codeEditorAlphaDark
-        && cachedSettings_.overlays.codeEditorAlphaLight == settings_.overlays.codeEditorAlphaLight
+        && qFuzzyCompare(cachedPixmap_.devicePixelRatio(), dpr)
         && cachedSettings_.sizeMode == settings_.sizeMode
         && cachedSettings_.position == settings_.position) {
         return cachedPixmap_;
     }
 
-    QImage canvas(canvasSize, QImage::Format_ARGB32_Premultiplied);
+    const QSize pixelSize(qCeil(canvasSize.width() * dpr), qCeil(canvasSize.height() * dpr));
+    QImage canvas(pixelSize, QImage::Format_ARGB32_Premultiplied);
+    canvas.setDevicePixelRatio(dpr);
     canvas.fill(Qt::transparent);
     QPainter imagePainter(&canvas);
     imagePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
@@ -490,14 +478,7 @@ QPixmap AppBackgroundPainter::renderedPixmap(const QSize& canvasSize)
     }
     imagePainter.end();
 
-    canvas = blurredImage(canvas);
-
-    QPixmap result(canvasSize);
-    result.fill(Qt::transparent);
-    QPainter painter(&result);
-    painter.setOpacity(settings_.opacity);
-    painter.drawImage(0, 0, canvas);
-    painter.end();
+    const QPixmap result = QPixmap::fromImage(canvas);
 
     cachedPixmap_ = result;
     cachedWidgetSize_ = canvasSize;
@@ -518,11 +499,9 @@ void AppBackgroundPainter::updateApplicationActiveFlag() const
         return;
     }
     const bool imageReadable =
-        !settings_.imagePath.isEmpty()
-        && QFileInfo::exists(settings_.imagePath)
-        && QImageReader(settings_.imagePath).canRead();
+        !sourceImage_.isNull() && loadedPath_ == settings_.imagePath;
     logBackgroundDiag(QStringLiteral(
-        "action=active_flag enabled=%1 opacity=%2 image_path_empty=%3 file_exists=%4 image_reader_can_read=%5 active=%6 image_path=%7")
+        "action=active_flag enabled=%1 opacity=%2 image_path_empty=%3 file_exists=%4 image_decoded=%5 active=%6 image_path=%7")
         .arg(settings_.enabled ? 1 : 0)
         .arg(settings_.opacity)
         .arg(settings_.imagePath.isEmpty() ? 1 : 0)
@@ -533,21 +512,21 @@ void AppBackgroundPainter::updateApplicationActiveFlag() const
     qApp->setProperty(
         kAppBackgroundActiveProperty,
         settings_.enabled && settings_.opacity > 0.0 && imageReadable);
+    qApp->setProperty("miacode.appBackgroundSourceRevision", sourceRevision_);
     qApp->setProperty(kAppBackgroundEnabledProperty, settings_.enabled);
     qApp->setProperty(kAppBackgroundImagePathProperty, settings_.imagePath);
     qApp->setProperty(
         kAppBackgroundSourceUrlProperty,
         settings_.imagePath.isEmpty() ? QString() : QUrl::fromLocalFile(settings_.imagePath).toString());
     qApp->setProperty(kAppBackgroundOpacityProperty, settings_.opacity);
-    qApp->setProperty(kAppBackgroundBlurProperty, settings_.blur);
     qApp->setProperty(kAppBackgroundToolbarAlphaDarkProperty, settings_.overlays.toolbarAlphaDark);
     qApp->setProperty(kAppBackgroundToolbarAlphaLightProperty, settings_.overlays.toolbarAlphaLight);
     qApp->setProperty(kAppBackgroundStatusAlphaDarkProperty, settings_.overlays.statusAlphaDark);
     qApp->setProperty(kAppBackgroundStatusAlphaLightProperty, settings_.overlays.statusAlphaLight);
     qApp->setProperty(kAppBackgroundPanelAlphaDarkProperty, settings_.overlays.panelAlphaDark);
     qApp->setProperty(kAppBackgroundPanelAlphaLightProperty, settings_.overlays.panelAlphaLight);
-    qApp->setProperty(kAppBackgroundCardAlphaDarkProperty, settings_.overlays.cardAlphaDark);
-    qApp->setProperty(kAppBackgroundCardAlphaLightProperty, settings_.overlays.cardAlphaLight);
+    qApp->setProperty(kAppBackgroundCardAlphaDarkProperty, kAppBackgroundOverlayAlphaMax);
+    qApp->setProperty(kAppBackgroundCardAlphaLightProperty, kAppBackgroundOverlayAlphaMax);
     qApp->setProperty(kAppBackgroundEditorHeaderAlphaDarkProperty, settings_.overlays.editorHeaderAlphaDark);
     qApp->setProperty(kAppBackgroundEditorHeaderAlphaLightProperty, settings_.overlays.editorHeaderAlphaLight);
     qApp->setProperty(kAppBackgroundInputAlphaDarkProperty, settings_.overlays.inputAlphaDark);

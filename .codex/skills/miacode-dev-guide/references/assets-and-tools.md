@@ -60,6 +60,8 @@ Current chart-directory conventions:
   - `bg.jpg`
   - `bg.png`
   - `bg.jpeg`
+  - metadata-page direct import accepts JPG/JPEG/PNG and copies it as `bg.<lowercase source extension>`; it accepts MP4 and copies it as `pv.mp4`
+  - a successful direct import moves other same-kind candidates to persistent `<stem>_bak.<ext>` copies after transactional commit; existing backup names are preserved by adding `_2`, `_3`, and so on, while imported video also persists `&video=pv.mp4`
 - project metadata sidecar root:
   - `.miacode/`
 - project render-state sidecar:

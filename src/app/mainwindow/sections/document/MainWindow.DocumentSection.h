@@ -24,6 +24,7 @@ public:
     void onNewFile();
     void onOpenFile();
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
+    bool openOnlinePreviewAtPath(const QString& path);
     void refreshRestoreBackupMenu(QMenu* restoreBackupMenu);
     void restoreBackupFilePath(const QString& path, bool mentionAbnormalExit = false);
     bool restoreLastSessionFile();
@@ -35,7 +36,8 @@ public:
         TextEncoding encodingUsed,
         const SimaiDocument& document,
         bool showStatusMessage,
-        double knownTrackDurationSeconds = -1.0
+        double knownTrackDurationSeconds = -1.0,
+        bool onlinePreview = false
     );
     void resetAutosaveState(const QString& referenceText);
     // Drop the in-memory crash-recovery snapshot AND delete the
@@ -58,6 +60,10 @@ public:
     bool currentSelectionRange(int* startPos, int* endPos) const;
     void setMetadataExtraText(const QString& text);
     void setEditorText(const QString& text);
+    void clearExportSelectionContext();
+    bool maybeSaveExportOriginFieldChanges();
+    bool saveExportOriginFieldToDisk();
+    void discardExportOriginChanges();
     void updatePauseButtonAppearance();
     void updateDirtyState();
     bool currentFieldHasUndoChanges() const;
@@ -95,6 +101,7 @@ public:
     void onToggleFireworkSelection();
     void onRandomRotateSelection();
     void onClearCompleteElementsSelection();
+    void onResetTapNotesSelection();
     void onRaiseSubdivisionSelection();
     void onLowerSubdivisionSelection();
     void onRaiseSubdivisionHalfStepSelection();
@@ -127,6 +134,8 @@ public:
     bool switchToDifficultyField(int difficultyId);
     bool switchToLatencyField();
     bool switchToExportField();
+    bool switchToExportFieldWithoutSave(
+        int difficultyId, double rangeStart, double rangeEnd, int documentRevision);
     // Floats the busy spinner over the "Export" sidebar row / hides it. Shown
     // while the (slow) export-page build runs after switchToExportField().
     // Positioning is separate so sidebar rebuilds can re-anchor an active

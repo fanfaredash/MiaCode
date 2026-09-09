@@ -6,6 +6,7 @@
 #include "QtPreviewSfxRuntime.h"
 #include "DialogLocalization.h"
 #include "EditableValueLabel.h"
+#include "PreviewVideoNumericPreset.h"
 #include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -625,6 +626,20 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     videoCheckLayout->addWidget(debugCheck, 1, 1, Qt::AlignLeft);
     videoCheckLayout->addWidget(forceLabeledJudgeLineWhenPausedCheck, 2, 0, Qt::AlignLeft);
     videoFormLayout->addRow(QString(), videoCheckRow);
+    auto* videoPresetRow = new QWidget(videoGroup);
+    auto* videoPresetLayout = new QHBoxLayout(videoPresetRow);
+    videoPresetLayout->setContentsMargins(0, 0, 0, 0);
+    videoPresetLayout->setSpacing(8);
+    videoPresetLayout->addStretch(1);
+    auto* saveLocalVideoPresetButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.render_settings.button.set_software_default_audio")),
+        videoPresetRow);
+    auto* applyLocalVideoPresetButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.render_settings.button.restore_project_default")),
+        videoPresetRow);
+    videoPresetLayout->addWidget(saveLocalVideoPresetButton);
+    videoPresetLayout->addWidget(applyLocalVideoPresetButton);
+    videoFormLayout->addRow(QString(), videoPresetRow);
 
     const auto addSettingsField = [](QWidget* parent, QGridLayout* layout, int row, int column, const QString& labelText, QWidget* control) {
         auto* field = new QWidget(parent);
@@ -1299,6 +1314,47 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         owner_.previewForceLabeledJudgeLineWhenPaused_ = checked;
         owner_.applyEffectivePreviewOutlineVariantToCanvas();
         owner_.applyPreviewStageMediaRouteVisualSettings();
+        owner_.savePortableState();
+    });
+
+    connect(saveLocalVideoPresetButton, &QPushButton::clicked, &dialog, [this]() {
+        miacode::ui::savePreviewVideoNumericPreset({
+            owner_.previewBackgroundBrightnessOuter_,
+            owner_.previewBackgroundBrightnessInner_,
+            owner_.previewLayoutSquareScale_,
+        });
+    });
+    connect(applyLocalVideoPresetButton, &QPushButton::clicked, &dialog, [
+        this,
+        outerBrightnessSlider,
+        outerBrightnessLabel,
+        innerBrightnessSlider,
+        innerBrightnessLabel,
+        layoutSquareScaleSlider,
+        layoutSquareScaleLabel
+    ]() {
+        const miacode::ui::PreviewVideoNumericPreset preset =
+            miacode::ui::loadPreviewVideoNumericPreset();
+        owner_.previewBackgroundBrightnessOuter_ = preset.backgroundBrightnessOuter;
+        owner_.previewBackgroundBrightnessInner_ = preset.backgroundBrightnessInner;
+        owner_.previewLayoutSquareScale_ = preset.layoutSquareScale;
+
+        const QSignalBlocker outerBlocker(outerBrightnessSlider);
+        const QSignalBlocker innerBlocker(innerBrightnessSlider);
+        const QSignalBlocker scaleBlocker(layoutSquareScaleSlider);
+        outerBrightnessSlider->setValue(qRound(preset.backgroundBrightnessOuter * 100.0));
+        innerBrightnessSlider->setValue(qRound(preset.backgroundBrightnessInner * 100.0));
+        layoutSquareScaleSlider->setValue(qRound(preset.layoutSquareScale * 100.0));
+        outerBrightnessLabel->setText(QString::number(outerBrightnessSlider->value()) + "%");
+        innerBrightnessLabel->setText(QString::number(innerBrightnessSlider->value()) + "%");
+        layoutSquareScaleLabel->setText(QString::number(layoutSquareScaleSlider->value()) + "%");
+
+        owner_.applyPreviewStageMediaRouteVisualSettings();
+        if (owner_.previewCanvas_ != nullptr) {
+            owner_.previewCanvas_->setBackgroundBrightnessOuter(preset.backgroundBrightnessOuter);
+            owner_.previewCanvas_->setBackgroundBrightnessInner(preset.backgroundBrightnessInner);
+            owner_.previewCanvas_->setLayoutSquareScale(preset.layoutSquareScale);
+        }
         owner_.savePortableState();
     });
 

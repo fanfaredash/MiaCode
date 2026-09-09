@@ -753,6 +753,9 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
     int errorCount = 0;
     int warningCount = 0;
     int muriIssueCount = 0;
+    if (currentDifficultyLevelMissing()) {
+        ++errorCount;
+    }
     const QSet<QString> ignoredTypes = state_.ignoredHeaderIssueTypesByFile_.value(currentValidationIgnoreScopeKey());
     const auto cacheIt = state_.validationCacheByDifficulty_.constFind(owner_.activeDifficultyId());
     if (cacheIt != state_.validationCacheByDifficulty_.constEnd()) {

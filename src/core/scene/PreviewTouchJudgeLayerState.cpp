@@ -290,6 +290,9 @@ PreviewTouchJudgeLayerState buildPreviewTouchJudgeLayerState(
 )
 {
     PreviewTouchJudgeLayerState layerState;
+    if (!state.render.showJudgeEffects) {
+        return layerState;
+    }
 
     struct TouchJudgeTrigger {
         const TimelineNoteMarker* marker = nullptr;

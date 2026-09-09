@@ -37,7 +37,7 @@ public:
     void syncBottomTabsToastAnchor(int x, int y, int width, int height, bool visible);
     void syncStatusSurfaceSize(int width, int height);
     void refreshBottomTabsSurfaceVisibility();
-    void updateRootWindowFrameGeometry(const QRect& geometry);
+    void updateRootWindowFrameGeometry(const QRect& geometry, const QRect& contentGeometry);
     void noteQuickShellUiReady();
     void showBottomTabsSpeedToast(const QString& speedLabel);
     void hideBottomTabsSpeedToast();

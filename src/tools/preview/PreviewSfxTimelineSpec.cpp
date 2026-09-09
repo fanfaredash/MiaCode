@@ -790,6 +790,14 @@ bool verifyMineNotesEmitTypeSfx(QTextStream& err)
     normalTap.second = 6.0;
     markers.append(normalTap);
 
+    TimelineNoteMarker mineHeadSlide;
+    mineHeadSlide.type = QStringLiteral("slide");
+    mineHeadSlide.second = 7.0;
+    mineHeadSlide.slideTraceSecond = 7.5;
+    mineHeadSlide.endSecond = 8.0;
+    mineHeadSlide.headMine = true;
+    markers.append(mineHeadSlide);
+
     QVector<Event> events;
     QVector<TouchholdSpan> spans;
     miacode::preview_sfx_timeline::buildTimeline(markers, 1.0, PreviewTimingSettings(), &events, &spans);
@@ -818,10 +826,10 @@ bool verifyMineNotesEmitTypeSfx(QTextStream& err)
             ++touchholdStopCount;
         }
     }
-    if (!require(answerCount == 5, QStringLiteral("[mine] all mine heads/tails emit answer timing"), err)
+    if (!require(answerCount == 6, QStringLiteral("[mine] all mine heads/tails emit answer timing"), err)
         && require(breakCount == 1, QStringLiteral("[mine] break mine emits break SFX"), err)
         && require(touchCount == 1, QStringLiteral("[mine] touch-hold mine emits touch SFX"), err)
-        && require(slideCount == 1, QStringLiteral("[mine] slide mine emits slide SFX"), err)
+        && require(slideCount == 2, QStringLiteral("[mine] both slide paths emit slide SFX"), err)
         && require(touchholdStartCount == 1 && touchholdStopCount == 1,
                    QStringLiteral("[mine] touch-hold mine starts and stops sustain SFX"), err)) {
         return false;
@@ -834,13 +842,15 @@ bool verifyMineNotesEmitTypeSfx(QTextStream& err)
     }
     int normalAnswerCount = 0;
     int normalJudgeCount = 0;
+    int normalSlideCount = 0;
     for (const Event& event : events) {
         normalAnswerCount += event.kind == QLatin1String("answer") ? 1 : 0;
         normalJudgeCount += event.kind == QLatin1String("judge") ? 1 : 0;
+        normalSlideCount += event.kind == QLatin1String("slide") ? 1 : 0;
     }
-    return require(events.size() == 2, QStringLiteral("[mine switch] only the normal tap remains audible"), err)
-        && require(normalAnswerCount == 1 && normalJudgeCount == 1,
-                   QStringLiteral("[mine switch] ordinary note SFX remain unchanged"), err);
+    return require(events.size() == 5, QStringLiteral("[mine switch] only non-mine slide components and the normal tap remain audible"), err)
+        && require(normalAnswerCount == 2 && normalJudgeCount == 2 && normalSlideCount == 1,
+                   QStringLiteral("[mine switch] slide head/path SFX are muted independently"), err);
 }
 
 }  // namespace

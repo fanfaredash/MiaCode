@@ -10,6 +10,14 @@
 
 class QTextDocument;
 
+struct TimelineExportRange {
+    int startPosition = 0;
+    int endPositionExclusive = 0;
+    double startSecond = 0.0;
+    double endSecond = 0.0;
+    bool resolved = false;
+};
+
 class TimelineQuickModel
 {
 public:
@@ -59,6 +67,12 @@ public:
 
     double timelineSecondForCursor(int lineNumber, int col) const;
     bool resolveTimelineSecondForCursor(int lineNumber, int col, double* second) const;
+    TimelineExportRange resolveExportRangeForSelection(
+        const QTextDocument* document,
+        int selectionStart,
+        int selectionEnd,
+        double tapFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed,
+        double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed) const;
     bool resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const;
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool resolvePreviewFollowSelectionRange(int line, int anchorCol, int* startCol, int* endCol) const;
@@ -85,6 +99,7 @@ private:
         int meterNumerator = 4;
         int meterDenominator = 4;
         double currentMeasureStartSecond = 0.0;
+        double hsMultiplier = 1.0;
         // Whether the chart-start measure line has been emitted yet. Mirrors the
         // strict parser's `initializedMeasureLines`: the very first NON-terminal
         // line seeds it, so a leading terminal `E` line no longer suppresses the

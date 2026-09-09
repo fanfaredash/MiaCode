@@ -28,6 +28,7 @@ public:
     void setSettings(const AppBackgroundSettings& settings);
     void setCanvasGeometryGlobal(const QRect& geometry);
     void invalidateCache();
+    void reloadSource();
     bool paintBackgroundForSurface(QWidget* surface, QPainter& painter);
 
 protected:
@@ -35,11 +36,10 @@ protected:
 
 private:
     bool ensureSourceLoaded();
-    QImage blurredImage(const QImage& image) const;
     QSize canvasSize() const;
     QRect targetRectForImage(const QSize& imageSize, const QSize& canvasSize) const;
     QPoint alignedTopLeft(const QSize& drawSize, const QSize& canvasSize) const;
-    QPixmap renderedPixmap(const QSize& canvasSize);
+    QPixmap renderedPixmap(const QSize& canvasSize, qreal dpr);
     void updateApplicationActiveFlag() const;
     void requestSurfaceUpdates() const;
 
@@ -47,6 +47,8 @@ private:
     QRect canvasGeometryGlobal_;
     AppBackgroundSettings settings_;
     QString loadedPath_;
+    int sourceRevision_ = 0;
+    bool sourceLoadAttempted_ = false;
     QImage sourceImage_;
     QPixmap cachedPixmap_;
     QSize cachedWidgetSize_;

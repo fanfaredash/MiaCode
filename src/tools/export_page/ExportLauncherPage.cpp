@@ -297,9 +297,14 @@ int ExportLauncherPage::resolveDefaultDifficultyId(int previousActiveDifficultyI
     return 0;
 }
 
-void ExportLauncherPage::onPageEntered(int previousActiveDifficultyId)
+void ExportLauncherPage::onPageEntered(int previousActiveDifficultyId, double rangeStart, double rangeEnd)
 {
     pageSessionActive_ = true;
+    pendingRangeStart_ = rangeStart;
+    pendingRangeEnd_ = rangeEnd;
+    pendingRangeDifficultyId_ = rangeStart >= 0.0 && rangeEnd > rangeStart
+        ? resolveDefaultDifficultyId(previousActiveDifficultyId)
+        : 0;
     setSelectedDifficulty(resolveDefaultDifficultyId(previousActiveDifficultyId));
     refreshFromDocument();
 }
@@ -309,6 +314,9 @@ void ExportLauncherPage::onPageLeft()
     // Idempotent — called unconditionally from every page-leave path, same
     // pattern as LatencyDetectionPage::onPageLeft.
     pageSessionActive_ = false;
+    pendingRangeStart_ = -1.0;
+    pendingRangeEnd_ = -1.0;
+    pendingRangeDifficultyId_ = 0;
     syncEmbeddedVideoPanel();
 }
 
@@ -505,8 +513,11 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
         if (!embeddedVideoPanel_.isNull()) {
             embeddedVideoPanel_.clear();
         }
-        QWidget* panel =
-            owner_->exportSection_->createEmbeddedVideoExportPanel(selectedDifficultyId_, videoPanelHost_);
+        QWidget* panel = owner_->exportSection_->createEmbeddedVideoExportPanel(
+            selectedDifficultyId_,
+            videoPanelHost_,
+            selectedDifficultyId_ == pendingRangeDifficultyId_ ? pendingRangeStart_ : -1.0,
+            selectedDifficultyId_ == pendingRangeDifficultyId_ ? pendingRangeEnd_ : -1.0);
         if (panel == nullptr) {
             if (videoUnavailableLabel_ != nullptr) {
                 videoUnavailableLabel_->setText(
@@ -515,6 +526,9 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
             }
             return;
         }
+        // Keep the range for the lifetime of the Export hub. Switching between
+        // its sub-pages destroys/recreates this panel; the range is consumed
+        // only by onPageLeft(), and is applied only to the originating chart.
         if (videoUnavailableLabel_ != nullptr) {
             videoUnavailableLabel_->hide();
         }

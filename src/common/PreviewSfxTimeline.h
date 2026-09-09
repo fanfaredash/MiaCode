@@ -352,10 +352,11 @@ inline void buildTimeline(
     };
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (!mineSfxEnabled && (marker.isMine || marker.trackMine)) {
+        const QString type = marker.type.toLower();
+        const bool slideLike = type == QLatin1String("slide") || type == QLatin1String("wifi");
+        if (!mineSfxEnabled && !slideLike && marker.isMine) {
             continue;
         }
-        const QString type = marker.type.toLower();
         // Enabled mines keep their avoid-note semantics while emitting the
         // same type-based SFX as ordinary notes.
         const double answerCompensationSeconds =
@@ -476,8 +477,8 @@ inline void buildTimeline(
             }
             continue;
         }
-        if (type == QLatin1String("slide") || type == QLatin1String("wifi")) {
-            if (marker.hasHeadStar) {
+        if (slideLike) {
+            if (marker.hasHeadStar && (mineSfxEnabled || !marker.headMine)) {
                 const double judgeSecond =
                     qMax(0.0, miacode::preview_sfx_timing::judgeTriggerSecond(marker.second, normalizedTimingSettings, playbackRate));
                 addEvent(
@@ -494,6 +495,9 @@ inline void buildTimeline(
                 if (marker.headEx) {
                     addEvent(judgeSecond, QStringLiteral("ex"));
                 }
+            }
+            if (!mineSfxEnabled && marker.trackMine) {
+                continue;
             }
             const double traceSecond = marker.slideTraceSecond >= 0.0 ? marker.slideTraceSecond : marker.second;
             const double trackSecond =

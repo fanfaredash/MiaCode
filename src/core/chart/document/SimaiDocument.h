@@ -34,6 +34,9 @@ public:
     static SimaiDocument fromText(const QString& text);
 
     static QVector<SimaiRawField> parseRawFields(const QString& text, bool prefixDummyIfNeeded = false);
+    // Returns one-based line numbers for property-looking lines that begin
+    // with '&' but are not a complete `&key=value` assignment.
+    static QVector<int> invalidPropertyLineNumbers(const QString& text);
     // Like parseRawFields, but drops keys that already have dedicated model
     // storage and editor UI (title/artist/first/des/video and the
     // per-difficulty lv_/des_/inote_). Used by the free-form "Other &xx

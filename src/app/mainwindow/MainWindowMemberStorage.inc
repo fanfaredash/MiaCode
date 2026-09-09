@@ -27,6 +27,7 @@
         QAction* transformToggleFireworkAction_ = nullptr;
         QAction* transformRandomRotateAction_ = nullptr;
         QAction* transformClearCompleteElementsAction_ = nullptr;
+        QAction* transformResetTapNotesAction_ = nullptr;
         QAction* transformRaiseSubdivisionAction_ = nullptr;
         QAction* transformLowerSubdivisionAction_ = nullptr;
         QAction* transformRaiseSubdivisionHalfStepAction_ = nullptr;
@@ -400,8 +401,28 @@
         int videoExportWorkerLastProgressPercent_ = 0;
         qint64 videoExportWorkerLastEtaSeconds_ = -1;
         int projectLastOpenedDifficultyId_ = 0;
+        bool onlinePreviewDocument_ = false;
         bool documentDirty_ = false;
         bool currentFieldDirty_ = false;
+        bool pendingSelectionExport_ = false;
+        int pendingSelectionExportDifficultyId_ = 0;
+        double pendingSelectionExportStartSecond_ = 0.0;
+        double pendingSelectionExportEndSecond_ = 0.0;
+        int pendingSelectionExportDocumentRevision_ = -1;
+        // Survives navigation inside the Export hub. Cleared only when the
+        // user leaves that hub for another main page, or after restoration to
+        // the originating chart editor.
+        bool exportSelectionContextActive_ = false;
+        int exportSelectionContextDifficultyId_ = 0;
+        int exportSelectionContextStartPosition_ = 0;
+        int exportSelectionContextEndPosition_ = 0;
+        int exportSelectionContextDocumentRevision_ = -1;
+        QString exportSelectionContextChartText_;
+        bool exportOriginDocumentSnapshotValid_ = false;
+        SimaiDocument exportOriginDocumentSnapshot_;
+        int exportOriginDifficultyId_ = 0;
+        bool exportOriginFieldDirty_ = false;
+        bool exportOriginDocumentDirty_ = false;
         bool qtPreviewPlaying_ = false;
         bool qtPreviewTimelineDirty_ = false;
         bool qtPreviewAwaitingFrameSwap_ = false;
@@ -653,6 +674,10 @@
         // VS Code-style editor.scrollBeyondLastLine behavior. Virtual viewport
         // space only; it never changes the chart text or saved document.
         bool editorScrollBeyondLastLineEnabled_ = true;
+        bool editorSelectionBeatDisplayEnabled_ = true;
+        // Prevent QTextEdit's repeated-click word/paragraph selection while
+        // leaving drag and keyboard selection unchanged.
+        bool editorPreventMultiClickSelectionEnabled_ = false;
         // 顶部显示 preference: which field pair the difficulty header shows next
         // to Lv — the chart-wide offset (default) or the per-difficulty
         // designer. Persisted as ui.editor_header_top_display.
@@ -720,6 +745,7 @@
     MainWindowState state_;
     std::unique_ptr<miacode::latency::LatencySandboxController> latencySandboxController_;
     std::unique_ptr<miacode::extensions::ExtensionManager> extensionManager_;
+    bool welcomeDialogOpen_ = false;
     QWidget*& editorWidget_ = ui_.editorWidget_;
     PreviewRuntime*& previewCanvas_ = state_.previewCanvas_;
     PreviewStageMediaHost*& previewStageMediaHost_ = state_.previewStageMediaHost_;
@@ -773,6 +799,7 @@
     QAction*& transformToggleFireworkAction_ = ui_.transformToggleFireworkAction_;
     QAction*& transformRandomRotateAction_ = ui_.transformRandomRotateAction_;
     QAction*& transformClearCompleteElementsAction_ = ui_.transformClearCompleteElementsAction_;
+    QAction*& transformResetTapNotesAction_ = ui_.transformResetTapNotesAction_;
     QAction*& transformRaiseSubdivisionAction_ = ui_.transformRaiseSubdivisionAction_;
     QAction*& transformLowerSubdivisionAction_ = ui_.transformLowerSubdivisionAction_;
     QAction*& transformRaiseSubdivisionHalfStepAction_ = ui_.transformRaiseSubdivisionHalfStepAction_;

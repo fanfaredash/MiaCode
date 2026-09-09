@@ -1,9 +1,12 @@
 #include "NetBatchUploadWorker.h"
 
+#include "common/DebugLog.h"
 #include "NetUploadDiagnostics.h"
 #include "UiText.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
+#include <QDir>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
@@ -15,6 +18,7 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <algorithm>
 #include <utility>
 
 namespace miacode::net {
@@ -23,6 +27,51 @@ namespace {
 constexpr int kRequestTimeoutMs = 90000;
 constexpr int kSuccessfulUploadDelaySeconds = 5;
 constexpr int kRateLimitFallbackDelaySeconds = 60;
+
+class UploadDiskLog {
+public:
+    bool open(QString* errorMessage)
+    {
+        const QString directoryPath = miacode::debug_log::logDirectory();
+        if (!QDir().mkpath(directoryPath)) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("Could not create log directory: %1").arg(directoryPath);
+            }
+            return false;
+        }
+        path_ = QDir(directoryPath).filePath(QStringLiteral("net-upload.log"));
+        file_.setFileName(path_);
+        if (!file_.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+            if (errorMessage != nullptr) {
+                *errorMessage = file_.errorString();
+            }
+            return false;
+        }
+        return true;
+    }
+
+    QString path() const { return path_; }
+
+    void append(const QString& event, const QString& details = QString())
+    {
+        QByteArray payload = QStringLiteral("%1 event=%2")
+                                 .arg(
+                                     QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs),
+                                     event)
+                                 .toUtf8();
+        if (!details.isEmpty()) {
+            payload.append('\n');
+            payload.append(details.toUtf8());
+        }
+        payload.append('\n');
+        file_.write(payload);
+        file_.flush();
+    }
+
+private:
+    QFile file_;
+    QString path_;
+};
 
 struct UploadAttemptResult {
     bool succeeded = false;
@@ -310,11 +359,27 @@ bool NetBatchUploadWorker::isCanceled() const
 
 void NetBatchUploadWorker::run()
 {
+    UploadDiskLog uploadLog;
+    QString uploadLogError;
+    if (!uploadLog.open(&uploadLogError)) {
+        const QString fatalError = UiText::text(QStringLiteral("net.upload_log_open_failed_1"))
+                                       .arg(uploadLogError);
+        emit finished(0, 0, false, fatalError);
+        return;
+    }
+    emit uploadLogPath(uploadLog.path());
+
     QNetworkAccessManager manager;
     int succeeded = 0;
     int failed = 0;
     int completed = 0;
     QString fatalError;
+    uploadLog.append(
+        QStringLiteral("batch_started"),
+        QStringLiteral("selected_jobs=%1").arg(std::count_if(
+            request_.jobs.cbegin(), request_.jobs.cend(), [](const NetUploadJob& job) {
+                return job.selected;
+            })));
 
     const auto waitWithCountdown = [this](int seconds, const QString& textKey, int row) {
         for (int remaining = seconds; remaining > 0 && !isCanceled(); --remaining) {
@@ -339,6 +404,7 @@ void NetBatchUploadWorker::run()
     };
 
     emit summary(UiText::text(QStringLiteral("net.upload_logging_in")));
+    uploadLog.append(QStringLiteral("login_started"));
     UploadAttemptResult loginResult = login(
         &manager, request_.username, request_.password, cancelRequested_);
     QString loginDetails = loginResult.details;
@@ -346,6 +412,9 @@ void NetBatchUploadWorker::run()
         const int retryDelay = loginResult.retryAfterSeconds > 0
             ? loginResult.retryAfterSeconds
             : kRateLimitFallbackDelaySeconds;
+        uploadLog.append(
+            QStringLiteral("login_rate_limited"),
+            QStringLiteral("retry_after_seconds=%1\n%2").arg(retryDelay).arg(loginResult.details));
         loginDetails = UiText::text(QStringLiteral("net.upload_detail_attempt_1")).arg(1)
             + QLatin1Char('\n') + loginResult.details;
         if (waitWithCountdown(
@@ -367,11 +436,15 @@ void NetBatchUploadWorker::run()
     if (!loginResult.succeeded) {
         if (!isCanceled()) {
             fatalError = loginResult.summary;
+            uploadLog.append(QStringLiteral("login_failed"), loginDetails);
             emit failureDetail(-1, loginResult.summary, loginDetails);
         }
+        uploadLog.append(
+            isCanceled() ? QStringLiteral("batch_canceled") : QStringLiteral("batch_stopped"));
         emit finished(0, 0, isCanceled(), fatalError);
         return;
     }
+    uploadLog.append(QStringLiteral("login_succeeded"));
     request_.password.clear();
 
     for (int row = 0; row < request_.jobs.size() && !isCanceled(); ++row) {
@@ -381,12 +454,21 @@ void NetBatchUploadWorker::run()
         }
         emit rowStatus(row, UiText::text(QStringLiteral("net.upload_uploading")));
         emit summary(UiText::text(QStringLiteral("net.upload_uploading_1")).arg(job.displayName));
+        uploadLog.append(
+            QStringLiteral("chart_started"),
+            QStringLiteral("chart=%1\ndirectory=%2").arg(job.displayName, job.directoryPath));
         UploadAttemptResult result = uploadJob(&manager, job, cancelRequested_);
         QString details = result.details;
         if (result.rateLimited && !isCanceled()) {
             const int retryDelay = result.retryAfterSeconds > 0
                 ? result.retryAfterSeconds
                 : kRateLimitFallbackDelaySeconds;
+            uploadLog.append(
+                QStringLiteral("chart_rate_limited"),
+                QStringLiteral("chart=%1\ndirectory=%2\nretry_after_seconds=%3\n%4")
+                    .arg(job.displayName, job.directoryPath)
+                    .arg(retryDelay)
+                    .arg(result.details));
             const QString firstAttemptDetails = UiText::text(QStringLiteral("net.upload_detail_attempt_1"))
                 .arg(1) + QLatin1Char('\n') + result.details;
             if (!waitWithCountdown(
@@ -411,11 +493,15 @@ void NetBatchUploadWorker::run()
 
         if (result.succeeded) {
             ++succeeded;
+            uploadLog.append(
+                QStringLiteral("chart_succeeded"),
+                QStringLiteral("chart=%1\ndirectory=%2").arg(job.displayName, job.directoryPath));
             emit rowStatus(row, UiText::text(QStringLiteral("net.upload_done")));
             emit rowOutcome(row, true);
         } else if (!isCanceled()) {
             ++failed;
             const QString status = UiText::text(QStringLiteral("net.failed_1")).arg(result.summary);
+            uploadLog.append(QStringLiteral("chart_failed"), status + QLatin1Char('\n') + details);
             emit rowStatus(row, status);
             emit rowOutcome(row, false);
             emit failureDetail(row, status, details);
@@ -445,6 +531,9 @@ void NetBatchUploadWorker::run()
         }
     }
 
+    uploadLog.append(
+        isCanceled() ? QStringLiteral("batch_canceled") : QStringLiteral("batch_finished"),
+        QStringLiteral("succeeded=%1\nfailed=%2").arg(succeeded).arg(failed));
     emit finished(succeeded, failed, isCanceled(), fatalError);
 }
 

@@ -15,6 +15,13 @@ class QTimer;
 
 namespace miacode::latency {
 
+// Focused crash breadcrumb for the BPM/latency entry path. Each phase is
+// written to the runtime log and mirrored synchronously into the per-process
+// startup beacon, so a hard crash still leaves the last completed boundary.
+void appendLatencyDiagnosticPhase(
+    const QString& action,
+    const QString& detail = QString());
+
 // Drives the latency-detection page's "sandbox audition".
 //
 // Design (per the page's intended behavior): the latency page plays exactly

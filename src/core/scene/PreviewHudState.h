@@ -33,6 +33,7 @@ struct PreviewHudStats {
 enum class PreviewHudFontArea {
     ChartInfo,
     Timestamp,
+    CenterDisplay,
     ObjectStats,
     DebugInfo,
 };

@@ -646,6 +646,23 @@ void MainWindow::ValidationSection::setValidationTabVisible(bool visible)
     owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Validation, visible);
 }
 
+bool MainWindow::ValidationSection::currentDifficultyLevelMissing() const
+{
+    return owner_.hasActiveDifficulty()
+        && (ui_.difficultyLevelEdit_ == nullptr || ui_.difficultyLevelEdit_->text().trimmed().isEmpty());
+}
+
+void MainWindow::ValidationSection::addMissingDifficultyLevelError()
+{
+    addValidationError(
+        1,
+        1,
+        QStringLiteral("Missing difficulty level."),
+        UiText::text(QStringLiteral("validation.difficulty_level_missing")),
+        QStringLiteral("missing_difficulty_level"),
+        UiText::text(QStringLiteral("validation.difficulty_level_missing_type")));
+}
+
 void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
 {
     if (!owner_.hasActiveDifficulty()) {
@@ -657,11 +674,16 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
     }
 
     setValidationTabVisible(true);
+    const bool levelMissing = currentDifficultyLevelMissing();
     const int difficultyId = owner_.activeDifficultyId();
     const auto it = state_.validationCacheByDifficulty_.constFind(difficultyId);
     if (it == state_.validationCacheByDifficulty_.constEnd()) {
         clearValidationErrors();
         clearValidationDecorations();
+        if (levelMissing) {
+            addMissingDifficultyLevelError();
+            scheduleWrappedListRelayout(ui_.errorList_);
+        }
         updateEditorValidationSummary();
         return;
     }
@@ -675,13 +697,17 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
         || entry.timingMetadata != timingMetadata) {
         clearValidationErrors();
         clearValidationDecorations();
+        if (levelMissing) {
+            addMissingDifficultyLevelError();
+            scheduleWrappedListRelayout(ui_.errorList_);
+        }
         updateEditorValidationSummary();
         return;
     }
 
     clearValidationErrors();
     state_.validationDecorations_.clear();
-    if (entry.issues.isEmpty() && ui_.errorList_ != nullptr) {
+    if (entry.issues.isEmpty() && !levelMissing && ui_.errorList_ != nullptr) {
         auto* item = new QListWidgetItem(
             UiText::text(QStringLiteral("validation.no_syntax_errors_detected")),
             ui_.errorList_
@@ -706,6 +732,7 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    if (levelMissing) addMissingDifficultyLevelError();
     refreshEditorExtraSelectionsForReason(QStringLiteral("validation_refresh"));
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
@@ -781,7 +808,8 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
     setValidationTabVisible(true);
     clearValidationErrors();
     state_.validationDecorations_.clear();
-    if (entry.issues.isEmpty() && ui_.errorList_ != nullptr) {
+    const bool levelMissing = currentDifficultyLevelMissing();
+    if (entry.issues.isEmpty() && !levelMissing && ui_.errorList_ != nullptr) {
         auto* item = new QListWidgetItem(
             UiText::text(QStringLiteral("validation.no_syntax_errors_detected")),
             ui_.errorList_
@@ -806,10 +834,11 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    if (levelMissing) addMissingDifficultyLevelError();
     refreshEditorExtraSelectionsForReason(QStringLiteral("explicit_validate"));
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
-    if (focusFirstIssue && !entry.issues.isEmpty() && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {
+    if (focusFirstIssue && (!entry.issues.isEmpty() || levelMissing) && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {
         owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Validation);
         onErrorItemActivated(ui_.errorList_->item(0));
     }
@@ -821,7 +850,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
                 .arg(entry.issues.size())
         );
     }
-    return entry.ok;
+    return entry.ok && !levelMissing;
 }
 
 void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList)

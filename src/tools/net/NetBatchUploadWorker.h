@@ -25,6 +25,7 @@ public slots:
     void run();
 
 signals:
+    void uploadLogPath(const QString& path);
     void rowStatus(int row, const QString& status);
     void rowOutcome(int row, bool succeeded);
     void failureDetail(int row, const QString& summary, const QString& details);

@@ -172,6 +172,11 @@ public:
         return hostCall(QStringLiteral("app/openAboutDialog"));
     }
 
+    Q_INVOKABLE QJSValue openWelcomeDialog()
+    {
+        return hostCall(QStringLiteral("app/openWelcomeDialog"));
+    }
+
     Q_INVOKABLE QJSValue reloadExtensions()
     {
         return hostCall(QStringLiteral("app/reloadExtensions"));
@@ -742,6 +747,13 @@ public:
     {
         return hostCall(
             QStringLiteral("preview/setMineSkinEnabled"),
+            QJsonObject{{QStringLiteral("enabled"), enabled}});
+    }
+
+    Q_INVOKABLE QJSValue setJudgeEffectsEnabled(bool enabled)
+    {
+        return hostCall(
+            QStringLiteral("preview/setJudgeEffectsEnabled"),
             QJsonObject{{QStringLiteral("enabled"), enabled}});
     }
 

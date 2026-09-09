@@ -81,6 +81,26 @@ void expectClearCompleteElementsReplacement(
         failed);
 }
 
+void expectResetTapNotes(
+    const QString& input,
+    const QString& expected,
+    int expectedChanged,
+    const QString& message,
+    QTextStream& out,
+    int* failed)
+{
+    int changed = -1;
+    const QString actual = miacode::editor::resetTapNotesInSelection(
+        input, 0, input.size(), &changed);
+    expect(
+        actual == expected && changed == expectedChanged,
+        QStringLiteral("%1 (actual='%2', changed=%3)")
+            .arg(message, actual)
+            .arg(changed),
+        out,
+        failed);
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -509,9 +529,24 @@ int main(int argc, char** argv)
             out,
             &failed);
     }
+    expectResetTapNotes(
+        QStringLiteral("{16}7,7,E1,A1,,8/2,,3,3^6[8:1]*^8[8:1],4,C,,3b,,,,"),
+        QStringLiteral("{16}1,1,1,1,,1,,1,1,1,1,,1,,,,"),
+        10,
+        QStringLiteral("reset tap notes reduces each occupied beat to one lane-1 tap"),
+        out,
+        &failed);
+    expectResetTapNotes(
+        QStringLiteral("(120){8}1, 2,|| keep 3,4,\n{16}A1,,"),
+        QStringLiteral("(120){8}1, 1,|| keep 3,4,\n{16}1,,"),
+        2,
+        QStringLiteral("reset tap notes preserves timing, whitespace, empty beats, and comments"),
+        out,
+        &failed);
 
     PlainCodeEditor editor;
     int clearShortcutCount = 0;
+    int resetTapShortcutCount = 0;
     int raiseHalfShortcutCount = 0;
     int lowerHalfShortcutCount = 0;
     QObject::connect(
@@ -519,6 +554,12 @@ int main(int argc, char** argv)
         &PlainCodeEditor::clearCompleteElementsShortcutRequested,
         [&clearShortcutCount]() {
             ++clearShortcutCount;
+        });
+    QObject::connect(
+        &editor,
+        &PlainCodeEditor::resetTapNotesShortcutRequested,
+        [&resetTapShortcutCount]() {
+            ++resetTapShortcutCount;
         });
     QObject::connect(
         &editor,
@@ -537,6 +578,13 @@ int main(int argc, char** argv)
     expect(
         clearShortcutCount == 1 && clearKey.isAccepted(),
         QStringLiteral("Ctrl+Q key press is forwarded by PlainCodeEditor"),
+        out,
+        &failed);
+    QKeyEvent resetTapKey(QEvent::KeyPress, Qt::Key_W, Qt::ControlModifier, QStringLiteral("w"));
+    QApplication::sendEvent(&editor, &resetTapKey);
+    expect(
+        resetTapShortcutCount == 1 && resetTapKey.isAccepted(),
+        QStringLiteral("Ctrl+W key press is forwarded by PlainCodeEditor"),
         out,
         &failed);
     QKeyEvent raiseHalfKey(QEvent::KeyPress, Qt::Key_Equal, Qt::ControlModifier | Qt::ShiftModifier, QStringLiteral("+"));
@@ -560,6 +608,56 @@ int main(int argc, char** argv)
         QStringLiteral("Ctrl+Shift+_ key press is forwarded as Ctrl+Shift+- by PlainCodeEditor"),
         out,
         &failed);
+    {
+        PlainCodeEditor clickEditor;
+        clickEditor.resize(480, 240);
+        clickEditor.setPlainText(QStringLiteral("alpha beta"));
+        clickEditor.show();
+        QApplication::processEvents();
+
+        QTextCursor alphaCursor(clickEditor.document());
+        alphaCursor.setPosition(2);
+        const QPointF alphaPosition = clickEditor.cursorRect(alphaCursor).center();
+        const auto sendDoubleClick = [&clickEditor, alphaPosition]() {
+            const auto sendMouseEvent = [&clickEditor, alphaPosition](
+                                            QEvent::Type type,
+                                            Qt::MouseButtons buttons) {
+                QMouseEvent event(
+                    type,
+                    alphaPosition,
+                    alphaPosition,
+                    QPointF(clickEditor.viewport()->mapToGlobal(alphaPosition.toPoint())),
+                    Qt::LeftButton,
+                    buttons,
+                    Qt::NoModifier);
+                QApplication::sendEvent(clickEditor.viewport(), &event);
+            };
+            sendMouseEvent(QEvent::MouseButtonPress, Qt::LeftButton);
+            sendMouseEvent(QEvent::MouseButtonRelease, Qt::NoButton);
+            sendMouseEvent(QEvent::MouseButtonDblClick, Qt::LeftButton);
+            sendMouseEvent(QEvent::MouseButtonRelease, Qt::NoButton);
+        };
+
+        expect(
+            !clickEditor.preventMultiClickSelectionEnabled(),
+            QStringLiteral("repeated-click selection prevention defaults off"),
+            out,
+            &failed);
+        sendDoubleClick();
+        expect(
+            clickEditor.textCursor().selectedText() == QLatin1String("alpha"),
+            QStringLiteral("the default repeated-click behavior selects a word"),
+            out,
+            &failed);
+
+        clickEditor.setPreventMultiClickSelectionEnabled(true);
+        sendDoubleClick();
+        expect(
+            !clickEditor.textCursor().hasSelection(),
+            QStringLiteral("turning repeated-click prevention on keeps the click as caret placement"),
+            out,
+            &failed);
+    }
     {
         PlainCodeEditor scrollEditor;
         scrollEditor.resize(480, 240);

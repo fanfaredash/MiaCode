@@ -549,6 +549,7 @@ void NetBatchUploadDialog::startUpload(const QSet<int>& rows)
     failedAttemptRows_.clear();
     retryCandidateRows_.clear();
     completedSummary_.clear();
+    activeUploadLogPath_.clear();
     failureDetails_.clear();
     for (int row = 0; row < jobs_.size(); ++row) {
         jobs_[row].selected = rows.contains(row);
@@ -573,6 +574,9 @@ void NetBatchUploadDialog::startUpload(const QSet<int>& rows)
     uploadThread_ = new QThread(this);
     worker->moveToThread(uploadThread_);
     connect(uploadThread_, &QThread::started, worker, &NetBatchUploadWorker::run);
+    connect(worker, &NetBatchUploadWorker::uploadLogPath, this, [this](const QString& path) {
+        activeUploadLogPath_ = path;
+    });
     connect(worker, &NetBatchUploadWorker::rowStatus, this, [this](int row, const QString& status) {
         setRowStatus(row, status);
     });
@@ -604,6 +608,11 @@ void NetBatchUploadDialog::startUpload(const QSet<int>& rows)
                 completedSummary_ = UiText::text(QStringLiteral("net.upload_complete_1_succeeded_2"))
                     .arg(succeeded)
                     .arg(failed);
+            }
+            if (!activeUploadLogPath_.isEmpty()) {
+                completedSummary_ += QLatin1Char('\n')
+                    + UiText::text(QStringLiteral("net.upload_log_saved_1"))
+                          .arg(QDir::toNativeSeparators(activeUploadLogPath_));
             }
             summaryLabel_->setText(completedSummary_);
             retryCandidateRows_ = failedAttemptRows_;

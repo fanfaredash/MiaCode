@@ -53,6 +53,7 @@ private:
     QSet<int> failedAttemptRows_;
     QSet<int> retryCandidateRows_;
     QString completedSummary_;
+    QString activeUploadLogPath_;
     QString sessionUsername_;
     QString sessionPassword_;
 

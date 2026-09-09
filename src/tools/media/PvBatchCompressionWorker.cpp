@@ -10,9 +10,9 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 
 #include <algorithm>
-#include <cmath>
 #include <utility>
 
 namespace miacode::media {
@@ -140,7 +140,7 @@ bool compressJob(
         *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_invalid_file"));
         return false;
     }
-    if (originalBytes <= kPvCompressionTargetBytes) {
+    if (originalBytes < kPvCompressionTargetBytes) {
         *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_already_small"));
         return true;
     }
@@ -165,44 +165,46 @@ bool compressJob(
         return false;
     }
 
-    const qint64 outputTargetBytes = std::min(
-        kPvCompressionTargetBytes,
-        static_cast<qint64>(std::floor(static_cast<double>(originalBytes) * kPvCompressionShrinkRatio)));
-    const double targetBits = static_cast<double>(outputTargetBytes) * 8.0 * kPvCompressionMuxSafetyRatio;
-    const int totalBitrateKbps = static_cast<int>(std::floor(targetBits / durationSeconds / 1000.0));
-    const int videoBitrateKbps = std::max(
-        kPvCompressionMinVideoBitrateKbps,
-        totalBitrateKbps - kPvCompressionAudioBitrateKbps);
-    const QStringList args{
-        QStringLiteral("-hide_banner"), QStringLiteral("-loglevel"), QStringLiteral("error"),
-        QStringLiteral("-nostdin"), QStringLiteral("-y"),
-        QStringLiteral("-i"), backupPath,
-        QStringLiteral("-map"), QStringLiteral("0:v:0"),
-        QStringLiteral("-map"), QStringLiteral("0:a?"),
-        QStringLiteral("-c:v"), QStringLiteral("libx264"),
-        QStringLiteral("-preset"), QStringLiteral("slow"),
-        QStringLiteral("-b:v"), QStringLiteral("%1k").arg(videoBitrateKbps),
-        QStringLiteral("-maxrate"), QStringLiteral("%1k").arg(videoBitrateKbps),
-        QStringLiteral("-bufsize"), QStringLiteral("%1k").arg(videoBitrateKbps * 2),
-        QStringLiteral("-vf"), QStringLiteral("scale='min(1280,iw)':-2"),
-        QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p"),
-        QStringLiteral("-c:a"), QStringLiteral("aac"),
-        QStringLiteral("-b:a"), QStringLiteral("%1k").arg(kPvCompressionAudioBitrateKbps),
-        QStringLiteral("-movflags"), QStringLiteral("+faststart"),
-        tempPath,
-    };
-    if (!runProcess(ffmpegPath, args, cancelRequested, nullptr, &error)) {
-        QFile::remove(tempPath);
-        if (cancelRequested == nullptr || !cancelRequested->load()) {
-            *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_ffmpeg_failed_1")).arg(error);
-        }
+    QTemporaryDir passLogDirectory;
+    if (!passLogDirectory.isValid()) {
+        *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_ffmpeg_failed_1"))
+            .arg(QStringLiteral("Could not create the two-pass log directory."));
         return false;
     }
 
-    const qint64 compressedBytes = QFileInfo(tempPath).size();
-    if (compressedBytes <= 0
-        || compressedBytes > kPvCompressionTargetBytes
-        || compressedBytes >= originalBytes) {
+    PvCompressionPlan plan = makePvCompressionPlan(durationSeconds);
+    qint64 compressedBytes = 0;
+    bool encoded = false;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        QFile::remove(tempPath);
+        const QString passLogPath = QDir(passLogDirectory.path()).filePath(
+            QStringLiteral("x264-attempt-%1").arg(attempt));
+        const QStringList firstPass = makePvCompressionPassArguments(
+            backupPath, tempPath, passLogPath, plan, 1);
+        const QStringList secondPass = makePvCompressionPassArguments(
+            backupPath, tempPath, passLogPath, plan, 2);
+        if (!runProcess(ffmpegPath, firstPass, cancelRequested, nullptr, &error)
+            || !runProcess(ffmpegPath, secondPass, cancelRequested, nullptr, &error)) {
+            QFile::remove(tempPath);
+            if (cancelRequested == nullptr || !cancelRequested->load()) {
+                *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_ffmpeg_failed_1")).arg(error);
+            }
+            return false;
+        }
+
+        compressedBytes = QFileInfo(tempPath).size();
+        if (isAcceptablePvCompressionOutput(originalBytes, compressedBytes)) {
+            encoded = true;
+            break;
+        }
+        if (attempt == 0 && compressedBytes >= kPvCompressionHardLimitBytes) {
+            plan = adjustedPvCompressionPlan(plan, compressedBytes);
+        } else {
+            break;
+        }
+    }
+
+    if (!encoded) {
         QFile::remove(tempPath);
         *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_output_invalid"));
         return false;
@@ -282,7 +284,7 @@ bool PvBatchCompressionWorker::isCanceled() const
 void PvBatchCompressionWorker::run()
 {
     const bool needsFfmpeg = std::any_of(jobs_.cbegin(), jobs_.cend(), [](const PvCompressionJob& job) {
-        return !job.videoPath.isEmpty() && job.originalBytes > kPvCompressionTargetBytes;
+        return !job.videoPath.isEmpty() && job.originalBytes >= kPvCompressionTargetBytes;
     });
     const QString ffmpegPath = needsFfmpeg ? resolvePvCompressionFfmpegExecutable() : QString();
     if (needsFfmpeg && ffmpegPath.isEmpty()) {
@@ -292,7 +294,7 @@ void PvBatchCompressionWorker::run()
             const PvCompressionJob& job = jobs_.at(row);
             if (job.videoPath.isEmpty()) {
                 emit rowStatus(row, UiText::text(QStringLiteral("media_tools.batch_pv_no_video")));
-            } else if (job.originalBytes <= kPvCompressionTargetBytes) {
+            } else if (job.originalBytes < kPvCompressionTargetBytes) {
                 emit rowStatus(row, UiText::text(QStringLiteral("media_tools.batch_pv_already_small")));
             } else {
                 emit rowStatus(
@@ -315,7 +317,7 @@ void PvBatchCompressionWorker::run()
             emit progress(row + 1);
             continue;
         }
-        if (job.originalBytes <= kPvCompressionTargetBytes) {
+        if (job.originalBytes < kPvCompressionTargetBytes) {
             emit rowStatus(row, UiText::text(QStringLiteral("media_tools.batch_pv_already_small")));
             emit progress(row + 1);
             continue;

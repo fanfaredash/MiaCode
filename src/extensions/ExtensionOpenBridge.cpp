@@ -143,6 +143,7 @@ QVector<ExtensionOpenBridgeObject> extensionOpenBridgeObjects()
                {
                    method(QStringLiteral("openPreferences"), QStringLiteral("app.openPreferences"), QStringLiteral("ui.prompt"), QStringLiteral("Open Preferences.")),
                    method(QStringLiteral("openAboutDialog"), QStringLiteral("app.openAboutDialog"), QStringLiteral("ui.prompt"), QStringLiteral("Open About dialog.")),
+                   method(QStringLiteral("openWelcomeDialog"), QStringLiteral("app.openWelcomeDialog"), QStringLiteral("ui.prompt"), QStringLiteral("Open the welcome and initial-configuration tutorial.")),
                }),
         object(QStringLiteral("workspace"), QStringLiteral("open.workspace"), QStringLiteral("Workspace file and save operations exposed through a facade."),
                {
@@ -199,6 +200,7 @@ QVector<ExtensionOpenBridgeObject> extensionOpenBridgeObjects()
                    method(QStringLiteral("seek"), QStringLiteral("preview/seek"), QStringLiteral("preview.control"), QStringLiteral("Seek preview playback.")),
                    method(QStringLiteral("setSpeed"), QStringLiteral("preview/setSpeed"), QStringLiteral("preview.control"), QStringLiteral("Set preview speed.")),
                    method(QStringLiteral("setMineSkinEnabled"), QStringLiteral("preview/setMineSkinEnabled"), QStringLiteral("preview.control"), QStringLiteral("Choose dedicated or normal sprites for mine notes.")),
+                   method(QStringLiteral("setJudgeEffectsEnabled"), QStringLiteral("preview/setJudgeEffectsEnabled"), QStringLiteral("preview.control"), QStringLiteral("Show or hide preview judge-hit effects.")),
                    method(QStringLiteral("setMineSfxEnabled"), QStringLiteral("preview/setMineSfxEnabled"), QStringLiteral("preview.control"), QStringLiteral("Enable or mute type-based SFX for mine notes.")),
                    method(QStringLiteral("getState"), QStringLiteral("preview/getState"), QStringLiteral("preview.read"), QStringLiteral("Read preview state.")),
                    method(QStringLiteral("getRenderState"), QStringLiteral("preview/getRenderState"), QStringLiteral("preview.read"), QStringLiteral("Read preview canvas/render settings.")),

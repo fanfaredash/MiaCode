@@ -62,6 +62,12 @@ Crash breadcrumb path note:
 - When a project log dir is bound while runtime debug output or `MIACODE_PREVIEW_HUD_PAINT_DIAG=1` is active, the runtime log writes `logging/crash_breadcrumb_hint` with the current PID plus `startup_beacon_hint` and `op_chain_hint`.
 - Longer-term work should rebind or mirror the crash shadow safely; the current line is a path signpost so investigations do not only check the chart log directory.
 
+BPM/latency crash capture:
+
+- `runtime/latency/entry` is a sparse, always-on phase trail emitted only by explicit BPM/latency actions. It distinguishes the Tools-menu and metadata-card entry sources, then brackets page switching, sandbox installation, SFX preparation, synthetic-chart build/parse, preview and timeline publication, and BPM/offset decoding and detection.
+- Every phase carries current private memory; relevant phases add BPM, duration, chart/note/envelope counts, decoder backend, and detection results.
+- The same phase is synchronously mirrored into `miacode_startup_beacon_<pid>.txt`. When a hard crash cuts off the asynchronous runtime log, the last `latency/entry` line in the beacon is the authoritative completed boundary. `miacode_op_chain_<pid>.log` additionally identifies the active latency function/sub-stage when the Windows crash handler runs.
+
 Path overrides:
 
 - `MIACODE_RUNTIME_LOG_PATH`

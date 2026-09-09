@@ -30,10 +30,20 @@
 #include "tools/muri/MuriStaticChecker.h"
 
 #include <algorithm>
+#include <array>
 
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <commdlg.h>
+#pragma comment(lib, "Comdlg32.lib")
+#endif
 
 using namespace miacode::mainwindow::shared;
 #include "MainWindow.DocumentFlow.Internal.h"
@@ -41,6 +51,60 @@ using namespace miacode::mainwindow::shared;
 using namespace miacode::mainwindow::documentflow_detail;
 
 namespace {
+
+QString promptForSimaiFile(QWidget* logicalParent, const QString& initialDirectory)
+{
+#ifdef Q_OS_WIN
+    // QuickShell keeps MainWindow as a hidden QWidget backend. A static
+    // QFileDialog therefore gives the Windows picker that hidden HWND as its
+    // owner, while capture/streaming software activates the visible QML root
+    // HWND. Windows then treats the root and picker as unrelated top-level
+    // windows and lets them repeatedly overtake one another. Own the native
+    // picker directly from the visible root so its modal relationship remains
+    // intact across external foreground-window changes.
+    QWindow* ownerWindow = UiDialogs::applicationDialogTransientParent();
+    if (ownerWindow == nullptr && logicalParent != nullptr) {
+        logicalParent->winId();
+        ownerWindow = logicalParent->windowHandle();
+    }
+
+    std::array<wchar_t, 32768> selectedPath{};
+    const std::wstring nativeInitialDirectory =
+        QDir::toNativeSeparators(initialDirectory).toStdWString();
+    constexpr wchar_t nativeFilter[] =
+        L"Simai (*.txt *.simai)\0*.txt;*.simai\0All Files (*.*)\0*.*\0";
+
+    OPENFILENAMEW request{};
+    request.lStructSize = sizeof(request);
+    request.hwndOwner = ownerWindow != nullptr
+        ? reinterpret_cast<HWND>(ownerWindow->winId())
+        : nullptr;
+    request.lpstrFilter = nativeFilter;
+    request.nFilterIndex = 1;
+    request.lpstrFile = selectedPath.data();
+    request.nMaxFile = static_cast<DWORD>(selectedPath.size());
+    request.lpstrInitialDir = nativeInitialDirectory.empty()
+        ? nullptr
+        : nativeInitialDirectory.c_str();
+    request.lpstrTitle = L"Open simai file";
+    request.Flags = OFN_EXPLORER
+        | OFN_FILEMUSTEXIST
+        | OFN_PATHMUSTEXIST
+        | OFN_NOCHANGEDIR
+        | OFN_ENABLESIZING;
+
+    if (::GetOpenFileNameW(&request) != TRUE) {
+        return QString();
+    }
+    return QDir::fromNativeSeparators(QString::fromWCharArray(selectedPath.data()));
+#else
+    return QFileDialog::getOpenFileName(
+        logicalParent,
+        QStringLiteral("Open simai file"),
+        initialDirectory,
+        QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)"));
+#endif
+}
 
 struct PreparedDocumentOpenPayload {
     bool success = false;
@@ -186,7 +250,14 @@ bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
     if (choice == UnsavedChangesChoice::Save) {
         QElapsedTimer saveTimer;
         saveTimer.start();
-        const bool saved = onSaveFile();
+        const bool exportOriginSave = !owner_.hasActiveDifficulty()
+            && state_.exportSelectionContextActive_
+            && SimaiDocument::isDifficultyId(state_.exportOriginDifficultyId_)
+            && state_.exportOriginFieldDirty_;
+        const bool saved = exportOriginSave ? saveExportOriginFieldToDisk() : onSaveFile();
+        if (saved && exportOriginSave) {
+            clearExportSelectionContext();
+        }
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/document"),
@@ -206,11 +277,18 @@ bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
     }
     const bool shouldContinue = choice == UnsavedChangesChoice::Discard;
     if (shouldContinue) {
-        anchorCurrentFieldCleanState();
-        state_.documentDirty_ = false;
-        state_.currentFieldDirty_ = false;
-        updateDirtyState();
-        owner_.updateWindowTitle();
+        if (!owner_.hasActiveDifficulty()
+            && state_.exportSelectionContextActive_
+            && SimaiDocument::isDifficultyId(state_.exportOriginDifficultyId_)
+            && state_.exportOriginFieldDirty_) {
+            discardExportOriginChanges();
+        } else {
+            anchorCurrentFieldCleanState();
+            state_.documentDirty_ = false;
+            state_.currentFieldDirty_ = false;
+            updateDirtyState();
+            owner_.updateWindowTitle();
+        }
     }
     miacode::debug_log::appendTimingLine(
         miacode::debug_log::Channel::Runtime,
@@ -262,6 +340,7 @@ void MainWindow::DocumentSection::onNewFile()
     }
 
     cancelPendingStartupRestore();
+    state_.onlinePreviewDocument_ = false;
     loadDocument(newDocument);
     owner_.clearValidationCache();
     state_.currentEncoding_ = TextEncoding::Utf8;
@@ -471,12 +550,7 @@ void MainWindow::DocumentSection::onOpenFile()
 
     owner_.windowSection_->logWindowGeometryDebug("open_file_before_dialog");
     owner_.windowSection_->logTopLevelWindowSnapshot("open_file_before_dialog");
-    const QString path = QFileDialog::getOpenFileName(
-        &owner_,
-        QStringLiteral("Open simai file"),
-        owner_.resolveInitialOpenDirectory(),
-        QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
-    );
+    const QString path = promptForSimaiFile(&owner_, owner_.resolveInitialOpenDirectory());
     owner_.windowSection_->logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
     owner_.windowSection_->logTopLevelWindowSnapshot("open_file_after_dialog");
     if (path.isEmpty()) {
@@ -512,6 +586,37 @@ bool MainWindow::DocumentSection::openFileAtPath(const QString& path, bool showS
         showStatusMessage,
         payload.hasTrackDuration ? payload.trackDurationSeconds : -1.0
     );
+    return true;
+}
+
+bool MainWindow::DocumentSection::openOnlinePreviewAtPath(const QString& path)
+{
+    MC_OP("MainWindow::DocumentSection::openOnlinePreviewAtPath");
+    _mc_op_.note(QStringLiteral("path=%1").arg(path));
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (normalizedPath.isEmpty() || !maybeSaveBeforeContinue()) {
+        return false;
+    }
+
+    cancelPendingStartupRestore();
+    const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(normalizedPath, true);
+    if (!payload.success) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Critical,
+            &owner_,
+            UiText::text(QStringLiteral("net.online_preview")),
+            UiText::text(QStringLiteral("net.online_preview_open_failed")));
+        _mc_op_.fail(QStringLiteral("prepareDocumentOpenPayload failed"));
+        return false;
+    }
+
+    applyOpenedDocumentState(
+        payload.normalizedPath,
+        payload.usedSystemEncoding ? TextEncoding::System : TextEncoding::Utf8,
+        payload.document,
+        true,
+        payload.hasTrackDuration ? payload.trackDurationSeconds : -1.0,
+        true);
     return true;
 }
 
@@ -639,7 +744,8 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
     TextEncoding encodingUsed,
     const SimaiDocument& document,
     bool showStatusMessage,
-    double knownTrackDurationSeconds)
+    double knownTrackDurationSeconds,
+    bool onlinePreview)
 {
     MC_OP("MainWindow::DocumentSection::applyOpenedDocumentState");
     _mc_op_.note(QStringLiteral("path=%1 dur=%2")
@@ -649,26 +755,40 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
     owner_.applyWaveformData(
         miacode::waveform::makeWaveformPlaceholder(
             knownTrackDurationSeconds > 0.0 ? knownTrackDurationSeconds : 0.0));
+    const QString previousOpenDirectory = owner_.resolveInitialOpenDirectory();
+    const QString previousSessionFilePath = state_.lastSessionFilePath_;
+    state_.onlinePreviewDocument_ = onlinePreview;
     owner_.setCurrentFilePath(normalizedPath, true);
-    owner_.addRecentFilePath(normalizedPath);
+    if (onlinePreview) {
+        state_.lastSessionFilePath_ = previousSessionFilePath;
+        miacode::crash_recovery::updateSessionMarker(QString());
+        owner_.setLastOpenDirectory(previousOpenDirectory);
+    } else {
+        owner_.addRecentFilePath(normalizedPath);
+    }
 
     // Eagerly create the crash-recovery directory BEFORE the user can
     // edit. Without this, a crash in the first ~1 ms after a keystroke
     // (before the lazy mkpath inside updateSnapshot has run) would find
     // the parent directory missing and fail CreateFileW. mkpath is
     // re-entrant and cheap on warm runs (one stat()).
-    miacode::crash_recovery::prepareForChart(normalizedPath);
+    if (!onlinePreview) {
+        miacode::crash_recovery::prepareForChart(normalizedPath);
+    }
 
     // Abnormal-exit recovery intentionally reuses File -> Restore Backup.
     // Opening the chart must finish first so the restore prompt appears over
     // the fully loaded window and the old on-disk content remains the restore
     // baseline, exactly like a manual menu action.
-    const bool previousSessionAbandoned =
-        miacode::crash_recovery::consumeAbandonedSessionChartMatch(normalizedPath);
-    const QString crashRecoveryPath = miacode::crash_recovery::crashRecoveryFilePath(normalizedPath);
-    const bool crashRecoveryFileExists =
-        !crashRecoveryPath.isEmpty() && QFileInfo(crashRecoveryPath).exists();
-    if (previousSessionAbandoned || crashRecoveryFileExists) {
+    const bool previousSessionAbandoned = !onlinePreview
+        && miacode::crash_recovery::consumeAbandonedSessionChartMatch(normalizedPath);
+    const QString crashRecoveryPath = onlinePreview
+        ? QString()
+        : miacode::crash_recovery::crashRecoveryFilePath(normalizedPath);
+    const bool crashRecoveryFileExists = !onlinePreview
+        && !crashRecoveryPath.isEmpty()
+        && QFileInfo(crashRecoveryPath).exists();
+    if (!onlinePreview && (previousSessionAbandoned || crashRecoveryFileExists)) {
         state_.pendingAbnormalExitBackupRestorePath_ =
             latestBackupRestoreFilePathForChart(normalizedPath);
         state_.pendingAbnormalExitBackupRestoreChartPath_ =
@@ -688,10 +808,15 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
         schedulePendingAbnormalExitBackupRestore();
     }
     if (showStatusMessage) {
-        owner_.statusBar()->showMessage(
-            QString("Opened: %1 (%2)")
-                .arg(QFileInfo(normalizedPath).fileName())
-                .arg(encodingUsed == TextEncoding::Utf8 ? "UTF-8" : "System encoding")
-        );
+        if (onlinePreview) {
+            owner_.statusBar()->showMessage(
+                UiText::text(QStringLiteral("net.online_preview_opened")));
+        } else {
+            owner_.statusBar()->showMessage(
+                QString("Opened: %1 (%2)")
+                    .arg(QFileInfo(normalizedPath).fileName())
+                    .arg(encodingUsed == TextEncoding::Utf8 ? "UTF-8" : "System encoding")
+            );
+        }
     }
 }

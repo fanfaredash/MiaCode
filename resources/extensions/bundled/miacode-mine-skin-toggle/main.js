@@ -4,6 +4,8 @@ var SKIN_SETTING_KEY = "miacode-mine-skin-toggle.enabled";
 var SKIN_COMMAND_ID = "miacode-mine-skin-toggle.toggle";
 var SFX_SETTING_KEY = "miacode-mine-skin-toggle.sfx-enabled";
 var SFX_COMMAND_ID = "miacode-mine-skin-toggle.toggle-sfx";
+var EFFECTS_SETTING_KEY = "miacode-mine-skin-toggle.effects-enabled";
+var EFFECTS_COMMAND_ID = "miacode-mine-skin-toggle.toggle-effects";
 
 function resultValue(result, fallback) {
   return result && result.ok !== false && result.value !== undefined
@@ -65,20 +67,48 @@ function toggleMineSfx() {
   );
 }
 
+function applyEffectsPreference(enabled) {
+  var result = miacode.preview.setJudgeEffectsEnabled(enabled);
+  if (result && result.ok === false) {
+    miacode.window.showErrorMessage("切换击中特效失败：" + (result.error || "未知错误"));
+    return false;
+  }
+  miacode.commands.setChecked(EFFECTS_COMMAND_ID, enabled);
+  return true;
+}
+
+function toggleJudgeEffects() {
+  var renderState = resultValue(miacode.preview.getRenderState(), {});
+  var current = typeof renderState.judgeEffectsEnabled === "boolean"
+    ? renderState.judgeEffectsEnabled
+    : storedPreference(EFFECTS_SETTING_KEY);
+  var enabled = !current;
+  if (!applyEffectsPreference(enabled)) {
+    return;
+  }
+  miacode.settings.set(EFFECTS_SETTING_KEY, enabled);
+  miacode.window.showInformationMessage(
+    enabled ? "击中特效已开启" : "击中特效已关闭"
+  );
+}
+
 function activate(context) {
   miacode.commands.registerCommand(
     SKIN_COMMAND_ID,
     toggleMineSkin
   );
   miacode.commands.registerCommand(SFX_COMMAND_ID, toggleMineSfx);
+  miacode.commands.registerCommand(EFFECTS_COMMAND_ID, toggleJudgeEffects);
   applyPreference(storedPreference(SKIN_SETTING_KEY));
   applySfxPreference(storedPreference(SFX_SETTING_KEY));
-  context.log("Mine skin and SFX toggles activated.");
+  applyEffectsPreference(storedPreference(EFFECTS_SETTING_KEY));
+  context.log("Mine skin, SFX, and judge-effect toggles activated.");
 }
 
 function deactivate() {
   applyPreference(true);
   applySfxPreference(true);
+  applyEffectsPreference(true);
 }
 
 module.exports = {

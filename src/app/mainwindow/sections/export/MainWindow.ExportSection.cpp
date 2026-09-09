@@ -66,7 +66,12 @@ void MainWindow::ExportSection::onNetBatchDownload()
         return;
     }
 
-    auto* dialog = new miacode::net::NetBatchDownloadDialog(nullptr);
+    QPointer<MainWindow> ownerGuard(&owner_);
+    auto* dialog = new miacode::net::NetBatchDownloadDialog(
+        nullptr,
+        [ownerGuard](const QString& chartPath) {
+            return !ownerGuard.isNull() && ownerGuard->openOnlinePreviewAtPath(chartPath);
+        });
     owner_.netBatchDownloadDialog_ = dialog;
     if (owner_.windowSection_ != nullptr) {
         owner_.windowSection_->applySystemWindowBackdrop(dialog);

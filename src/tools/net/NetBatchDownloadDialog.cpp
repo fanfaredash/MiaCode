@@ -2,6 +2,7 @@
 
 #include "DialogLocalization.h"
 #include "NetBatchDownloadWorker.h"
+#include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
@@ -11,18 +12,23 @@
 #include <QCalendarWidget>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QDateEdit>
 #include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QEvent>
 #include <QEventLoop>
 #include <QFileDialog>
 #include <QGridLayout>
 #include <QHeaderView>
+#include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPalette>
 #include <QPaintEvent>
 #include <QPlainTextEdit>
@@ -33,9 +39,13 @@
 #include <QTableWidget>
 #include <QTextCharFormat>
 #include <QThread>
+#include <QTemporaryDir>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 
+#include <algorithm>
+#include <array>
 #include <utility>
 
 namespace miacode::net {
@@ -43,6 +53,92 @@ namespace {
 
 constexpr char kPreferencesAppSection[] = "app";
 constexpr char kLastNetBatchOutputDirKey[] = "last_net_batch_output_dir";
+constexpr int kPreviewColumn = 7;
+constexpr qint64 kSlowConnectionThresholdMs = 1000;
+constexpr std::array<int, 8> kDownloadTableColumnWeights = {5, 20, 15, 15, 10, 18, 7, 10};
+
+QIcon makePlayIcon(const QColor& color)
+{
+    constexpr int kSize = 16;
+    constexpr qreal kDpr = 2.0;
+    QPixmap pixmap(qRound(kSize * kDpr), qRound(kSize * kDpr));
+    pixmap.setDevicePixelRatio(kDpr);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+
+    constexpr qreal kHeight = 10.0;
+    constexpr qreal kWidth = 9.0;
+    const qreal left = (kSize - kWidth) / 2.0 + 0.5;
+    const qreal top = (kSize - kHeight) / 2.0;
+    QPainterPath triangle;
+    triangle.moveTo(left, top);
+    triangle.lineTo(left, top + kHeight);
+    triangle.lineTo(left + kWidth, top + kHeight / 2.0);
+    triangle.closeSubpath();
+    painter.fillPath(triangle, color);
+    return QIcon(pixmap);
+}
+
+class NetDownloadTable : public QTableWidget {
+public:
+    explicit NetDownloadTable(QWidget* parent = nullptr)
+        : QTableWidget(parent)
+    {
+    }
+
+    void scheduleColumnProportions()
+    {
+        if (initialColumnProportionsApplied_ || columnProportionsPending_) {
+            return;
+        }
+        columnProportionsPending_ = true;
+        QTimer::singleShot(0, this, [this]() {
+            columnProportionsPending_ = false;
+            initialColumnProportionsApplied_ = applyColumnProportions();
+        });
+    }
+
+protected:
+    bool viewportEvent(QEvent* event) override
+    {
+        const bool handled = QTableWidget::viewportEvent(event);
+        if (event->type() == QEvent::Resize) {
+            scheduleColumnProportions();
+        }
+        return handled;
+    }
+
+private:
+    bool applyColumnProportions()
+    {
+        QHeaderView* const header = horizontalHeader();
+        const int availableWidth = viewport() != nullptr ? viewport()->width() : 0;
+        if (header == nullptr
+            || availableWidth <= 0
+            || columnCount() != static_cast<int>(kDownloadTableColumnWeights.size())) {
+            return false;
+        }
+
+        constexpr int totalWeight = 100;
+        int cumulativeWeight = 0;
+        int previousBoundary = 0;
+        for (int column = 0; column < columnCount(); ++column) {
+            cumulativeWeight += kDownloadTableColumnWeights.at(column);
+            const int boundary = column == columnCount() - 1
+                ? availableWidth
+                : (availableWidth * cumulativeWeight + totalWeight / 2) / totalWeight;
+            header->resizeSection(column, boundary - previousBoundary);
+            previousBoundary = boundary;
+        }
+        return true;
+    }
+
+    bool initialColumnProportionsApplied_ = false;
+    bool columnProportionsPending_ = false;
+};
 
 class NetCalendarBorderOverlay : public QWidget {
 public:
@@ -289,10 +385,37 @@ QCalendarWidget* createNetCalendar(QWidget* parent)
     return calendar;
 }
 
+QString onlinePreviewSessionCacheRoot()
+{
+    const QString tempRoot = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    static QTemporaryDir sessionCache(
+        QDir(tempRoot).filePath(QStringLiteral("MiaCode-net-preview-XXXXXX")));
+    return sessionCache.isValid() ? sessionCache.path() : QString();
+}
+
+bool onlinePreviewCacheIsComplete(const QString& chartDirectory, bool requireVideo = false)
+{
+    const QDir directory(chartDirectory);
+    for (const QString& name : {QStringLiteral("maidata.txt"), QStringLiteral("track.mp3"), QStringLiteral("bg.jpg")}) {
+        const QFileInfo file(directory.filePath(name));
+        if (!file.isFile() || file.size() <= 0) {
+            return false;
+        }
+    }
+    if (requireVideo) {
+        const QFileInfo video(directory.filePath(QStringLiteral("pv.mp4")));
+        if (!video.isFile() || video.size() <= 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
-NetBatchDownloadDialog::NetBatchDownloadDialog(QWidget* parent)
+NetBatchDownloadDialog::NetBatchDownloadDialog(QWidget* parent, OnlinePreviewHandler onlinePreviewHandler)
     : QDialog(parent)
+    , onlinePreviewHandler_(std::move(onlinePreviewHandler))
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     buildUi();
@@ -331,7 +454,41 @@ void NetBatchDownloadDialog::buildUi()
     fuzzyMatchCheck_->setChecked(true);
     zipAfterDownloadCheck_ = new QCheckBox(UiText::text(QStringLiteral("net.also_create_zip_after_success")), this);
     zipAfterDownloadCheck_->setChecked(false);
+    downloadPvCheck_ = new QCheckBox(UiText::text(QStringLiteral("net.download_pv")), this);
+    downloadPvCheck_->setChecked(true);
+    networkTestButton_ = new QPushButton(UiText::text(QStringLiteral("net.test_connection")), this);
+    networkStatusLabel_ = new QLabel(UiText::text(QStringLiteral("net.connection_not_tested")), this);
+    sortCombo_ = miacode::ui::createDialogComboBox(
+        this, 6, Qt::AlignLeft | Qt::AlignVCenter);
+    sortCombo_->addItem(UiText::text(QStringLiteral("net.sort_level_ascending")),
+        static_cast<int>(NetDownloadSortOrder::LevelAscending));
+    sortCombo_->addItem(UiText::text(QStringLiteral("net.sort_level_descending")),
+        static_cast<int>(NetDownloadSortOrder::LevelDescending));
+    sortCombo_->addItem(UiText::text(QStringLiteral("net.sort_uploaded_newest")),
+        static_cast<int>(NetDownloadSortOrder::UploadedNewest));
+    sortCombo_->addItem(UiText::text(QStringLiteral("net.sort_uploaded_oldest")),
+        static_cast<int>(NetDownloadSortOrder::UploadedOldest));
+    sortCombo_->addItem(UiText::text(QStringLiteral("net.sort_status_ascending")),
+        static_cast<int>(NetDownloadSortOrder::StatusAscending));
+    sortCombo_->addItem(UiText::text(QStringLiteral("net.sort_status_descending")),
+        static_cast<int>(NetDownloadSortOrder::StatusDescending));
+    sortCombo_->setCurrentIndex(2);
+    miacode::ui::applyDialogComboBoxStyle(sortCombo_, 6);
     queryButton_ = new QPushButton(UiText::text(QStringLiteral("net.query")), this);
+
+    const std::array<QWidget*, 9> measuredFormControls = {
+        usernameEdit_, tagEdit_, titleEdit_, startDateEdit_, endDateEdit_,
+        outputDirEdit_, browseButton, queryButton_, networkTestButton_};
+    int formControlHeight = sortCombo_->minimumHeight();
+    for (QWidget* control : measuredFormControls) {
+        control->ensurePolished();
+        formControlHeight = qMax(
+            formControlHeight, qMax(control->sizeHint().height(), 30) + 4);
+    }
+    for (QWidget* control : measuredFormControls) {
+        control->setFixedHeight(formControlHeight);
+    }
+    sortCombo_->setFixedHeight(formControlHeight);
 
     form->addWidget(new QLabel(UiText::text(QStringLiteral("net.user_id")), this), 0, 0);
     form->addWidget(usernameEdit_, 0, 1);
@@ -349,9 +506,18 @@ void NetBatchDownloadDialog::buildUi()
     form->addWidget(outputDirEdit_, 1, 1, 1, 9);
     form->addWidget(browseButton, 1, 10);
     form->addWidget(zipAfterDownloadCheck_, 1, 11);
+    form->addWidget(new QLabel(UiText::text(QStringLiteral("net.sort_by")), this), 2, 0);
+    form->addWidget(sortCombo_, 2, 1, 1, 3);
+    auto* connectionTestRow = new QHBoxLayout;
+    connectionTestRow->setContentsMargins(0, 0, 0, 0);
+    connectionTestRow->addWidget(networkTestButton_);
+    connectionTestRow->addWidget(networkStatusLabel_);
+    connectionTestRow->addStretch(1);
+    form->addLayout(connectionTestRow, 2, 4, 1, 7);
+    form->addWidget(downloadPvCheck_, 2, 11);
     root->addLayout(form);
 
-    table_ = new QTableWidget(this);
+    table_ = new NetDownloadTable(this);
     table_->setColumnCount(8);
     table_->setHorizontalHeaderLabels({
         UiText::text(QStringLiteral("net.select")),
@@ -360,23 +526,11 @@ void NetBatchDownloadDialog::buildUi()
         UiText::text(QStringLiteral("net.designer")),
         UiText::text(QStringLiteral("net.levels")),
         UiText::text(QStringLiteral("net.uploaded")),
-        QStringLiteral("ID"),
         UiText::text(QStringLiteral("net.status")),
+        UiText::text(QStringLiteral("net.online_preview")),
     });
-    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
-    table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
-    table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
-    table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-    table_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Interactive);
-    table_->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Interactive);
-    table_->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Stretch);
-    table_->setColumnWidth(1, 300);
-    table_->setColumnWidth(2, 150);
-    table_->setColumnWidth(3, 150);
-    table_->setColumnWidth(5, 150);
-    table_->setColumnWidth(6, 90);
-    table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    table_->setSelectionMode(QAbstractItemView::NoSelection);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setAlternatingRowColors(true);
     root->addWidget(table_, 1);
@@ -409,6 +563,12 @@ void NetBatchDownloadDialog::buildUi()
 
     connect(browseButton, &QPushButton::clicked, this, [this]() { chooseOutputDirectory(); });
     connect(queryButton_, &QPushButton::clicked, this, [this]() { queryCharts(); });
+    connect(networkTestButton_, &QPushButton::clicked, this, [this]() { testConnection(); });
+    connect(sortCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this]() {
+        syncSelectionsFromTable();
+        applyCurrentSort();
+        rebuildTable();
+    });
     connect(selectAllButton_, &QPushButton::clicked, this, [this]() { selectAllRows(true); });
     connect(clearSelectionButton_, &QPushButton::clicked, this, [this]() { selectAllRows(false); });
     connect(logButton_, &QPushButton::clicked, this, [this]() { toggleLogVisible(); });
@@ -423,18 +583,34 @@ void NetBatchDownloadDialog::buildUi()
     connect(closeButton_, &QPushButton::clicked, this, [this]() {
         if (busy_) {
             cancelRequested_ = true;
-            summaryLabel_->setText(UiText::text(QStringLiteral("net.canceling")));
+            if (connectionProbeActive_) {
+                networkTestButton_->setEnabled(false);
+                networkStatusLabel_->setText(UiText::text(QStringLiteral("net.canceling")));
+            } else {
+                summaryLabel_->setText(UiText::text(QStringLiteral("net.canceling")));
+            }
             return;
         }
         close();
     });
+
+    // Return/Enter must not implicitly query, start/repeat a download, cancel,
+    // or close the dialog based on whichever button happened to keep focus.
+    // Actions in this tool are explicit clicks only.
+    const QList<QPushButton*> actionButtons = findChildren<QPushButton*>();
+    for (QPushButton* button : actionButtons) {
+        button->setAutoDefault(false);
+        button->setDefault(false);
+    }
 }
 
 void NetBatchDownloadDialog::closeEvent(QCloseEvent* event)
 {
     if (busy_) {
         cancelRequested_ = true;
-        if (summaryLabel_ != nullptr) {
+        if (connectionProbeActive_ && networkStatusLabel_ != nullptr) {
+            networkStatusLabel_->setText(UiText::text(QStringLiteral("net.canceling")));
+        } else if (summaryLabel_ != nullptr) {
             summaryLabel_->setText(UiText::text(QStringLiteral("net.canceling")));
         }
         event->ignore();
@@ -454,14 +630,24 @@ void NetBatchDownloadDialog::setBusy(bool busy)
     outputDirEdit_->setEnabled(!busy);
     fuzzyMatchCheck_->setEnabled(!busy);
     zipAfterDownloadCheck_->setEnabled(!busy);
+    downloadPvCheck_->setEnabled(!busy);
+    sortCombo_->setEnabled(!busy);
     queryButton_->setEnabled(!busy);
+    networkTestButton_->setEnabled(!busy || connectionProbeActive_);
     selectAllButton_->setEnabled(!busy);
     clearSelectionButton_->setEnabled(!busy);
     closeButton_->setText(
         busy ? UiText::text(QStringLiteral("action.cancel")) : UiText::text(QStringLiteral("action.close")));
     downloadButton_->setText(
-        busy ? UiText::text(QStringLiteral("net.cancel_download")) : UiText::text(QStringLiteral("net.download_selected")));
-    downloadButton_->setEnabled(!jobs_.isEmpty());
+        busy && !connectionProbeActive_
+            ? UiText::text(QStringLiteral("net.cancel_download"))
+            : UiText::text(QStringLiteral("net.download_selected")));
+    downloadButton_->setEnabled(!connectionProbeActive_ && !jobs_.isEmpty());
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        if (QWidget* previewButton = table_->cellWidget(row, kPreviewColumn); previewButton != nullptr) {
+            previewButton->setEnabled(!busy);
+        }
+    }
 }
 
 void NetBatchDownloadDialog::appendLog(const QString& message)
@@ -497,6 +683,56 @@ void NetBatchDownloadDialog::chooseOutputDirectory()
         outputDirEdit_->setText(QDir::toNativeSeparators(dir));
         saveStoredOutputDirectory(dir);
     }
+}
+
+void NetBatchDownloadDialog::testConnection()
+{
+    if (connectionProbeActive_) {
+        cancelRequested_ = true;
+        networkTestButton_->setEnabled(false);
+        networkStatusLabel_->setText(UiText::text(QStringLiteral("net.canceling")));
+        return;
+    }
+    if (busy_) {
+        return;
+    }
+
+    cancelRequested_ = false;
+    connectionProbeActive_ = true;
+    networkTestButton_->setText(UiText::text(QStringLiteral("net.cancel_connection_test")));
+    networkStatusLabel_->setText(UiText::text(QStringLiteral("net.testing_connection")));
+    progressBar_->setRange(0, 0);
+    setBusy(true);
+    appendLog(UiText::text(QStringLiteral("net.connection_test_started")));
+
+    const NetConnectionProbeResult result = client_.probeConnection(&cancelRequested_);
+
+    progressBar_->setRange(0, 100);
+    progressBar_->setValue(0);
+    connectionProbeActive_ = false;
+    setBusy(false);
+    networkTestButton_->setText(UiText::text(QStringLiteral("net.test_connection")));
+
+    QString status;
+    if (result.canceled) {
+        status = UiText::text(QStringLiteral("net.connection_test_canceled"));
+    } else if (result.ok && result.elapsedMs >= kSlowConnectionThresholdMs) {
+        status = UiText::text(QStringLiteral("net.connection_slow_1_ms")).arg(result.elapsedMs);
+    } else if (result.ok) {
+        status = UiText::text(QStringLiteral("net.connection_normal_1_ms")).arg(result.elapsedMs);
+    } else if (result.blockingResponse) {
+        status = UiText::text(QStringLiteral("net.connection_blocked"));
+    } else if (result.timedOut) {
+        status = UiText::text(QStringLiteral("net.connection_timeout"));
+    } else {
+        status = UiText::text(QStringLiteral("net.connection_failed"));
+    }
+    networkStatusLabel_->setText(status);
+    appendLog(UiText::text(QStringLiteral("net.connection_test_result_1_http_2_ms_3_4"))
+                  .arg(status)
+                  .arg(result.statusCode)
+                  .arg(result.elapsedMs)
+                  .arg(result.errorMessage.isEmpty() ? QStringLiteral("-") : result.errorMessage));
 }
 
 void NetBatchDownloadDialog::queryCharts()
@@ -568,27 +804,78 @@ void NetBatchDownloadDialog::queryCharts()
 void NetBatchDownloadDialog::populateTable(const QList<NetChartSummary>& charts)
 {
     jobs_.clear();
-    table_->setRowCount(charts.size());
+    jobs_.reserve(charts.size());
     for (int row = 0; row < charts.size(); ++row) {
         NetDownloadJob job;
         job.chart = charts.at(row);
         job.selected = true;
         job.status = UiText::text(QStringLiteral("net.pending"));
         jobs_.append(job);
+    }
+    applyCurrentSort();
+    rebuildTable();
+    downloadButton_->setEnabled(!jobs_.isEmpty());
+}
 
+void NetBatchDownloadDialog::rebuildTable()
+{
+    table_->clearContents();
+    table_->setRowCount(jobs_.size());
+    for (int row = 0; row < jobs_.size(); ++row) {
+        const NetDownloadJob& job = jobs_.at(row);
         auto* check = new QTableWidgetItem;
-        check->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-        check->setCheckState(Qt::Checked);
+        check->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
+        check->setCheckState(job.selected ? Qt::Checked : Qt::Unchecked);
         table_->setItem(row, 0, check);
         table_->setItem(row, 1, new QTableWidgetItem(job.chart.title));
         table_->setItem(row, 2, new QTableWidgetItem(job.chart.artist));
         table_->setItem(row, 3, new QTableWidgetItem(job.chart.designer));
         table_->setItem(row, 4, new QTableWidgetItem(formatLevels(job.chart.levels)));
         table_->setItem(row, 5, new QTableWidgetItem(displayTimestamp(job.chart.timestampUtc)));
-        table_->setItem(row, 6, new QTableWidgetItem(job.chart.id));
-        table_->setItem(row, 7, new QTableWidgetItem(job.status));
+        table_->setItem(row, 6, new QTableWidgetItem(job.status));
+        auto* previewCell = new QWidget(table_);
+        auto* previewLayout = new QHBoxLayout(previewCell);
+        previewLayout->setContentsMargins(2, 2, 2, 2);
+        previewLayout->setAlignment(Qt::AlignCenter);
+        auto* previewButton = new QPushButton(previewCell);
+        previewButton->setIcon(makePlayIcon(UiTheme::colors().textPrimary));
+        previewButton->setIconSize(QSize(16, 16));
+        previewButton->setToolTip(UiText::text(QStringLiteral("net.online_preview")));
+        previewButton->setAccessibleName(UiText::text(QStringLiteral("net.online_preview")));
+        previewButton->setStyleSheet(QStringLiteral(
+            "QPushButton { min-width: 26px; max-width: 26px; min-height: 26px; max-height: 26px; padding: 0; }"));
+        previewButton->setAutoDefault(false);
+        previewButton->setDefault(false);
+        previewButton->setFocusPolicy(Qt::NoFocus);
+        previewLayout->addWidget(previewButton);
+        connect(previewButton, &QPushButton::clicked, this, [this, chartId = job.chart.id]() {
+            onlinePreview(chartId);
+        });
+        table_->setCellWidget(row, kPreviewColumn, previewCell);
     }
-    downloadButton_->setEnabled(!jobs_.isEmpty());
+    table_->resizeRowsToContents();
+    static_cast<NetDownloadTable*>(table_)->scheduleColumnProportions();
+}
+
+void NetBatchDownloadDialog::applyCurrentSort()
+{
+    if (sortCombo_ == nullptr || jobs_.isEmpty()) {
+        return;
+    }
+    const auto order = static_cast<NetDownloadSortOrder>(sortCombo_->currentData().toInt());
+    sortNetDownloadJobs(&jobs_, order);
+}
+
+void NetBatchDownloadDialog::syncSelectionsFromTable()
+{
+    if (table_->rowCount() != jobs_.size()) {
+        return;
+    }
+    for (int row = 0; row < jobs_.size(); ++row) {
+        if (const QTableWidgetItem* item = table_->item(row, 0); item != nullptr) {
+            jobs_[row].selected = item->checkState() == Qt::Checked;
+        }
+    }
 }
 
 void NetBatchDownloadDialog::selectAllRows(bool selected)
@@ -600,12 +887,65 @@ void NetBatchDownloadDialog::selectAllRows(bool selected)
     }
 }
 
-void NetBatchDownloadDialog::setRowStatus(int row, const QString& status)
+void NetBatchDownloadDialog::setChartStatus(const QString& chartId, const QString& status)
 {
-    if (row >= 0 && row < table_->rowCount() && table_->item(row, 7) != nullptr) {
-        table_->item(row, 7)->setText(status);
+    for (int row = 0; row < jobs_.size(); ++row) {
+        if (jobs_[row].chart.id != chartId) {
+            continue;
+        }
+        jobs_[row].status = status;
+        if (table_->item(row, 6) != nullptr) {
+            table_->item(row, 6)->setText(status);
+        }
+        break;
     }
     qApp->processEvents(QEventLoop::AllEvents, 50);
+}
+
+void NetBatchDownloadDialog::onlinePreview(const QString& chartId)
+{
+    if (busy_ || onlinePreviewHandler_ == nullptr) {
+        return;
+    }
+    syncSelectionsFromTable();
+    const auto it = std::find_if(jobs_.cbegin(), jobs_.cend(), [&](const NetDownloadJob& job) {
+        return job.chart.id == chartId;
+    });
+    if (it == jobs_.cend()) {
+        return;
+    }
+
+    const QString cacheRoot = onlinePreviewSessionCacheRoot();
+    if (cacheRoot.isEmpty()) {
+        QMessageBox::critical(this, windowTitle(), UiText::text(QStringLiteral("net.online_preview_cache_failed")));
+        return;
+    }
+    const QString cacheIdentity = it->chart.hash.trimmed().isEmpty()
+        ? it->chart.id
+        : QStringLiteral("%1-%2").arg(it->chart.id, it->chart.hash.left(16));
+    const QString chartDirectory = chartDirectoryPathForTitle(
+        cacheRoot, it->chart.title, cacheIdentity);
+    const QString chartPath = QDir(chartDirectory).filePath(QStringLiteral("maidata.txt"));
+    const bool downloadVideo = downloadPvCheck_->isChecked();
+    if (onlinePreviewCacheIsComplete(chartDirectory, downloadVideo)) {
+        if (onlinePreviewHandler_(chartPath)) {
+            summaryLabel_->setText(UiText::text(QStringLiteral("net.online_preview_opened")));
+        }
+        return;
+    }
+
+    NetDownloadJob previewJob = *it;
+    previewJob.selected = true;
+    previewJob.outputDirectoryPath = chartDirectory;
+    NetBatchDownloadRequest request;
+    request.jobs = {previewJob};
+    request.outputDirectory = cacheRoot;
+    request.createZip = false;
+    request.downloadVideo = downloadVideo;
+    request.onlinePreview = true;
+    setChartStatus(chartId, UiText::text(QStringLiteral("net.online_preview_loading")));
+    appendLog(UiText::text(QStringLiteral("net.online_preview_loading_1")).arg(it->chart.title));
+    startDownloadRequest(std::move(request), 1, chartPath);
 }
 
 void NetBatchDownloadDialog::downloadSelected()
@@ -629,26 +969,44 @@ void NetBatchDownloadDialog::downloadSelected()
         return;
     }
 
-    setBusy(true);
-    cancelRequested_ = false;
-    progressBar_->setRange(0, selectedCount);
-    progressBar_->setValue(0);
     NetBatchDownloadRequest request;
     request.jobs = jobs_;
     request.outputDirectory = outputDir;
     request.createZip = zipAfterDownloadCheck_->isChecked();
+    request.downloadVideo = downloadPvCheck_->isChecked();
     appendLog(UiText::text(QStringLiteral("net.start_download_queue_selected_1"))
                   .arg(selectedCount)
                   .arg(outputDir)
-                  .arg(request.createZip ? QStringLiteral("yes") : QStringLiteral("no")));
+                  .arg(request.createZip ? QStringLiteral("yes") : QStringLiteral("no"))
+                  .arg(request.downloadVideo ? QStringLiteral("yes") : QStringLiteral("no")));
+
+    startDownloadRequest(std::move(request), selectedCount);
+}
+
+void NetBatchDownloadDialog::startDownloadRequest(
+    NetBatchDownloadRequest request,
+    int workCount,
+    const QString& previewChartPath)
+{
+    setBusy(true);
+    cancelRequested_ = false;
+    progressBar_->setRange(0, workCount);
+    progressBar_->setValue(0);
+    QStringList requestChartIds;
+    requestChartIds.reserve(request.jobs.size());
+    for (const NetDownloadJob& job : std::as_const(request.jobs)) {
+        requestChartIds.append(job.chart.id);
+    }
 
     auto* worker = new NetBatchDownloadWorker(std::move(request), &cancelRequested_);
     downloadThread_ = new QThread(this);
     worker->moveToThread(downloadThread_);
 
     connect(downloadThread_, &QThread::started, worker, &NetBatchDownloadWorker::run);
-    connect(worker, &NetBatchDownloadWorker::rowStatus, this, [this](int row, const QString& status) {
-        setRowStatus(row, status);
+    connect(worker, &NetBatchDownloadWorker::rowStatus, this, [this, requestChartIds](int row, const QString& status) {
+        if (row >= 0 && row < requestChartIds.size()) {
+            setChartStatus(requestChartIds.at(row), status);
+        }
     });
     connect(worker, &NetBatchDownloadWorker::progress, this, [this](int completed) {
         progressBar_->setValue(completed);
@@ -659,9 +1017,11 @@ void NetBatchDownloadDialog::downloadSelected()
     connect(worker, &NetBatchDownloadWorker::log, this, [this](const QString& message) {
         appendLog(message);
     });
-    connect(worker, &NetBatchDownloadWorker::finished, this, [this](int succeeded, int failed, bool paused, bool canceled) {
+    connect(worker, &NetBatchDownloadWorker::finished, this, [this, previewChartPath](int succeeded, int failed, bool paused, bool canceled) {
         setBusy(false);
         downloadThread_ = nullptr;
+        applyCurrentSort();
+        rebuildTable();
         if (paused) {
             summaryLabel_->setText(UiText::text(QStringLiteral("net.queue_paused_net_cloudflare_blocked")));
             QMessageBox::warning(this, windowTitle(), summaryLabel_->text());
@@ -669,6 +1029,17 @@ void NetBatchDownloadDialog::downloadSelected()
         }
         if (canceled) {
             summaryLabel_->setText(UiText::text(QStringLiteral("net.download_canceled")));
+            return;
+        }
+        if (!previewChartPath.isEmpty()) {
+            if (succeeded == 1 && onlinePreviewCacheIsComplete(QFileInfo(previewChartPath).absolutePath())) {
+                if (onlinePreviewHandler_ != nullptr && onlinePreviewHandler_(previewChartPath)) {
+                    summaryLabel_->setText(UiText::text(QStringLiteral("net.online_preview_opened")));
+                }
+            } else {
+                summaryLabel_->setText(UiText::text(QStringLiteral("net.online_preview_failed")));
+                QMessageBox::warning(this, windowTitle(), summaryLabel_->text());
+            }
             return;
         }
         summaryLabel_->setText(

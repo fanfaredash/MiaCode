@@ -16,6 +16,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -24,6 +25,7 @@
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
+#include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -248,15 +250,71 @@ void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
     }
 
     const auto [line, col] = currentCursorLineCol();
-    const QString cursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
+    QString cursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
+    QString cursorToolTip;
+    if (state_.editorSelectionBeatDisplayEnabled_) {
+        if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+            const QTextCursor selection = editor->textCursor();
+            if (selection.hasSelection()) {
+                const QString selected = selection.selectedText();
+                const int commaCount = selected.count(QLatin1Char(','));
+                const QString documentText = editor->toPlainText();
+                const int selectionStart = selection.selectionStart();
+                const int selectionEnd = selection.selectionEnd();
+                QString denominator = QStringLiteral("4");
+                QStringList parts;
+                QStringList denominators;
+                QHash<QString, int> counts;
+                const QRegularExpression declarationRe(QStringLiteral("\\{(\\d+)\\}"));
+                int cursor = 0;
+                while (cursor < selectionEnd && cursor < documentText.size()) {
+                    const QRegularExpressionMatch match = declarationRe.match(documentText, cursor);
+                    const int next = match.hasMatch() ? match.capturedStart() : documentText.size();
+                    const int commaFrom = qMax(selectionStart, cursor);
+                    const int commaTo = qMin(selectionEnd, next);
+                    if (commaTo > commaFrom) {
+                        const int count = documentText.mid(commaFrom, commaTo - commaFrom).count(QLatin1Char(','));
+                        if (count > 0) {
+                            if (!denominators.contains(denominator)) {
+                                denominators.append(denominator);
+                            }
+                            counts[denominator] += count;
+                        }
+                    }
+                    if (!match.hasMatch()) {
+                        break;
+                    }
+                    denominator = match.captured(1);
+                    cursor = match.capturedEnd();
+                }
+                for (const QString& value : denominators) {
+                    parts.append(QStringLiteral("%1/%2").arg(counts.value(value)).arg(value));
+                }
+                if (parts.size() == 1) {
+                    cursorText = UiText::text(QStringLiteral("document.selection_beats_single"))
+                        .arg(parts.first());
+                    cursorToolTip = cursorText;
+                } else if (parts.size() > 1) {
+                    cursorText = UiText::text(QStringLiteral("document.selection_beats_mixed"))
+                        .arg(commaCount);
+                    cursorToolTip = UiText::text(QStringLiteral("document.selection_beats_mixed_tooltip"))
+                        .arg(parts.join(QStringLiteral(" + ")));
+                } else if (commaCount > 0) {
+                    cursorText = UiText::text(QStringLiteral("document.selection_beats_single"))
+                        .arg(QStringLiteral("%1/%2").arg(commaCount).arg(denominator));
+                    cursorToolTip = cursorText;
+                }
+            }
+        }
+    }
     ui_.editorCursorLabel_->setText(cursorText);
-    ui_.editorCursorLabel_->setFixedWidth(QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(cursorText) + 10);
+    ui_.editorCursorLabel_->setToolTip(cursorToolTip);
     ui_.editorCursorLabel_->setVisible(true);
-    const QString correctedCursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
     const QString correctedCursorWidthTemplate = UiText::text(QStringLiteral("document.ln_9999_col_9999"));
-    ui_.editorCursorLabel_->setText(correctedCursorText);
     ui_.editorCursorLabel_->setFixedWidth(
-        QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(correctedCursorWidthTemplate) + 10);
+        qMax(
+            QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(correctedCursorWidthTemplate),
+            QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(cursorText)) + 10);
 
     if (QLayout* headerLayout = ui_.editorHeaderWidget_->layout(); headerLayout != nullptr) {
         headerLayout->activate();
@@ -578,6 +636,51 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     metadataItem->setData(kOutlineItemActiveRole,
                           state_.activeOutlineKey_ == QLatin1String("metadata")
                               || state_.activeOutlineKey_ == QLatin1String("latency"));
+    const QString inputTitle = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
+    const QString inputArtist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
+    const QString inputDesigner = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : QString();
+    const bool titleMissing = state_.document_.title.trimmed().isEmpty() && inputTitle.trimmed().isEmpty();
+    const bool artistMissing = state_.document_.artist.trimmed().isEmpty() && inputArtist.trimmed().isEmpty();
+    const bool designerMissing = state_.document_.designer.trimmed().isEmpty() && inputDesigner.trimmed().isEmpty();
+    const bool useLiveMetadataEdits = state_.activeOutlineKey_ == QLatin1String("metadata")
+        && state_.currentFieldDirty_;
+    const QString liveProperties = useLiveMetadataEdits && ui_.metadataExtraEdit_ != nullptr
+        ? ui_.metadataExtraEdit_->toPlainText()
+        : SimaiDocument::serializeRawFields(state_.document_.extraFields);
+    const bool missingCover = state_.currentFilePath_.isEmpty()
+        || miacode::chart_assets::resolveBackgroundMediaPath(
+               state_.currentFilePath_, /*includeVideoCandidates=*/false).isEmpty();
+    const QVector<int> invalidPropertyLines = SimaiDocument::invalidPropertyLineNumbers(liveProperties);
+    if (ui_.metadataExtraEdit_ != nullptr) {
+        QList<QTextEdit::ExtraSelection> selections;
+        for (int line : invalidPropertyLines) {
+            QTextBlock block = ui_.metadataExtraEdit_->document()->findBlockByLineNumber(line - 1);
+            if (!block.isValid()) continue;
+            QTextEdit::ExtraSelection selection;
+            selection.cursor = QTextCursor(block);
+            selection.cursor.select(QTextCursor::LineUnderCursor);
+            selection.format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
+            selection.format.setUnderlineColor(UiTheme::colors().dark ? QColor("#FF7B72") : QColor("#D1242F"));
+            selection.format.setToolTip(UiText::text(QStringLiteral("metadata.invalid_property")));
+            selections.append(selection);
+        }
+        ui_.metadataExtraEdit_->setExtraSelections(selections);
+    }
+    QStringList metadataProblems;
+    if (titleMissing) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.title")));
+    if (artistMissing) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.artist")));
+    if (designerMissing) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.des")));
+    if (missingCover) metadataProblems.append(UiText::text(QStringLiteral("metadata.field.cover")));
+    if (!invalidPropertyLines.isEmpty()) {
+        QStringList lineNumbers;
+        for (int line : invalidPropertyLines) lineNumbers.append(QString::number(line));
+        metadataProblems.append(UiText::text(QStringLiteral("metadata.invalid_property_lines"))
+                                    .arg(lineNumbers.join(QStringLiteral(", "))));
+    }
+    metadataItem->setData(kOutlineItemAttentionRole, !metadataProblems.isEmpty());
+    metadataItem->setToolTip(metadataProblems.isEmpty() ? metadataLabel
+        : UiText::text(QStringLiteral("metadata.needs_attention"))
+              .arg(metadataLabel, metadataProblems.join(QStringLiteral(", "))));
 
     // The latency-settings sidebar item is gone (L-A migration): the page is
     // now reached from the metadata page's "延迟与偏移校准" entry card (and
@@ -888,19 +991,46 @@ void MainWindow::DocumentSection::setChartBottomTabsMode(bool enabled)
 
 bool MainWindow::DocumentSection::switchToLatencyField()
 {
+    MC_OP("MainWindow::DocumentSection::switchToLatencyField");
+    _mc_op_.note(QStringLiteral("active_outline=%1 difficulty=%2 dirty=%3")
+                     .arg(state_.activeOutlineKey_)
+                     .arg(state_.activeDifficultyId_)
+                     .arg(state_.currentFieldDirty_ ? 1 : 0));
+    miacode::latency::appendLatencyDiagnosticPhase(
+        QStringLiteral("switch_request"),
+        QStringLiteral("active_outline=%1 difficulty=%2 dirty=%3 playing=%4 pause_second=%5 track_duration=%6")
+            .arg(state_.activeOutlineKey_)
+            .arg(state_.activeDifficultyId_)
+            .arg(state_.currentFieldDirty_ ? 1 : 0)
+            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
+            .arg(state_.previewTrackDurationSeconds_, 0, 'f', 6));
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_maybe_save_begin"));
     if (!maybeSaveCurrentFieldChanges()) {
+        miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_cancelled_by_save_prompt"));
         return false;
     }
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_maybe_save_complete"));
     if (ui_.latencyDetectionPage_ == nullptr || ui_.editorStack_ == nullptr) {
+        _mc_op_.fail(QStringLiteral("missing_page_or_editor_stack"));
+        miacode::latency::appendLatencyDiagnosticPhase(
+            QStringLiteral("switch_abort_missing_ui"),
+            QStringLiteral("page=%1 editor_stack=%2")
+                .arg(ui_.latencyDetectionPage_ != nullptr ? 1 : 0)
+                .arg(ui_.editorStack_ != nullptr ? 1 : 0));
         return false;
     }
     // Leaving the export page (possibly) — tear down its embedded video
     // panel unconditionally (idempotent), same pattern as the latency
     // onPageLeft calls in the other switch functions.
     if (ui_.exportPage_ != nullptr) {
+        miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_export_page_leave_begin"));
         ui_.exportPage_->onPageLeft();
+        miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_export_page_leave_complete"));
     }
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_cache_layout_begin"));
     owner_.cacheWorkspaceLayoutSizes();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_cache_layout_complete"));
     // Preserve the current preview position across the switch, just like
     // switchToDifficultyField does, so entering the latency page keeps the
     // playhead instead of snapping to 0. installSandboxScene() consumes
@@ -908,7 +1038,11 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     const double restorePreviewSecond = qMax(0.0, state_.qtPreviewPlaying_
         ? owner_.currentPreviewAuthoritativeAudioClockSecond()
         : state_.qtPreviewPauseSecond_);
+    miacode::latency::appendLatencyDiagnosticPhase(
+        QStringLiteral("switch_stop_preview_begin"),
+        QStringLiteral("restore_second=%1").arg(restorePreviewSecond, 0, 'f', 6));
     owner_.stopQtPreviewPlayback(true);
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_stop_preview_complete"));
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
     state_.pendingPreviewPlaybackRevision_ = 0;
@@ -918,22 +1052,40 @@ bool MainWindow::DocumentSection::switchToLatencyField()
         state_.qtPreviewPauseSecond_, restorePreviewSecond, state_.qtPreviewPlaying_, "switch_to_latency_field");
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "latency";
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_populate_metadata_begin"));
     populateMetadataPage();  // keeps document fields in sync for sidebar use
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_populate_metadata_complete"));
+    // Showing the bottom timeline changes the QuickShell workspace height. Arm
+    // before changing either surface so synchronous and deferred resize events
+    // both finalize the latency page at its destination geometry, instead of
+    // briefly compositing the previous metadata frame into the shorter area.
+    owner_.armWorkspaceSurfaceSettleRelayout();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_editor_stack_begin"));
     ui_.editorStack_->setCurrentWidget(ui_.latencyDetectionPage_);
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_editor_stack_complete"));
     // Bottom timeline + bottom tabs remain visible: the sandbox audition
     // drives them with the synthesized test chart, so the user can watch
     // the taps scroll past the judge line in sync with the song.
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_bottom_tabs_begin"));
     setChartBottomTabsMode(true);
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_bottom_tabs_complete"));
     owner_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_sidebar_rebuild_begin"));
     rebuildFieldSidebar();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_sidebar_rebuild_complete"));
     owner_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_page_enter_begin"));
     ui_.latencyDetectionPage_->onPageEntered();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_page_enter_complete"));
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_layout_refresh_begin"));
     owner_.refreshLayoutAfterPageSwitch();
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_layout_refresh_complete"));
     QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
+    miacode::latency::appendLatencyDiagnosticPhase(QStringLiteral("switch_complete"));
     return true;
 }
 
@@ -951,6 +1103,30 @@ bool MainWindow::DocumentSection::switchToExportField()
     // the spinner paints (and starts spinning) before the thread blocks. The
     // spinner's own active state guards against a double-trigger landing two
     // deferred builds in flight.
+    if (ui_.outlineBusySpinner_ != nullptr && ui_.outlineBusySpinner_->isActive()) {
+        return true;
+    }
+    showOutlineExportBusySpinner();
+    QTimer::singleShot(0, &owner_, [this]() {
+        performSwitchToExportField();
+        hideOutlineExportBusySpinner();
+    });
+    return true;
+}
+
+bool MainWindow::DocumentSection::switchToExportFieldWithoutSave(
+    int difficultyId, double rangeStart, double rangeEnd, int documentRevision)
+{
+    if (ui_.exportPage_ == nullptr || ui_.editorStack_ == nullptr
+        || !SimaiDocument::isDifficultyId(difficultyId)
+        || rangeStart < 0.0 || rangeEnd <= rangeStart) {
+        return false;
+    }
+    state_.pendingSelectionExport_ = true;
+    state_.pendingSelectionExportDifficultyId_ = difficultyId;
+    state_.pendingSelectionExportStartSecond_ = rangeStart;
+    state_.pendingSelectionExportEndSecond_ = rangeEnd;
+    state_.pendingSelectionExportDocumentRevision_ = documentRevision;
     if (ui_.outlineBusySpinner_ != nullptr && ui_.outlineBusySpinner_->isActive()) {
         return true;
     }
@@ -1023,31 +1199,32 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     }
     // Captured BEFORE the reset below: seeds the page's difficulty badge
     // default (decision D4 — "the difficulty that was active on entry").
-    const int previousActiveDifficultyId = state_.activeDifficultyId_;
-    // Carry the current preview position INTO the export audition so it doesn't
-    // snap to 0 — matching the difficulty-tab switch (which preserves progress
-    // when a difficulty / the latency page was active before the switch). Read
-    // the authoritative clock while it is still live (before stopQtPreviewPlayback
-    // below); installExportPreviewAuditionScene consumes this one-shot seed.
-    // The metadata (谱面信息) page keeps no audition, but leaving a difficulty for
-    // it stopped playback with keepPosition=true, so qtPreviewPauseSecond_ still
-    // holds the last position — carry it into the export page too. Source detected
-    // from the stack (currentWidget is still the page we're LEAVING; the switch to
-    // exportPage_ happens later), because activeOutlineKey_ was already overwritten
-    // with the destination by the sidebar handler. A stale cross-file value is
-    // guarded by loadDocument resetting qtPreviewPauseSecond_ to 0.
-    const bool leavingMetadataPage = ui_.editorStack_ != nullptr
-        && ui_.metadataPage_ != nullptr
-        && ui_.editorStack_->currentWidget() == ui_.metadataPage_;
-    const bool restoreEntryPreview = owner_.hasActiveDifficulty()
-        || state_.latencySandboxAuditionActive_
-        || state_.exportPreviewAuditionActive_   // re-entering export from export (sidebar re-click)
-        || leavingMetadataPage;
-    state_.exportPreviewEntrySeedSecond_ = restoreEntryPreview
-        ? qMax(0.0, state_.qtPreviewPlaying_
-              ? owner_.currentPreviewAuthoritativeAudioClockSecond()
-              : state_.qtPreviewPauseSecond_)
-        : -1.0;
+    const bool selectionExport = state_.pendingSelectionExport_;
+    const int previousActiveDifficultyId = selectionExport
+        ? state_.pendingSelectionExportDifficultyId_
+        : state_.activeDifficultyId_;
+    const double selectionExportStart = state_.pendingSelectionExportStartSecond_;
+    const double selectionExportEnd = state_.pendingSelectionExportEndSecond_;
+    const int selectionExportDocumentRevision = state_.pendingSelectionExportDocumentRevision_;
+    auto* selectionExportEditor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (selectionExport && selectionExportEditor != nullptr
+        && selectionExportEditor->document() != nullptr
+        && selectionExportDocumentRevision >= 0
+        && selectionExportEditor->document()->revision() != selectionExportDocumentRevision) {
+        state_.pendingSelectionExport_ = false;
+        clearExportSelectionContext();
+        owner_.statusBar()->showMessage(
+            UiText::text(QStringLiteral("video_export.export_selection_changed")));
+        return;
+    }
+    const bool preserveDirtyState = state_.currentFieldDirty_;
+    // Entering the export page is a fresh WYSIWYG audition: seed chart time 0.
+    // installExportPreviewAuditionScene consumes this one-shot seed, then
+    // refreshExportIntroState moves the playhead to the negative-time intro head
+    // when 添加片头 is enabled. Rebuilding the video panel while already inside
+    // the export page still preserves its position through the separate
+    // lastExportAuditionDifficultyId_ path.
+    state_.exportPreviewEntrySeedSecond_ = 0.0;
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
@@ -1076,7 +1253,7 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     ui_.editorStack_->setCurrentWidget(ui_.exportPage_);
     setChartBottomTabsMode(false);
     owner_.clearValidationDecorations();
-    state_.currentFieldDirty_ = false;
+    state_.currentFieldDirty_ = preserveDirtyState;
     updateDirtyState();
     rebuildFieldSidebar();
     owner_.updateWindowTitle();
@@ -1086,7 +1263,12 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // The expensive part — building the embedded video panel — happens inside
     // onPageEntered. It ticks the spinner at its own sub-step boundaries so the
     // ring keeps rotating across the build (see createEmbeddedVideoExportPanel).
-    ui_.exportPage_->onPageEntered(previousActiveDifficultyId);
+    ui_.exportPage_->onPageEntered(
+        previousActiveDifficultyId,
+        selectionExport ? selectionExportStart : -1.0,
+        selectionExport ? selectionExportEnd : -1.0);
+    state_.pendingSelectionExport_ = false;
+    state_.pendingSelectionExportDocumentRevision_ = -1;
     owner_.tickOutlineBusySpinner();
     // Entering the export page changes the preview aspect (square → export video
     // ratio) and collapses the bottom tabs; both drive the workspace surface to a
@@ -1098,11 +1280,27 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
 }
 
+void MainWindow::DocumentSection::clearExportSelectionContext()
+{
+    state_.exportSelectionContextActive_ = false;
+    state_.exportSelectionContextDifficultyId_ = 0;
+    state_.exportSelectionContextStartPosition_ = 0;
+    state_.exportSelectionContextEndPosition_ = 0;
+    state_.exportSelectionContextDocumentRevision_ = -1;
+    state_.exportSelectionContextChartText_.clear();
+    state_.exportOriginDocumentSnapshotValid_ = false;
+    state_.exportOriginDocumentSnapshot_ = SimaiDocument::createEmpty();
+    state_.exportOriginDifficultyId_ = 0;
+    state_.exportOriginFieldDirty_ = false;
+    state_.exportOriginDocumentDirty_ = false;
+}
+
 bool MainWindow::DocumentSection::switchToMetadataField()
 {
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
+    clearExportSelectionContext();
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
@@ -1157,6 +1355,7 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     if (!maybeSaveBeforeContinue()) {
         return false;
     }
+    clearExportSelectionContext();
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
@@ -1226,6 +1425,16 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     const bool leavingMetadataPage = ui_.editorStack_ != nullptr
         && ui_.metadataPage_ != nullptr
         && ui_.editorStack_->currentWidget() == ui_.metadataPage_;
+    const bool leavingExportPage = ui_.editorStack_ != nullptr
+        && ui_.exportPage_ != nullptr
+        && ui_.editorStack_->currentWidget() == ui_.exportPage_;
+    const bool restoreExportSelection = leavingExportPage
+        && state_.exportSelectionContextActive_
+        && state_.exportSelectionContextDifficultyId_ == difficultyId
+        && state_.exportSelectionContextDocumentRevision_ >= 0;
+    const int exportSelectionStart = state_.exportSelectionContextStartPosition_;
+    const int exportSelectionEnd = state_.exportSelectionContextEndPosition_;
+    const QString exportSelectionChartText = state_.exportSelectionContextChartText_;
     const bool restoreSwitchView = owner_.hasActiveDifficulty()
         || state_.latencySandboxAuditionActive_
         || state_.exportPreviewAuditionActive_
@@ -1247,7 +1456,8 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
             }
         }
     }
-    if (!maybeSaveCurrentFieldChanges()) {
+    const bool returningToExportOrigin = restoreExportSelection;
+    if (!returningToExportOrigin && !maybeSaveCurrentFieldChanges()) {
         return false;
     }
     // Navigating away always tears down the latency audition. onPageLeft() is
@@ -1337,6 +1547,46 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     if (ui_.editorStack_ != nullptr && ui_.chartPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);
     }
+    if (restoreExportSelection) {
+        if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+            editor != nullptr && editor->document() != nullptr
+            && editor->toPlainText() == exportSelectionChartText) {
+            const QPointer<PlainCodeEditor> editorGuard(editor);
+            const QPointer<QListWidget> focusGuard(ui_.outlineList_);
+            const auto restoreSelection = [editorGuard, exportSelectionStart,
+                                           exportSelectionEnd, exportSelectionChartText,
+                                           focusGuard]() {
+                if (editorGuard.isNull() || editorGuard->document() == nullptr
+                    || editorGuard->toPlainText() != exportSelectionChartText
+                    || !editorGuard->isVisible()) {
+                    return;
+                }
+                QTextCursor cursor(editorGuard->document());
+                const int documentEnd = qMax(0, editorGuard->document()->characterCount() - 1);
+                const int start = qBound(0, exportSelectionStart, documentEnd);
+                const int end = qBound(start, exportSelectionEnd, documentEnd);
+                cursor.setPosition(start);
+                cursor.setPosition(end, QTextCursor::KeepAnchor);
+                editorGuard->setTextCursor(cursor);
+                // Showing the chart page can make Qt restore the editor's
+                // previous focus asynchronously. Keep the restored selection
+                // visible, but leave keyboard focus on the page navigation.
+                if (!focusGuard.isNull() && focusGuard->isVisible() && focusGuard->isEnabled()) {
+                    focusGuard->setFocus(Qt::OtherFocusReason);
+                }
+            };
+            // The editor is repopulated/relaid out during page switching. Restore
+            // after the switch settles so the selection is applied to the final
+            // document/cursor state, not an intermediate page state.
+            // Focus is intentionally not changed here: page navigation retains
+            // the original application's non-editor focus behavior.
+            QTimer::singleShot(0, &owner_, restoreSelection);
+            QTimer::singleShot(50, &owner_, restoreSelection);
+        }
+        clearExportSelectionContext();
+    } else if (leavingExportPage) {
+        clearExportSelectionContext();
+    }
     setChartBottomTabsMode(true);
     // Entering a difficulty re-asserts the correct preview levels. With the latency
     // audition torn down above (onPageLeft), the mode is Normal, so the single
@@ -1414,6 +1664,10 @@ void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
         state_.qtPreviewPauseSecond_, 0.0, state_.qtPreviewPlaying_, "load_document");
     state_.lastExportAuditionDifficultyId_ = 0;
     state_.activeOutlineKey_ = state_.document_.difficultyIds().isEmpty() ? QStringLiteral("welcome") : QStringLiteral("chart");
+    // Keep the metadata inputs synchronized even when the initial destination
+    // is a difficulty page. Sidebar completeness checks intentionally require
+    // both the parsed TXT model and the input page to report the same blank.
+    populateMetadataPage();
     activateInitialField();
     updateMetadataPageMode();
     // Restore the per-project "all difficulties share the same designer"
