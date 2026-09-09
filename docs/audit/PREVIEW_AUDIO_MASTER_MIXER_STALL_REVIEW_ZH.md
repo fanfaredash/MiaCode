@@ -20,7 +20,8 @@ lifecycle: working
 | A2 | 暂停期间 `latestHealthSample_` 不刷新，恢复后最长 1 s 内 `bass_status.bgm_raw` 是**暂停前**的旧值 | 日志伪影（非音频故障） | 中（误导分析） | 确凿 | 无：解释了"恢复后第一拍 ±36/-145/-75/+3.7 s"现象，与 H2 无关。**已修复，见 §7.1** |
 | A3 | `bass_status.bgm_raw` 与 `auth` 时基不同步（bgm_raw 最多陈旧 1 s，auth 是现场值）→ `bgm_delta_ms` 本身带 0~+1000 ms 的采样相位噪声 | 分析方法层面 | 中 | 确凿 | 中：H2 的"单拍 0.85-0.94 s"必须用相邻两次 worker 样本的 `sampledAtMs` 差归一化后才可信（当前 bass_status 不打印 sampledAtMs） |
 | A4 | 现有日志**无法区分**"BGM 源单独断供"与"整条 master 混音停顿"；SFX 的触发是按 master 混音位置（`BASS_SYNC_POS|MIXTIME`）驱动的，master 停顿时 SFX 触发行照样"正常"出现 | 分析框架 | 高 | 高 | 强：H2 的"BGM-only"结论目前证据不足；见 §2.4 的判别方法 |
-| A5 | master mixer 以 `BASS_ATTRIB_BUFFER=0`（零播放缓冲）+ `BASS_ATTRIB_MIXER_THREADS=8` 运行，且从未设置 `BASS_CONFIG_DEV_BUFFER/UPDATEPERIOD`；任何 >1 个设备周期的处理抖动都会直接掉音 | 架构隐患 | 高 | 高（机制确定，是否为本次根因未证） | **已实现代码级缓解，硬件复测待完成，见 §7.7**：默认改为 0 ms / 4 线程，保留 env A/B；非零 buffer 仅作显式 A/B，并按实际缓冲补偿 SFX 调度。 |
+| A5 | master mixer 以 `BASS_ATTRIB_BUFFER=0`（零播放缓冲）+ `BASS_ATTRIB_MIXER_THREADS=8` 运行，且从未设置 `BASS_CONFIG_DEV_BUFFER/UPDATEPERIOD`；任何 >1 个设备周期的处理抖动都会直接掉音 | 架构隐患 | 高 | 高（机制确定，是否为本次根因未证） | **默认已改为 0 ms / 4 线程，见 §7.7**。零缓冲仍是残余欠载风险，`0/8` 保留为回滚参考；不能用非零 master buffer 作为已验证的稳定化方案。 |
+| A15 | `a9a95856` 引入 `BASS_ATTRIB_BUFFER=20–40 ms` 时没有同步降低 `BASS_CONFIG_UPDATEPERIOD`（默认值为 100 ms）；本机实测所有 `BUFFER_MS≠0` 都产生严重错误听感，延迟量还呈现约 `100−BUFFER_MS` 的关系 | 时序契约回归 | 高 | 高（复现事实；精确内部调度机制仍需探针确认） | **本轮最直接的回归触发因素**：非零值撤回为生产方案，保留为诊断项。 |
 | A6 | 混音线程回调 `handleMixerGroupSync` 在音频线程持 `QMutex`、深拷贝 `CollapsedEventGroup`、拼 `QString`、走 DebugLog 的 `std::mutex` 队列；`QMutex` 无优先级继承 → 经典优先级反转 | 实时性隐患 | 中高 | 高（机制确定） | **已完成代码路径修复，硬件复测待完成，见 §7.7**：回调不再等待互斥锁，且不再深拷贝、构造日志字符串或写日志。 |
 | A7 | `anchorSfxScheduler` 在锁外先读 master 位置、再在锁内 `BASS_ChannelSetSync`；若目标位置在这几毫秒内已被越过，sync 永不触发且链式调度整体卡死到下次 seek/pause | 竞态（假设） | 高（若成立则 SFX 全部静音） | 中（需 BASS 文档确认"已越过位置的 SYNC_POS 是否触发"） | 弱 |
 | A8 | BGM 的 `setCurrentSec` 用 `BASS_ChannelSetPosition`，而同文件的 SFX `stop/playOneShot` 用 `BASS_Mixer_ChannelSetPosition`；BASSmix 要求混音源 seek 用后者以复位 resampler/ramp/缓冲 | 库语义不符 | 中 | 高（不一致是事实；后果需复核文档） | 弱-中：只在 seek/变速时触发，不解释稳态缺口 |
@@ -213,7 +214,7 @@ lifecycle: working
 1. **用现有日志做 §2.4 的判别：** 对每个缺口拍，比较缺口前后 `bass_sfx_mixer_trigger` 行的"墙钟时间戳 − group_second/rate"是否同步跳变。这一步决定 H2 是 A5 路线还是真正的 BGM-only。
 2. **用现有日志验证 A2：** 异常拍的 `bgm_raw` 是否等于暂停前最后的 `pause_bgm_raw`/`bgm_raw`。
 3. **最小埋点（两行）：** `bass_status` 增加 `master_chart=` 与 `bgm_raw_age_ms=`；`bass_audio_health` 增加相邻样本推进比。这三个字段足以把 A1/A2/A3/A4 一次性解决为可量化指标。
-4. 若 (1) 指向整条混音停顿：优先试 master `BASS_ATTRIB_BUFFER` 20-40 ms 与 `MIXER_THREADS` 降级，在 `mixerSecondForChartSecond` 补偿常量延迟；同时处理 A6。
+4. 若 (1) 指向整条混音停顿：先保持 `BASS_ATTRIB_BUFFER=0`，只比较 `MIXER_THREADS=4` 与旧参考值 `8`，同时处理 A6。任何非零 buffer 实验都必须先确认 `BASS_CONFIG_UPDATEPERIOD` 与回调时钟语义，不能再以“增加缓冲”作为默认修复。
 5. 独立于本次症状：A7（需先查文档，再在日志找签名）、A8、A9 各自立项。
 
 ---
@@ -229,7 +230,7 @@ lifecycle: working
 ## 6. 仍未验证
 
 - H2 是否真的 BGM-only（§2.4 判别未做；前一轮"SFX 正常"的判据不明）。
-- BASS 文档细节：`BASS_ASYNCFILE` 对内存流的确切措辞；`BASS_ATTRIB_BUFFER=0` 在 macOS/CoreAudio 下的确切执行线程；`BASS_ATTRIB_MIXER_THREADS` 的汇合等待语义；`BASS_SYNC_POS` 对"已越过位置"是否触发（A7）；`BASS_Mixer_ChannelGetPosition` 在 `BASS_ChannelSetPosition` 之后的行为（A8）。仓库无 chm/bass_fx.h，我无法在本地核对。
+- 已通过 BASS 官方在线文档确认：`BASS_ASYNCFILE` 对内存流会被忽略；`BASS_ATTRIB_BUFFER=0` 表示不做通道播放缓冲，数据在最终混音需要时产出；低的非零值可能要求降低 `BASS_CONFIG_UPDATEPERIOD`；该更新周期默认 100 ms。仍未确认的细节包括 `BASS_SYNC_POS` 对已越过目标位置的行为（A7）、`BASS_Mixer_ChannelGetPosition` 与当前 BGM seek 组合的实际后果（A8），以及 macOS 实际回调线程调度。仓库仍无 `bass_fx.h` 和本地 CHM。
 - A9 的实际触发顺序（波形解码与预览引擎初始化谁先）——需要看启动日志里 `bass_engine_ready` 与波形任务的先后。
 - 内存压力/页错误（§2.1 变体）是否在复现机器上存在——需要 `vm_stat`/`memory_pressure` 与缺口时刻对齐。
 - 复现日志中缺口拍前是否出现过 `bass_live_rate_change`（A12）。
@@ -306,7 +307,7 @@ lifecycle: working
 
 ### 7.6 下一步（后续会话已开始执行）
 
-- "给 master 一点缓冲余量能否消除 click/pop"的代码准备已完成：`BASS_ATTRIB_BUFFER`/`MIXER_THREADS` 已有受校验的 env 覆盖，见 §7.7；仍需在复现硬件上用本节探针完成 A/B 验收（复测后 `kind=late_callback` 的离群值计数应显著下降）。
+- “给 master 一点缓冲余量能否消除 click/pop”的旧假设已被复现硬件否定：所有 `BUFFER_MS≠0` 的实例均有严重错误听感。受校验的 env 覆盖仍保留，但非零值只用于有明确问题的诊断，不再安排盲扫或作为验收候选。
 - 若要进一步定位"迟到之后设备具体怎么补空档"：`step` 阈值 0.25 可能偏高，可以尝试调低阈值再测一轮，或者在设备输出更靠后的位置（如果 BASS/CoreAudio 允许）再加一层探针。
 - A6（混音线程回调内的锁等待/堆分配/日志）已完成代码路径修复，见 §7.7；仍需与 A5 一起做硬件复测。
 
@@ -335,5 +336,21 @@ lifecycle: working
 
 **仍不能仅凭代码验证宣称症状消失。** 下一步必须在原复现硬件上分别运行新默认 `0 / 4` 与
 旧组合 `0 / 8`，比较相同播放区间内 `bass_output_glitch kind=late_callback` 的次数/离群值，并
-主观确认 click/pop 与 H2 卡顿是否消失。若 30 ms 仍有离群，可在 `20..40 ms` 内继续 A/B；若
-需要超过 40 ms 才稳定，应继续排查设备周期和系统调度，而不是无限增加延迟。
+主观确认 click/pop 与 H2 卡顿是否消失。若 `0 / 4` 仍有离群，应继续排查设备周期和系统调度，
+而不是增加 `BUFFER_MS`。
+
+### 7.8 本轮复评：非零 master buffer 的建议撤回（2026-09-09）
+
+用户在复现硬件上确认：`BUFFER_MS=20/30/40` 均导致音频轨道严重错误；单线程实例尤其严重。`30/1 → 30/4` 只消除了线程数这一项混杂因素，听感问题仍在；本轮 `7a7109e4` 已将生产默认改为 `0/4`，并推送到 `feature/qml-ui`。
+
+这与 BASS 官方语义相符：[`BASS_ATTRIB_BUFFER`](https://www.un4seen.com/doc/bass/BASS_ATTRIB_BUFFER.html) 说明 0 是不做播放缓冲、在最终混音需要时请求数据；低的非零值可能需要同时降低更新周期。[`BASS_CONFIG_UPDATEPERIOD`](https://www.un4seen.com/doc/bass/BASS_CONFIG_UPDATEPERIOD.html) 的默认值是 100 ms，而当前工程没有显式设置它。因此“20/30/40 ms 的迟到量约为 100 ms 减去请求 buffer”是一个有官方机制支持、但仍需回调探针独立验证的高置信度假设。macOS 的设备缓冲是另一层：[`BASS_CONFIG_DEV_BUFFER`](https://www.un4seen.com/doc/bass/BASS_CONFIG_DEV_BUFFER.html) 在 macOS 不可用，不能把它与 master channel buffer 混为一谈。
+
+建议重新归类如下：
+
+- **撤回**：30 ms 生产默认、正 buffer 作为普遍稳定化措施、1 个 mixer 线程默认、以及“读取成功/补偿成功就等于听感正确”。
+- **保留**：`0/8` 作为已知参考/回滚组合；`0/4` 作为当前生产候选；线程数覆盖用于隔离容量因素；读回值、late-callback、A6 回调实时性、A7 sync 竞态、A8 seek 语义、A9 设备租约等诊断方向。
+- **重述**：`MIACODE_BASS_MASTER_BUFFER_MS` 非零值是复现机上的已知有问题实验项，不是受支持的低延迟配置；`MIXER_THREADS` 是并行处理容量参数，不是时钟修复手段。
+
+从 v1 到 v2，最重要的行为变化不是 BGM 文件读取：v1 已经使用内存解码流、BASS_FX tempo、零 master buffer 和 8 个 mixer 线程。v2 期间先加入 macOS BASS 后端，再把 SFX 从 GUI 墙钟排程改成 master mixer sync，随后把 backend/BASS 操作迁移到 worker，并加入进程级设备租约与 hotplug barrier。这些变化增加了时钟、回调、生命周期之间的耦合和对调度抖动的敏感度，但不能单独解释本轮 `BUFFER_MS≠0` 的回归。最直接的回归来自 `a9a95856`：把 master buffer 改成非零，同时没有调整默认 100 ms update period，并叠加了 SFX buffer 补偿与回调路径改造；`d3c50201` 仅将线程数改回 4，`7a7109e4` 才移除了已确认的正 buffer 触发因素。
+
+最后，`0/4` 仍不是“已经听感验收通过”的结论。既有日志还表明旧 `0/8` 零缓冲路径存在独立的短时欠载风险；下一次用户 A/B 应只比较 `0/4` 与 `0/8`，并同时看 `late_callback` 离群值。只有在 master/device 位置、BGM 产出位置和设备回调节奏被分别记录后，才能最终区分 BGM 单独欠供与整个 master/device 停顿。
