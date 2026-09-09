@@ -1053,6 +1053,45 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   card's jacket slot still shows the 曲绘. Batch export (`BatchVideoExportDialog`) and the CLI
   keep spec defaults (jacket/blur/DX).
 
+## 8d. Majdata Net download + online preview — `src/tools/net/`
+
+- Query/resource transport and parsing: `NetClient.{h,cpp}`. The batch-download UI and worker are
+  `NetBatchDownloadDialog.*` / `NetBatchDownloadWorker.*`; pure list sorting (highest numeric level,
+  upload time, or displayed download status; both directions) is owned by `sortNetDownloadJobs` and
+  covered by `net_client_spec`.
+- The result table intentionally omits the internal chart ID column. Its eight visible data columns
+  initialize once at `5:20:15:15:10:18:7:10` (selection/title/artist/designer/levels/uploaded/
+  status/online preview), then preserve user-resized widths across refreshes. Online Preview is the
+  final column. Online preview downloads the
+  canonical `maidata.txt` / `track.mp3` / `bg.jpg` triplet into a process-lifetime `QTemporaryDir`,
+  keyed by chart ID + remote hash, then hands its `maidata.txt` to
+  `MainWindow::openOnlinePreviewAtPath` through an owner-guarded callback.
+- The sort combo reuses the user-ID input's grid column so their left edge and width align. A nested
+  row spanning the remaining columns keeps **Test Connection** immediately beside the combo without
+  imposing its width on an individual query column; the filter inputs, combo, and button share one
+  measured W1-safe height. The Test Connection action performs an eight-second probe against the real
+  Majdata chart-list HTTPS endpoint. Its inline status distinguishes normal/slow responses,
+  timeouts, general failures, and Net/Cloudflare blocking; full HTTP/network diagnostics go to the
+  existing log. The default-enabled **Download PV** checkbox sits directly below the extra-ZIP
+  option. Normal batch downloads append the Majdata `video` resource as `pv.mp4`; the endpoint's
+  documented 404 means that chart simply has no optional PV and does not fail the otherwise
+  complete chart. Online preview always caches
+  the canonical three-file triplet and, while Download PV is checked, also requires/fetches
+  `pv.mp4` before treating an existing cache entry as complete. A PV top-up skips already complete
+  cached resources, so it requests the missing video directly. Per-row online-preview actions use a
+  compact painted play icon centered in the final cell (tooltip/accessibility text retains the
+  localized label).
+  Canceling an in-flight resource changes that chart's displayed status to Canceled before the
+  worker finishes, so it cannot remain visually stuck on a Downloading status. Table status cells
+  stay terse (Pending / Downloading / Loading preview / Retrying / Packaging / Done / Failed /
+  Paused / Canceled); filenames and error explanations belong only in the diagnostic log. All
+  dialog push buttons have Qt auto-default/default activation disabled, so Return/Enter never
+  triggers query, start/repeat download, cancellation, log toggling, or close by stale focus.
+- Online-preview document state is owned by `DocumentSection`: it reuses the ordinary file-backed
+  parser/audio/preview path but does not enter recent files, last-session restore, or crash-recovery
+  tracking. Saving an online preview routes through Save As so the transient cache is not treated as
+  the user's persistent source file. The temporary root removes itself when the process exits.
+
 ## 9. Latency settings (BPM / offset / clock_count) — `src/tools/latency/`
 
 - `LatencyDetectionPage.*`, `LatencyAnalysis.*`, `LatencySandboxController.*`,

@@ -49,9 +49,28 @@ struct NetDownloadResult {
     QString errorMessage;
 };
 
+struct NetConnectionProbeResult {
+    bool ok = false;
+    bool canceled = false;
+    bool blockingResponse = false;
+    bool timedOut = false;
+    int statusCode = 0;
+    qint64 elapsedMs = 0;
+    QString errorMessage;
+};
+
 struct NetQueryOptions {
     bool fuzzyCaseInsensitive = true;
     QString titleKeyword;
+};
+
+enum class NetDownloadSortOrder {
+    LevelAscending,
+    LevelDescending,
+    UploadedNewest,
+    UploadedOldest,
+    StatusAscending,
+    StatusDescending,
 };
 
 bool netDownloadLengthIsComplete(qint64 expectedBytes, qint64 bytesWritten);
@@ -62,6 +81,7 @@ QList<NetChartSummary> filterChartsByLocalDateRange(
     const QDate& startDate,
     const QDate& endDate);
 QString formatLevels(const QStringList& levels);
+void sortNetDownloadJobs(QList<NetDownloadJob>* jobs, NetDownloadSortOrder order);
 QString netUserSpaceReferer(const QString& username);
 QString chartDirectoryPathForTitle(const QString& outputDirectory, const QString& title, const QString& chartId);
 QString uniqueZipPathForTitle(const QString& outputDirectory, const QString& title);
@@ -98,6 +118,8 @@ public:
         const QString& chartId,
         const QString& resourcePath,
         const QString& outputPath,
+        const std::atomic_bool* cancelRequested = nullptr);
+    NetConnectionProbeResult probeConnection(
         const std::atomic_bool* cancelRequested = nullptr);
 
 private:

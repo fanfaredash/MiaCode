@@ -117,6 +117,23 @@ int main(int argc, char** argv)
     ok &= check(charts.at(0).publicTags.contains(QStringLiteral("EventTag")), "parser keeps publicTags");
     ok &= check(charts.at(1).publicTags.contains(QStringLiteral("OtherTag")), "parser keeps contestTag");
 
+    QList<NetDownloadJob> sortedJobs;
+    NetDownloadJob highLevelJob;
+    highLevelJob.chart = charts.at(0);
+    highLevelJob.status = QStringLiteral("Pending");
+    NetDownloadJob lowLevelJob;
+    lowLevelJob.chart = charts.at(1);
+    lowLevelJob.status = QStringLiteral("Done");
+    sortedJobs = {highLevelJob, lowLevelJob};
+    sortNetDownloadJobs(&sortedJobs, NetDownloadSortOrder::LevelAscending);
+    ok &= check(sortedJobs.at(0).chart.id == QStringLiteral("b"), "level sort compares numeric levels");
+    sortNetDownloadJobs(&sortedJobs, NetDownloadSortOrder::LevelDescending);
+    ok &= check(sortedJobs.at(0).chart.id == QStringLiteral("a"), "descending level sort keeps plus levels above integers");
+    sortNetDownloadJobs(&sortedJobs, NetDownloadSortOrder::UploadedNewest);
+    ok &= check(sortedJobs.at(0).chart.id == QStringLiteral("b"), "upload-time sort puts newest first");
+    sortNetDownloadJobs(&sortedJobs, NetDownloadSortOrder::StatusAscending);
+    ok &= check(sortedJobs.at(0).status == QStringLiteral("Done"), "status sort uses displayed status text");
+
     const QDate localDate = charts.at(0).timestampUtc.toLocalTime().date();
     const QList<NetChartSummary> filtered = filterChartsByLocalDateRange(charts, localDate, localDate);
     ok &= check(!filtered.isEmpty(), "local date filter includes boundary day");

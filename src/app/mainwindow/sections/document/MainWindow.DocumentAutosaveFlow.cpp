@@ -414,7 +414,7 @@ void MainWindow::DocumentSection::rebuildAutosaveMetadata(const QString& autosav
 
 void MainWindow::DocumentSection::runAutosaveCheck(bool allowHistory)
 {
-    if (state_.currentFilePath_.isEmpty()) {
+    if (state_.currentFilePath_.isEmpty() || state_.onlinePreviewDocument_) {
         return;
     }
 
@@ -491,7 +491,7 @@ void MainWindow::DocumentSection::runAutosaveCheck(bool allowHistory)
 bool MainWindow::DocumentSection::onSaveFile()
 {
     MC_OP("MainWindow::DocumentSection::onSaveFile");
-    if (state_.currentFilePath_.isEmpty()) {
+    if (state_.currentFilePath_.isEmpty() || state_.onlinePreviewDocument_) {
         return onSaveFileAs();
     }
     return saveToPath(state_.currentFilePath_);
@@ -505,7 +505,9 @@ bool MainWindow::DocumentSection::onSaveFileAs()
     const QString path = QFileDialog::getSaveFileName(
         &owner_,
         QStringLiteral("Save simai file"),
-        state_.currentFilePath_.isEmpty() ? QStringLiteral("chart.txt") : state_.currentFilePath_,
+        state_.onlinePreviewDocument_
+            ? QDir(owner_.resolveInitialOpenDirectory()).filePath(QStringLiteral("maidata.txt"))
+            : (state_.currentFilePath_.isEmpty() ? QStringLiteral("chart.txt") : state_.currentFilePath_),
         QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
     );
     owner_.windowSection_->logWindowGeometryDebug("save_file_as_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
@@ -609,6 +611,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     }
     state_.documentDirty_ = false;
     state_.currentFieldDirty_ = false;
+    state_.onlinePreviewDocument_ = false;
     updateDirtyState();
     owner_.updateWindowTitle();
     owner_.statusBar()->showMessage("Saved: " + QFileInfo(path).fileName());

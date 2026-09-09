@@ -24,6 +24,7 @@ public:
     void onNewFile();
     void onOpenFile();
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
+    bool openOnlinePreviewAtPath(const QString& path);
     void refreshRestoreBackupMenu(QMenu* restoreBackupMenu);
     void restoreBackupFilePath(const QString& path, bool mentionAbnormalExit = false);
     bool restoreLastSessionFile();
@@ -35,7 +36,8 @@ public:
         TextEncoding encodingUsed,
         const SimaiDocument& document,
         bool showStatusMessage,
-        double knownTrackDurationSeconds = -1.0
+        double knownTrackDurationSeconds = -1.0,
+        bool onlinePreview = false
     );
     void resetAutosaveState(const QString& referenceText);
     // Drop the in-memory crash-recovery snapshot AND delete the

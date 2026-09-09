@@ -400,6 +400,7 @@
         int videoExportWorkerLastProgressPercent_ = 0;
         qint64 videoExportWorkerLastEtaSeconds_ = -1;
         int projectLastOpenedDifficultyId_ = 0;
+        bool onlinePreviewDocument_ = false;
         bool documentDirty_ = false;
         bool currentFieldDirty_ = false;
         bool pendingSelectionExport_ = false;

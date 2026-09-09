@@ -340,6 +340,7 @@ void MainWindow::DocumentSection::onNewFile()
     }
 
     cancelPendingStartupRestore();
+    state_.onlinePreviewDocument_ = false;
     loadDocument(newDocument);
     owner_.clearValidationCache();
     state_.currentEncoding_ = TextEncoding::Utf8;
@@ -588,6 +589,37 @@ bool MainWindow::DocumentSection::openFileAtPath(const QString& path, bool showS
     return true;
 }
 
+bool MainWindow::DocumentSection::openOnlinePreviewAtPath(const QString& path)
+{
+    MC_OP("MainWindow::DocumentSection::openOnlinePreviewAtPath");
+    _mc_op_.note(QStringLiteral("path=%1").arg(path));
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (normalizedPath.isEmpty() || !maybeSaveBeforeContinue()) {
+        return false;
+    }
+
+    cancelPendingStartupRestore();
+    const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(normalizedPath, true);
+    if (!payload.success) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Critical,
+            &owner_,
+            UiText::text(QStringLiteral("net.online_preview")),
+            UiText::text(QStringLiteral("net.online_preview_open_failed")));
+        _mc_op_.fail(QStringLiteral("prepareDocumentOpenPayload failed"));
+        return false;
+    }
+
+    applyOpenedDocumentState(
+        payload.normalizedPath,
+        payload.usedSystemEncoding ? TextEncoding::System : TextEncoding::Utf8,
+        payload.document,
+        true,
+        payload.hasTrackDuration ? payload.trackDurationSeconds : -1.0,
+        true);
+    return true;
+}
+
 bool MainWindow::DocumentSection::restoreLastSessionFile()
 {
     MC_OP("MainWindow::DocumentSection::restoreLastSessionFile");
@@ -712,7 +744,8 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
     TextEncoding encodingUsed,
     const SimaiDocument& document,
     bool showStatusMessage,
-    double knownTrackDurationSeconds)
+    double knownTrackDurationSeconds,
+    bool onlinePreview)
 {
     MC_OP("MainWindow::DocumentSection::applyOpenedDocumentState");
     _mc_op_.note(QStringLiteral("path=%1 dur=%2")
@@ -722,26 +755,40 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
     owner_.applyWaveformData(
         miacode::waveform::makeWaveformPlaceholder(
             knownTrackDurationSeconds > 0.0 ? knownTrackDurationSeconds : 0.0));
+    const QString previousOpenDirectory = owner_.resolveInitialOpenDirectory();
+    const QString previousSessionFilePath = state_.lastSessionFilePath_;
+    state_.onlinePreviewDocument_ = onlinePreview;
     owner_.setCurrentFilePath(normalizedPath, true);
-    owner_.addRecentFilePath(normalizedPath);
+    if (onlinePreview) {
+        state_.lastSessionFilePath_ = previousSessionFilePath;
+        miacode::crash_recovery::updateSessionMarker(QString());
+        owner_.setLastOpenDirectory(previousOpenDirectory);
+    } else {
+        owner_.addRecentFilePath(normalizedPath);
+    }
 
     // Eagerly create the crash-recovery directory BEFORE the user can
     // edit. Without this, a crash in the first ~1 ms after a keystroke
     // (before the lazy mkpath inside updateSnapshot has run) would find
     // the parent directory missing and fail CreateFileW. mkpath is
     // re-entrant and cheap on warm runs (one stat()).
-    miacode::crash_recovery::prepareForChart(normalizedPath);
+    if (!onlinePreview) {
+        miacode::crash_recovery::prepareForChart(normalizedPath);
+    }
 
     // Abnormal-exit recovery intentionally reuses File -> Restore Backup.
     // Opening the chart must finish first so the restore prompt appears over
     // the fully loaded window and the old on-disk content remains the restore
     // baseline, exactly like a manual menu action.
-    const bool previousSessionAbandoned =
-        miacode::crash_recovery::consumeAbandonedSessionChartMatch(normalizedPath);
-    const QString crashRecoveryPath = miacode::crash_recovery::crashRecoveryFilePath(normalizedPath);
-    const bool crashRecoveryFileExists =
-        !crashRecoveryPath.isEmpty() && QFileInfo(crashRecoveryPath).exists();
-    if (previousSessionAbandoned || crashRecoveryFileExists) {
+    const bool previousSessionAbandoned = !onlinePreview
+        && miacode::crash_recovery::consumeAbandonedSessionChartMatch(normalizedPath);
+    const QString crashRecoveryPath = onlinePreview
+        ? QString()
+        : miacode::crash_recovery::crashRecoveryFilePath(normalizedPath);
+    const bool crashRecoveryFileExists = !onlinePreview
+        && !crashRecoveryPath.isEmpty()
+        && QFileInfo(crashRecoveryPath).exists();
+    if (!onlinePreview && (previousSessionAbandoned || crashRecoveryFileExists)) {
         state_.pendingAbnormalExitBackupRestorePath_ =
             latestBackupRestoreFilePathForChart(normalizedPath);
         state_.pendingAbnormalExitBackupRestoreChartPath_ =
@@ -761,10 +808,15 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
         schedulePendingAbnormalExitBackupRestore();
     }
     if (showStatusMessage) {
-        owner_.statusBar()->showMessage(
-            QString("Opened: %1 (%2)")
-                .arg(QFileInfo(normalizedPath).fileName())
-                .arg(encodingUsed == TextEncoding::Utf8 ? "UTF-8" : "System encoding")
-        );
+        if (onlinePreview) {
+            owner_.statusBar()->showMessage(
+                UiText::text(QStringLiteral("net.online_preview_opened")));
+        } else {
+            owner_.statusBar()->showMessage(
+                QString("Opened: %1 (%2)")
+                    .arg(QFileInfo(normalizedPath).fileName())
+                    .arg(encodingUsed == TextEncoding::Utf8 ? "UTF-8" : "System encoding")
+            );
+        }
     }
 }

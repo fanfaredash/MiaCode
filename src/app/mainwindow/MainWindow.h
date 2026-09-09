@@ -187,6 +187,7 @@ public:
         QString* details = nullptr
     );
     bool openStartupTarget(const QString& path);
+    bool openOnlinePreviewAtPath(const QString& path);
     void setQuickShellRootWindow(QWindow* window);
     void cancelChartAudioDrop();
     void handleAudioDrop(const QStringList& audioPaths);

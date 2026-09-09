@@ -14,12 +14,15 @@ struct NetBatchDownloadRequest {
     QList<NetDownloadJob> jobs;
     QString outputDirectory;
     bool createZip = false;
+    bool downloadVideo = false;
+    bool onlinePreview = false;
 };
 
 struct NetBatchResourceSpec {
     QString path;
     QString fileName;
     QString label;
+    bool optional = false;
 };
 
 struct NetBatchResourceStats {

@@ -657,6 +657,11 @@ bool MainWindow::openStartupTarget(const QString& path)
     return false;
 }
 
+bool MainWindow::openOnlinePreviewAtPath(const QString& path)
+{
+    return documentSection_ != nullptr && documentSection_->openOnlinePreviewAtPath(path);
+}
+
 bool MainWindow::restoreLastSessionFile()
 {
     return documentSection_->restoreLastSessionFile();
