@@ -255,10 +255,10 @@ QtObject {
     readonly property real overlayOpacity: darkTheme ? 0.72 : 0.82
     readonly property real popupOpacity: 0.96
     // Frosted menu material is independent of wallpaper visibility.
-    readonly property real popupTintOpacity: 0.82
-    readonly property int popupBlurRadius: 64
-    readonly property real dialogTintOpacity: darkTheme ? 0.94 : 0.90
-    readonly property int dialogBlurRadius: 96
+    readonly property real popupTintOpacity: 0.78
+    readonly property int popupBlurRadius: 96
+    readonly property real dialogTintOpacity: 0.92
+    readonly property int dialogBlurRadius: 128
     readonly property color modalScrimColor: Qt.rgba(0, 0, 0, 0.5)
     readonly property real popupBlurScale: 0.5
     readonly property real popupShadowOpacity: darkTheme ? 0.28 : 0.14

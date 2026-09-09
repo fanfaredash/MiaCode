@@ -182,6 +182,8 @@ Item {
     Item {
         id: horizontalSplit
         anchors.fill: parent
+        // Fullscreen composites its surface over the shared wallpaper, with the workspace out of the stack.
+        visible: !fullscreenPreview.visible
         readonly property int orientation: Qt.Horizontal
 
         Sidebar {
