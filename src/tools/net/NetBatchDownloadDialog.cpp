@@ -507,13 +507,13 @@ void NetBatchDownloadDialog::buildUi()
     form->addWidget(browseButton, 1, 10);
     form->addWidget(zipAfterDownloadCheck_, 1, 11);
     form->addWidget(new QLabel(UiText::text(QStringLiteral("net.sort_by")), this), 2, 0);
-    form->addWidget(sortCombo_, 2, 1);
+    form->addWidget(sortCombo_, 2, 1, 1, 3);
     auto* connectionTestRow = new QHBoxLayout;
     connectionTestRow->setContentsMargins(0, 0, 0, 0);
     connectionTestRow->addWidget(networkTestButton_);
     connectionTestRow->addWidget(networkStatusLabel_);
     connectionTestRow->addStretch(1);
-    form->addLayout(connectionTestRow, 2, 2, 1, 9);
+    form->addLayout(connectionTestRow, 2, 4, 1, 7);
     form->addWidget(downloadPvCheck_, 2, 11);
     root->addLayout(form);
 

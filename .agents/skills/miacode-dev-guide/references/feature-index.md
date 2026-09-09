@@ -1066,10 +1066,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   canonical `maidata.txt` / `track.mp3` / `bg.jpg` triplet into a process-lifetime `QTemporaryDir`,
   keyed by chart ID + remote hash, then hands its `maidata.txt` to
   `MainWindow::openOnlinePreviewAtPath` through an owner-guarded callback.
-- The sort combo reuses the user-ID input's grid column so their left edge and width align. A nested
-  row spanning the remaining columns keeps **Test Connection** immediately beside the combo without
-  imposing its width on an individual query column; the filter inputs, combo, and button share one
-  measured W1-safe height. The Test Connection action performs an eight-second probe against the real
+- The sort combo spans the user-ID and Tag input group so its long option labels do not inflate the
+  user-ID column and squeeze the Tag field. A nested row spanning the remaining columns keeps **Test
+  Connection** immediately beside the combo; the filter inputs, combo, and button share one measured
+  W1-safe height. The Test Connection action performs an eight-second probe against the real
   Majdata chart-list HTTPS endpoint. Its inline status distinguishes normal/slow responses,
   timeouts, general failures, and Net/Cloudflare blocking; full HTTP/network diagnostics go to the
   existing log. The default-enabled **Download PV** checkbox sits directly below the extra-ZIP
