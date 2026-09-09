@@ -282,4 +282,3 @@ void MainWindow::setMuriRenderMode(RenderMode mode, bool persistState)
 {
     validationSection_->setMuriRenderMode(mode, persistState);
 }
-

@@ -4,6 +4,10 @@
 - 基准：`dev` `677a9625`（`1.1.0-beta.7`）
 - 关联文档：`WINDOWS_IDLE_FREEZE_AUDIT_REVIEW_ZH.md`、`OBS_CONTENTION_PLAYBACK_STUTTER_AUDIT_ZH.md`
 
+> 状态更新（2026-08-24）：本文对 Linux miniaudio 路径的结论仅适用于审查基准
+> `677a9625`。当前 Linux 构建已启用 BASS/BASSmix/BASS_FX，并通过 PipeWire 设备选择接入
+> 最新的 `PreviewBassDeviceLease` 生命周期；第 0、2、6 节相关结论不再描述当前实现。
+
 | | 问题 3 | 问题 4 |
 |---|---|---|
 | 现象 | 播放中切换音频设备 / 插入外设 / 切后台 / 笔记本进入节能 → 预览音频错位；**暂停再播放可恢复** | Linux：**从中间播放**预览有显著延迟；**导出正常** |

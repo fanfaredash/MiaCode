@@ -194,8 +194,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
     // Decode mode: the persisted user preference (硬件渲染 / 软件渲染, default
     // HARDWARE) decides. MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO stays a dev override on
     // top (ForceSoftware / ForceHardware win; Auto / unset honors the user
-    // preference). The session-only fallback latch forces FFmpeg CPU decode
-    // only after the selected platform hardware decoder reports InvalidMedia.
+    // preference).
     using DecodePref = miacode::debug_options::PreviewVideoDecodePreference;
     const DecodePref decodePref = miacode::debug_options::previewVideoDecodePreference();
     bool forceSoftware = videoDecodePreferSoftware_;
@@ -235,7 +234,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
 #else
     appendPreviewStageMediaLog(
         QStringLiteral("media_backend"),
-        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=platform_default qt_runtime_version=%1 force_software=%2 pref=%3")
+        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=vaapi qt_runtime_version=%1 force_software=%2 pref=%3 renderer_bridge=drm_egl")
             .arg(QString::fromLatin1(qVersion()))
             .arg(useSoftware ? 1 : 0)
             .arg(QString::fromLatin1(prefName)));
@@ -883,9 +882,7 @@ void PreviewStageMediaHost::maybeRetryWithSoftwareDecode()
         player_->pause();
     }
 }
-#endif  // MIACODE_USE_QTAVPLAYER
 
-#ifdef MIACODE_USE_QTAVPLAYER
 void PreviewStageMediaHost::reloadVideoDecodeInPlace()
 {
     if (player_ == nullptr || mediaKind_ != MediaKind::Video || mediaPath_.isEmpty()) {
@@ -895,7 +892,7 @@ void PreviewStageMediaHost::reloadVideoDecodeInPlace()
     // reload in place (the empty setSource forces a reload since setSource(sameUrl)
     // is a no-op), then restore position + play state. Reuses the existing video
     // sink — no player recreation, no app restart. Bidirectional vs the one-way
-    // software fallback: empty codec restores the platform hardware decoder;
+    // user selection: empty codec restores the platform hardware decoder;
     // "software" selects FFmpeg CPU decode.
     const double second = qMax(0.0, currentPlaybackSecond());
     const qint64 resumeMs = qMax<qint64>(0, qRound64((second + timelineOffsetSeconds_) * 1000.0));

@@ -42,7 +42,7 @@ shasum -a 256 dist/*.zip
 - [ ] Review [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md).
 - [ ] Review [LICENSE_SCOPE.md](../../LICENSE_SCOPE.md).
 - [ ] Confirm package contents match the non-commercial distribution notes.
-- [ ] Confirm BASS files are present only in the intended non-commercial release package.
+- [ ] Confirm BASS files are present only in the intended non-commercial Windows, macOS, and Linux release packages.
 - [ ] Confirm FFmpeg build flags and license notes match the packaged binaries.
 
 ## Publish

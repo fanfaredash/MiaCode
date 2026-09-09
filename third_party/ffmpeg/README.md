@@ -20,7 +20,12 @@ This directory stores prebuilt `ffmpeg` executables used by MiaCode video export
 
 - Linux
   - Binary: `linux/ffmpeg`
-  - SHA256 (`ffmpeg`): `D91FE748D77422A783BBFA1811E33E12C7BDC1667AB746AB0C765F00467F1AC4`
+  - Source package:
+    `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-22-13-36/ffmpeg-n7.1.5-9-gb9a218bc1e-linux64-gpl-7.1.tar.xz`
+  - Archive SHA256:
+    `1AA3246A617F1A1D17D2E9027685D19C633C10CD6E3D1E0589DFE1ED1DB5F3FB`
+  - Runtime version pattern: `ffmpeg version n7.1.5`
+  - SHA256 (`ffmpeg`): `A253D9E7A94C9376D67D2DF144F16671C8B3E2875A6311188146BDCE2889E85A`
 
 ## Notes
 

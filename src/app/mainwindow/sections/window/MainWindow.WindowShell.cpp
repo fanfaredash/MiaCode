@@ -1122,7 +1122,7 @@ void MainWindow::WindowSection::applyUiTheme()
         owner_.previewPanel_->setStyleSheet(previewPanelStyle);
     }
     QSet<QMenu*> refreshedMenus;
-    refreshMenuBarTheme(owner_.menuBar(), &refreshedMenus);
+    refreshMenuBarTheme(owner_.mainMenuBar_, &refreshedMenus);
     refreshMenuThemeRecursive(owner_.toolboxMenu_, &refreshedMenus);
     const QList<QMenu*> menus = owner_.findChildren<QMenu*>();
     for (QMenu* menu : menus) {

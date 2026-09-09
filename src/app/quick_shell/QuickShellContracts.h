@@ -6,6 +6,7 @@
 #include <QStringList>
 
 class QDockWidget;
+class QMenuBar;
 class QObject;
 class QWidget;
 class QWindow;
@@ -114,6 +115,7 @@ public:
     virtual ~QuickShellNativeContentProvider() = default;
 
     virtual QWidget* shellWindowWidget() const = 0;
+    virtual QMenuBar* shellMenuBarWidget() const = 0;
     virtual QDockWidget* shellOutlineDockWidget() const = 0;
     virtual bool shellOutlineDockCollapsed() const = 0;
     virtual int shellOutlineDockExpandedWidth() const = 0;
