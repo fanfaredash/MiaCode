@@ -196,7 +196,7 @@ Item {
         x: root.width - Theme.panelPadding - width + horizontalInset
         y: timelineItem.y + (timelineItem.timelineTop - height) / 2
         visible: timelineItem.visible
-        iconSource: Qt.resolvedUrl("icons/settings.svg")
+        iconSource: Qt.resolvedUrl("icons/sliders-horizontal.svg")
         tooltip: UiText.text("时间轴亮度")
         active: brightnessMenu.active
         Accessible.description: UiText.text("打开波形和小节线亮度设置")

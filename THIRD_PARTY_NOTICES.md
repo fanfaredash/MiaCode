@@ -19,6 +19,7 @@ This file inventories libraries, tools, fonts, media assets, and reference proje
 | miniz | ZIP packaging under [third_party/miniz](third_party/miniz) | MIT License, see [third_party/miniz/LICENSE](third_party/miniz/LICENSE). |
 | miniaudio | Audio playback / decode helper under [third_party/miniaudio](third_party/miniaudio) | Public Domain or MIT-0, see the license block in [third_party/miniaudio/miniaudio.h](third_party/miniaudio/miniaudio.h). |
 | BASS, BASSmix, BASS_FX, BASS_AAC, BASSOPUS | Windows and macOS audio backends, offline export mixing, and waveform decoding; packaged DLL/dylib runtimes | Kept for non-commercial MiaCode builds/releases. BASS is not a general open-source dependency; do not use MiaCode's bundled BASS files for commercial redistribution without appropriate BASS licensing. |
+| Lucide Icons | Utility UI SVGs under `src/app/qml_ui/resources/icons/` and the checkbox mark under `resources/icons/checkmark.svg` | ISC License; see [licenses/Lucide-ISC.txt](licenses/Lucide-ISC.txt) and the upstream [Lucide repository](https://github.com/lucide-icons/lucide). |
 
 ## Fonts
 

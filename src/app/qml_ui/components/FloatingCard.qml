@@ -12,6 +12,7 @@ Item {
     property T.Popup popup: null
     property color tintColor: Theme.popupTintColor
     property int blurRadius: Theme.popupBlurRadius
+    property real cornerRadius: popup ? Theme.popupRadius : Theme.controlRadius
     property real shadowBlur: 0.6
     property real shadowOpacity: Theme.popupShadowOpacity
     property real shadowVerticalOffset: 2
@@ -32,9 +33,10 @@ Item {
     Rectangle {
         id: card
         anchors.fill: parent
-        radius: root.popup ? Theme.popupRadius : Theme.controlRadius
-        color: backdrop.active ? root.tintColor
-                              : Theme.overlayColor(Theme.colors.background.elevated, Theme.popupOpacity)
+        radius: root.cornerRadius
+        color: backdrop.active || Theme.backgroundActive
+               ? root.tintColor
+               : Theme.overlayColor(Theme.colors.background.elevated, Theme.popupOpacity)
     }
 
     layer.enabled: true

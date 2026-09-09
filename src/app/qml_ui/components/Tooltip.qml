@@ -19,6 +19,8 @@ ToolTip {
         font.pixelSize: Theme.uiFontSize
     }
 
-    background: FloatingCard {}
+    background: FloatingCard {
+        popup: root
+        cornerRadius: Theme.controlRadius
+    }
 }
-

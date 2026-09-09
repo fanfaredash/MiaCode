@@ -22,6 +22,22 @@ AppDialog {
     property var keys: []
     property var levels: ({})
 
+    // Keep every row's label edge aligned while allowing localized labels to
+    // size the column from their actual font metrics.
+    readonly property FontMetrics labelMetrics: FontMetrics {
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.uiFontSize
+    }
+    readonly property real labelColumnWidth: {
+        var widest = 0
+        for (var i = 0; i < root.keys.length; ++i) {
+            var channel = root.levels[root.keys[i]]
+            if (channel)
+                widest = Math.max(widest, root.labelMetrics.advanceWidth(channel.label))
+        }
+        return Math.ceil(widest) + 4
+    }
+
     function refresh() {
         var rows = root.audioSettings.channels()
         var byKey = {}
@@ -48,9 +64,32 @@ AppDialog {
     title: UiText.text("音频设置")
     preferredWidth: 520
     preferredHeight: Theme.dialogHeight
-    footer: DialogFooter {
-        cancelText: UiText.text("关闭")
-        onRejected: root.reject()
+    footer: Item {
+        implicitHeight: footerRow.implicitHeight + 2 * Theme.dialogPadding
+
+        RowLayout {
+            id: footerRow
+            anchors.fill: parent
+            anchors.leftMargin: Theme.dialogPadding
+            anchors.rightMargin: Theme.dialogPadding
+            anchors.topMargin: Theme.dialogPadding
+            anchors.bottomMargin: Theme.dialogPadding
+            spacing: 8
+
+            AppButton {
+                text: UiText.text("设为本地默认")
+                onClicked: root.audioSettings.saveAsSoftwareDefault()
+            }
+            AppButton {
+                text: UiText.text("恢复本地默认")
+                onClicked: root.audioSettings.restoreSoftwareDefault()
+            }
+            Item { Layout.fillWidth: true }
+            AppButton {
+                text: UiText.text("关闭")
+                onClicked: root.reject()
+            }
+        }
     }
 
     body: ColumnLayout {
@@ -66,13 +105,20 @@ AppDialog {
                 spacing: 8
 
                 Text {
-                    Layout.preferredWidth: 96
+                    Layout.minimumWidth: root.labelColumnWidth
+                    Layout.preferredWidth: root.labelColumnWidth
+                    Layout.maximumWidth: root.labelColumnWidth
                     text: channelRow.channel.label
                     color: Theme.colors.text.secondary
-                    elide: Text.ElideRight
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.uiFontSize
                 }
                 IconButton {
-                    glyph: channelRow.channel.muted ? "🔇" : "🔊"
+                    iconSource: Qt.resolvedUrl(channelRow.channel.muted
+                                               ? "icons/volume-x.svg"
+                                               : "icons/volume-2.svg")
+                    iconWidth: 18
+                    iconHeight: 18
                     tooltip: channelRow.channel.muted ? UiText.text("取消静音") : UiText.text("静音")
                     onClicked: root.audioSettings.toggleChannelMuted(channelRow.modelData)
                 }
@@ -121,20 +167,6 @@ AppDialog {
             text: UiText.text("静音 Break 星星尾判音")
             checked: root.audioSettings.breakSlideTailCheerMuted
             onToggled: root.audioSettings.breakSlideTailCheerMuted = checked
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            AppButton {
-                text: UiText.text("设为本地默认")
-                onClicked: root.audioSettings.saveAsSoftwareDefault()
-            }
-            AppButton {
-                text: UiText.text("恢复本地默认")
-                onClicked: root.audioSettings.restoreSoftwareDefault()
-            }
-            Item { Layout.fillWidth: true }
         }
     }
 }

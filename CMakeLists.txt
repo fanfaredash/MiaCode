@@ -751,6 +751,10 @@ set(MIACODE_UI_ICON_FILES
     src/app/qml_ui/resources/icons/tools.svg
     src/app/qml_ui/resources/icons/audio-settings.svg
     src/app/qml_ui/resources/icons/preview-settings.svg
+    src/app/qml_ui/resources/icons/file.svg
+    src/app/qml_ui/resources/icons/sliders-horizontal.svg
+    src/app/qml_ui/resources/icons/volume-2.svg
+    src/app/qml_ui/resources/icons/volume-x.svg
     src/app/qml_ui/resources/icons/close.svg
     src/app/qml_ui/resources/icons/more.svg
     src/app/qml_ui/resources/icons/metadata.svg

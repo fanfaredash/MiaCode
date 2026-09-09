@@ -21,7 +21,7 @@ Rectangle {
         anchors.top: parent.top
 
         ActivityButton {
-            iconSource: Qt.resolvedUrl("icons/chart.svg")
+            iconSource: Qt.resolvedUrl("icons/file.svg")
             tooltip: UiText.text("谱面")
             selected: root.activeView === "chart"
             onClicked: root.viewRequested("chart")
