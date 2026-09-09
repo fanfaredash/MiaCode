@@ -202,6 +202,8 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         }
         miacode::app::entry::bindHighPerformanceQuickGraphicsDevice(
             window, QStringLiteral("qml_ui_root_window"), /*preferVideoShareDevice=*/false);
+        miacode::app::entry::logQuickWindowGpuDevice(
+            window, QStringLiteral("qml_ui_root_window"));
 
         auto* platform = qobject_cast<QmlUiPlatformChrome*>(applicationContext_->platform());
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)

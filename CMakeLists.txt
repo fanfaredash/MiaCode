@@ -170,6 +170,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/WindowVisibilityDiagnostics.cpp
     src/app/gpu_adapter_probe.cpp
     src/app/gpu_device_provider.cpp
+    src/preview/quick_scene/PreviewQuickGraphicsInfo.h
+    src/preview/quick_scene/PreviewQuickGraphicsInfo.cpp
     src/app/gpu_high_performance_hint.cpp
     src/app/cli_shared.cpp
     src/app/cli_video_export.cpp

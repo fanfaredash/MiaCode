@@ -287,16 +287,26 @@ ResolvedGpuPolicy resolveGpuPolicy(const GpuPolicyRequest& request)
         resolved.resolvedKind = GpuPolicyKind::Software;
         return resolved;
     case GpuPolicyKind::AutoHighPerformance: {
-        const QList<GpuAdapterInfo> adapters = enumerateHighPerformanceAdapters();
+#ifndef Q_OS_WIN
+        // Metal/Vulkan/OpenGL platforms let Qt and the window system select the
+        // physical device. This is the normal platform path, not a failed probe.
+        resolved.resolvedKind = GpuPolicyKind::PlatformDefault;
+        return resolved;
+#else
+        QString enumerationTrace;
+        const QList<GpuAdapterInfo> adapters = enumerateHighPerformanceAdapters(&enumerationTrace);
         if (!adapters.isEmpty()) {
             resolved.resolvedKind = GpuPolicyKind::AutoHighPerformance;
             resolved.adapterLuid = adapters.first().luid;
             resolved.adapterName = adapters.first().name;
         } else {
             resolved.resolvedKind = GpuPolicyKind::PlatformDefault;
-            resolved.fallbackReason = QStringLiteral("no_hardware_adapter_enumerated");
+            resolved.fallbackReason = enumerationTrace.isEmpty()
+                ? QStringLiteral("no_hardware_adapter_enumerated")
+                : QStringLiteral("no_hardware_adapter_enumerated[%1]").arg(enumerationTrace);
         }
         return resolved;
+#endif
     }
     case GpuPolicyKind::AdapterLuid: {
         if (!request.explicitLuid.has_value() || !request.explicitLuid->valid) {
@@ -304,7 +314,8 @@ ResolvedGpuPolicy resolveGpuPolicy(const GpuPolicyRequest& request)
             resolved.fallbackReason = QStringLiteral("adapter_luid_missing_or_invalid");
             return resolved;
         }
-        const QList<GpuAdapterInfo> adapters = enumerateHighPerformanceAdapters();
+        QString enumerationTrace;
+        const QList<GpuAdapterInfo> adapters = enumerateHighPerformanceAdapters(&enumerationTrace);
         for (const GpuAdapterInfo& adapter : adapters) {
             if (adapter.luid.equals(*request.explicitLuid)) {
                 resolved.resolvedKind = GpuPolicyKind::AdapterLuid;
@@ -318,7 +329,9 @@ ResolvedGpuPolicy resolveGpuPolicy(const GpuPolicyRequest& request)
         // logged), but resolved.adapterLuid is left EMPTY so nothing downstream
         // binds to a non-existent adapter. Resolve to the platform default.
         resolved.resolvedKind = GpuPolicyKind::PlatformDefault;
-        resolved.fallbackReason = QStringLiteral("adapter_luid_not_found_among_hw_adapters");
+        resolved.fallbackReason = enumerationTrace.isEmpty()
+            ? QStringLiteral("adapter_luid_not_found_among_hw_adapters")
+            : QStringLiteral("adapter_luid_not_found_among_hw_adapters[%1]").arg(enumerationTrace);
         return resolved;
     }
     }

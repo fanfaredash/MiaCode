@@ -78,7 +78,7 @@ bool bindHighPerformanceQuickGraphicsDevice(
         || api == QSGRendererInterface::Unknown;
     if (!d3d11Capable) {
         logProvider(surfaceLabel,
-            QStringLiteral("action=skip source=qt_default reason=explicit_non_d3d11_rhi api=%1")
+            QStringLiteral("action=selected source=qt_requested_rhi reason=explicit_non_d3d11_rhi api=%1")
                 .arg(providerRhiApiName(api)));
         return false;
     }
@@ -101,8 +101,8 @@ bool bindHighPerformanceQuickGraphicsDevice(
             return true;
         }
         logProvider(surfaceLabel,
-            QStringLiteral("action=skip source=qt_default "
-                           "reason=video_surface_keeps_default_for_decode_bridge"));
+            QStringLiteral("action=selected source=qt_default "
+                           "reason=video_surface_uses_default_adapter_for_decode_bridge"));
         return false;
     }
 
@@ -160,7 +160,7 @@ bool bindHighPerformanceQuickGraphicsDevice(
         miacode::gpu::defaultAdapterLuid();
     if (defaultLuid.has_value() && defaultLuid->equals(*resolved.adapterLuid)) {
         logProvider(surfaceLabel,
-            QStringLiteral("action=skip source=qt_default reason=high_perf_equals_default_adapter "
+            QStringLiteral("action=selected source=qt_default reason=selected_adapter_already_default "
                            "luid=%1").arg(resolved.adapterLuid->toString()));
         return false;
     }
@@ -187,7 +187,7 @@ bool bindHighPerformanceQuickGraphicsDevice(
 #else
     Q_UNUSED(preferVideoShareDevice);
     logProvider(surfaceLabel,
-        QStringLiteral("action=skip source=qt_default reason=non_windows"));
+        QStringLiteral("action=selected source=platform_default reason=platform_managed_adapter"));
     return false;
 #endif
 }

@@ -354,18 +354,17 @@ QFont previewHudMonoFontForArea(PreviewHudFontArea area, int pointSize, QFont::W
         return font;
     }
 
-    QFont font;
-    for (const QString& family : QStringList{QStringLiteral("Cascadia Mono"), QStringLiteral("JetBrains Mono"), QStringLiteral("Cascadia Code"), QStringLiteral("Consolas")}) {
-        font.setFamily(family);
-        if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-            break;
-        }
-    }
-    if (font.family().isEmpty()) {
-        font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    }
+    static const QString embeddedMapleMonoFamily = []() -> QString {
+        const int fontId = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/maple_mono_cn.ttf"));
+        const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        return families.isEmpty() ? QStringLiteral("Maple Mono Normal NL CN") : families.first();
+    }();
+
+    QFont font(embeddedMapleMonoFamily);
     font.setPointSize(pointSize);
     font.setWeight(weight);
+    font.setStyleHint(QFont::Monospace);
+    font.setFixedPitch(true);
     return font;
 }
 

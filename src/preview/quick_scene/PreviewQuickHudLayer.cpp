@@ -401,7 +401,10 @@ PreviewQuickHudLayer::PreviewQuickHudLayer(QQuickItem* parent)
     setOpaquePainting(false);
     setAntialiasing(true);
     hudUpdateThrottleTimer_.start();
-    connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow*) {
+    connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow* currentWindow) {
+        graphicsInfoWindow_ = currentWindow;
+        graphicsInfo_ = {};
+        graphicsInfoReady_ = false;
         if (runtime_ != nullptr) {
             runtime_->setFrameSize(boundingRect().size().toSize());
         }
@@ -589,8 +592,13 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
                 .arg(state->hudPlayheadSecondsOverride, 0, 'f', 3);
         },
         /*durable=*/true);
+    if (!graphicsInfoReady_ || graphicsInfoWindow_ != window()) {
+        graphicsInfoWindow_ = window();
+        graphicsInfo_ = miacode::preview::quick_scene::queryQuickGraphicsInfo(window());
+        graphicsInfoReady_ = true;
+    }
     miacode::preview::hud::paintPreviewHudOverlay(
-        *painter, *state, canvasSize, layerFlags_, textColor_, shadowColor_);
+        *painter, *state, canvasSize, layerFlags_, graphicsInfo_, textColor_, shadowColor_);
     appendHudPaintDiag(
         QStringLiteral("paint_exit"),
         [&] {
@@ -609,6 +617,7 @@ void paintPreviewHudOverlay(
     const miacode::preview::scene::PreviewFrameState& stateRef,
     const QSize& canvasSize,
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags,
+    const miacode::preview::quick_scene::QuickGraphicsInfo& graphicsInfo,
     const QColor& textColor,
     const QColor& shadowColor)
 {
@@ -729,9 +738,16 @@ void paintPreviewHudOverlay(
         };
 
         drawDebugLine(
-            QStringLiteral("Renderer: %1  Fallback: %2")
-                .arg(state->usedGpuRendererThisFrame ? QStringLiteral("GPU") : QStringLiteral("CPU"))
-                .arg(state->cpuFallbackCount)
+            QStringLiteral("Renderer: %1  API: %2")
+                .arg(graphicsInfo.hardwareAccelerated
+                    ? QStringLiteral("GPU") : QStringLiteral("CPU"))
+                .arg(graphicsInfo.apiName.isEmpty()
+                    ? QStringLiteral("Unknown") : graphicsInfo.apiName)
+        );
+        drawDebugLine(
+            QStringLiteral("Device: %1")
+                .arg(graphicsInfo.deviceIdentified
+                    ? graphicsInfo.deviceName : QStringLiteral("Unknown"))
         );
         // The trailing max=Nms and stut=N metrics surface what an FPS average
         // hides: max is the worst single inter-event interval in the rolling
