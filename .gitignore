@@ -114,6 +114,10 @@ third_party/**/*.a
 !third_party/bass/lib/linux/x86_64/libbass.so
 !third_party/bass/lib/linux/x86_64/libbassmix.so
 !third_party/bass/lib/linux/x86_64/libbass_fx.so
+!third_party/bass/lib/linux/aarch64/
+!third_party/bass/lib/linux/aarch64/libbass.so
+!third_party/bass/lib/linux/aarch64/libbassmix.so
+!third_party/bass/lib/linux/aarch64/libbass_fx.so
 
 # scripts whitelist: ignore all by default, allow only release/infra scripts.
 scripts/*

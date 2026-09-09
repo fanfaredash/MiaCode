@@ -806,11 +806,15 @@ elseif (APPLE)
         COMMENT "Deploying macOS BASS runtime libraries"
     )
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    if (NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
-        message(FATAL_ERROR "MiaCode's bundled Linux BASS runtime currently supports x86_64 only")
+    if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+        set(MIACODE_BASS_LINUX_ARCH "x86_64")
+    elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+        set(MIACODE_BASS_LINUX_ARCH "aarch64")
+    else()
+        message(FATAL_ERROR "MiaCode's bundled Linux BASS runtime currently supports x86_64 and aarch64 only")
     endif()
 
-    set(MIACODE_BASS_LINUX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/linux/x86_64")
+    set(MIACODE_BASS_LINUX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/linux/${MIACODE_BASS_LINUX_ARCH}")
     set(MIACODE_BASS_LINUX_LIBRARIES
         "${MIACODE_BASS_LINUX_DIR}/libbass.so"
         "${MIACODE_BASS_LINUX_DIR}/libbassmix.so"
