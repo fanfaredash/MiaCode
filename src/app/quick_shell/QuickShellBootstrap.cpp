@@ -256,7 +256,10 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
     miacode::oplog::appendStartupBeaconLine("qsb/start_enter");
     appendQuickShellRuntimeLog(QStringLiteral("start_enter"));
     miacode::oplog::appendStartupBeaconLine("qsb/before_mainwindow_ctor");
-    backend_ = std::make_unique<MainWindow>(true);
+    backend_ = std::make_unique<MainWindow>(
+        true,
+        nullptr,
+        !startupOpenTarget.trimmed().isEmpty());
     miacode::oplog::appendStartupBeaconLine("qsb/after_mainwindow_ctor");
     backend_->setQuickShellBackendActive(true);
     miacode::oplog::appendStartupBeaconLine("qsb/after_set_backend_active");

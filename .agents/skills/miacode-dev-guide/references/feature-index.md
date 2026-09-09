@@ -7,7 +7,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - GUI entry: `main`, `setWindowsAppUserModelId`, `wantsQuickShellBeta`,
   `startupOpenTargetFromArguments` (Qt startup, theme/font, window launch, startup-timing log,
-  `--quick-shell-beta` routing, file/folder drag-open).
+  `--quick-shell-beta` routing, file/folder drag-open). An explicit startup file/folder suppresses
+  last-session restoration while `MainWindow` is constructed; `QuickShellBootstrap` opens that
+  target on the first event-loop turn, so a dragged-folder launch never warms the previous chart
+  before switching to the requested one.
 - First-run welcome / initial-config dialog: `wantsWelcomeDialog` (`--welcome` flag) + first-run
   probe `QFile::exists(UiText::preferencesFilePath())` **OR** a schema-outdated probe
   `UiText::storedPreferencesSchema() != UiText::currentPreferencesSchema()` — both captured right

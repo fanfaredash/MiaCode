@@ -73,6 +73,22 @@ bool verifyChartDropUsesQsgOnly(QTextStream& err)
             err);
 }
 
+bool verifyExplicitStartupTargetSkipsSessionRestore(QTextStream& err)
+{
+    const QString bootstrap = readSource(QStringLiteral("src/app/quick_shell/QuickShellBootstrap.cpp"));
+    const QString frameBootstrap =
+        readSource(QStringLiteral("src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp"));
+    return require(
+               bootstrap.contains(QStringLiteral("!startupOpenTarget.trimmed().isEmpty()")),
+               QStringLiteral("QuickShell must tell MainWindow when an explicit startup target is pending"),
+               err)
+        && require(
+            frameBootstrap.contains(
+                QStringLiteral("!explicitStartupOpenPending && restoreLastSessionFile()")),
+            QStringLiteral("an explicit startup target must take precedence over last-session restoration"),
+            err);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -81,7 +97,9 @@ int main(int argc, char* argv[])
     QTextStream err(stderr);
     QTextStream out(stdout);
 
-    if (!verifyPolicy(err) || !verifyChartDropUsesQsgOnly(err)) {
+    if (!verifyPolicy(err)
+        || !verifyChartDropUsesQsgOnly(err)
+        || !verifyExplicitStartupTargetSkipsSessionRestore(err)) {
         return 1;
     }
 

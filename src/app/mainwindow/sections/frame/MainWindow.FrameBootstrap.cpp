@@ -78,7 +78,10 @@ void appendPreviewFramePacingDiagLog(const QString& action, const QString& paylo
 
 }  // namespace
 
-MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
+MainWindow::MainWindow(
+    bool quickShellBootstrapMode,
+    QWidget* parent,
+    bool explicitStartupOpenPending)
     : QMainWindow(parent)
 {
     QElapsedTimer startupStageTimer;
@@ -1999,7 +2002,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     updatePreviewWorkspaceLayout();
     logStartupStage("workspace_and_central_widget_ready");
 
-    finishFrameBootstrap(toolBar, logStartupStage);
+    finishFrameBootstrap(toolBar, logStartupStage, explicitStartupOpenPending);
     QTimer::singleShot(0, this, [this]() {
         if (extensionManager_ != nullptr) {
             extensionManager_->refreshExtensions();

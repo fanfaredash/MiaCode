@@ -83,7 +83,10 @@ int previewFrameSwapWatchdogTimeoutMs(qint64 frameIntervalNs)
 
 }  // namespace
 
-void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(const QString&)>& logStartupStage)
+void MainWindow::finishFrameBootstrap(
+    QToolBar* toolBar,
+    const std::function<void(const QString&)>& logStartupStage,
+    bool explicitStartupOpenPending)
 {
     constexpr int kToolbarLeadingSpacerWidth = 6;
     auto* toolbarLeadingSpacer = new QWidget(toolBar);
@@ -687,7 +690,13 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     applyMuriRenderOptions();
     windowSection_->applyUiTheme();
     updatePauseButtonAppearance();
-    const bool restoredStartupDocument = restoreLastSessionFile();
+    // A file/folder passed on the command line is the startup document. Do not
+    // first restore and warm up the previous session only to replace it on the
+    // first event-loop turn: concurrent launches can otherwise make every new
+    // process decode the old chart's audio/PV while the explicit target is
+    // loading, producing avoidable resource spikes and stale preparation races.
+    const bool restoredStartupDocument =
+        !explicitStartupOpenPending && restoreLastSessionFile();
     if (!restoredStartupDocument) {
         loadDocument(SimaiDocument::createEmpty());
         logStartupStage("initial_empty_document_applied");
