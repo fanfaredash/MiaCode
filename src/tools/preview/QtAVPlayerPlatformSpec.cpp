@@ -135,11 +135,10 @@ int main()
                       QStringLiteral("hardware_decoder=videotoolbox"),
                       QStringLiteral("hardware_decoder=vaapi"),
                       QStringLiteral("#elif defined(Q_OS_MACOS)"),
+                      QStringLiteral("video_software_fallback"),
+                      QStringLiteral("maybeRetryWithSoftwareDecode"),
                   }),
-                  QStringLiteral("backend diagnostics identify each desktop hardware decoder"), err);
-    ok &= require(!backend.contains(QStringLiteral("video_software_fallback"))
-                      && !backend.contains(QStringLiteral("maybeRetryWithSoftwareDecode")),
-                  QStringLiteral("QtAVPlayer keeps the selected decode mode without host fallback"), err);
+                  QStringLiteral("backend diagnostics identify each desktop hardware decoder and fallback"), err);
     ok &= require(diagnostics.contains(QStringLiteral("#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)")),
                   QStringLiteral("D3D11 diagnostics are platform guarded"), err);
     ok &= require(sharedDevice.contains(QStringLiteral("#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)")),

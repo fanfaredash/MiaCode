@@ -96,6 +96,31 @@ static QVideoFrameFormat::PixelFormat videoToolboxPixelFormat(const AVFrame *fra
 }
 #endif
 
+#if defined(Q_OS_LINUX) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+static QVideoFrameFormat::PixelFormat vaapiTexturePixelFormat(const AVFrame *frame)
+{
+    if (!frame || frame->format != AV_PIX_FMT_VAAPI)
+        return QVideoFrameFormat::Format_Invalid;
+
+    if (frame->hw_frames_ctx) {
+        const auto *hwFramesCtx = reinterpret_cast<const AVHWFramesContext *>(frame->hw_frames_ctx->data);
+        if (hwFramesCtx) {
+            switch (hwFramesCtx->sw_format) {
+            case AV_PIX_FMT_P010LE:
+            case AV_PIX_FMT_P010BE:
+            case AV_PIX_FMT_YUV420P10LE:
+            case AV_PIX_FMT_YUV420P10BE:
+                return QVideoFrameFormat::Format_P010;
+            case AV_PIX_FMT_NV12:
+            default:
+                return QVideoFrameFormat::Format_NV12;
+            }
+        }
+    }
+    return QVideoFrameFormat::Format_NV12;
+}
+#endif
+
 static const QAVVideoCodec *videoCodec(const QAVCodec *c)
 {
     return reinterpret_cast<const QAVVideoCodec *>(c);
@@ -522,8 +547,13 @@ QAVVideoFrame::operator QVideoFrame() const
 #endif
             break;
         case AV_PIX_FMT_VAAPI:
+#if defined(Q_OS_LINUX) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+            format = vaapiTexturePixelFormat(frame());
+            break;
+#else
             format = VideoFrame::Format_NV12;
             break;
+#endif
         case AV_PIX_FMT_VDPAU:
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
             format = VideoFrame::Format_BGRA32;

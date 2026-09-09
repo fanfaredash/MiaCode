@@ -214,10 +214,13 @@ private:
     // reaches the pending seek target. Mirrors the QMediaPlayer path's
     // frame-covers-target / position-ack logic, keyed on pts instead of µs.
     void settlePendingSeekAcks(double mediaSecondStart, double mediaSecondEnd);
+    // One-shot fallback: if platform hardware decode reports InvalidMedia,
+    // re-open the source forcing FFmpeg software decode before giving up.
+    void maybeRetryWithSoftwareDecode();
     // Hot-switch the currently-loaded PV's decode mode in place on the same
     // QAVPlayer (stop -> setInputVideoCodec -> reload -> seek -> restore play
-    // state). Driven directly by the user's hardware/software preference and
-    // bidirectional. No app restart.
+    // state). Same in-place reload as the software fallback, but driven by the
+    // user's hardware/software preference and bidirectional. No app restart.
     void reloadVideoDecodeInPlace();
 #endif
     // HW-decode diagnostics:
@@ -291,6 +294,7 @@ private:
     QMetaObject::Connection videoFrameConnection_;
     QMetaObject::Connection seekedConnection_;
     bool videoBackendLoaded_ = false;
+    bool softwareDecodeFallbackTried_ = false;
     double lastFramePtsSeconds_ = -1.0;
     // Latest decoded frame, replayed into the QML sink when a VideoOutput
     // attaches after decoding has already produced frames (e.g. paused bg) —

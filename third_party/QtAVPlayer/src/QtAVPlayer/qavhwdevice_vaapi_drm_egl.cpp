@@ -11,6 +11,9 @@
 #include "qavstream.h"
 #include <QDebug>
 #include <QScopeGuard>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QList>
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -33,6 +36,34 @@ QT_BEGIN_NAMESPACE
 
 class QAVHWDevice_VAAPI_DRM_EGLPrivate
 {
+public:
+    ~QAVHWDevice_VAAPI_DRM_EGLPrivate()
+    {
+        cleanupTextures();
+    }
+
+    void queueTexturesForDeletion(GLuint tex0, GLuint tex1)
+    {
+        QMutexLocker locker(&mutex);
+        if (tex0)
+            pendingTextures.append(tex0);
+        if (tex1)
+            pendingTextures.append(tex1);
+    }
+
+    void cleanupTextures()
+    {
+        QMutexLocker locker(&mutex);
+        if (pendingTextures.isEmpty())
+            return;
+        if (eglGetCurrentContext() != EGL_NO_CONTEXT) {
+            glDeleteTextures(pendingTextures.size(), pendingTextures.constData());
+            pendingTextures.clear();
+        }
+    }
+
+    QMutex mutex;
+    QList<GLuint> pendingTextures;
 };
 
 QAVHWDevice_VAAPI_DRM_EGL::QAVHWDevice_VAAPI_DRM_EGL()
@@ -42,6 +73,7 @@ QAVHWDevice_VAAPI_DRM_EGL::QAVHWDevice_VAAPI_DRM_EGL()
 
 QAVHWDevice_VAAPI_DRM_EGL::~QAVHWDevice_VAAPI_DRM_EGL()
 {
+    d_ptr->cleanupTextures();
 }
 
 AVPixelFormat QAVHWDevice_VAAPI_DRM_EGL::format() const
@@ -57,8 +89,9 @@ AVHWDeviceType QAVHWDevice_VAAPI_DRM_EGL::type() const
 class VideoBuffer_EGL : public QAVVideoBuffer_GPU
 {
 public:
-    explicit VideoBuffer_EGL(const QAVVideoFrame &frame)
+    VideoBuffer_EGL(QAVHWDevice_VAAPI_DRM_EGLPrivate *hw, const QAVVideoFrame &frame)
         : QAVVideoBuffer_GPU(frame)
+        , m_hw(hw)
     {
         if (!s_eglCreateImageKHR) {
             s_eglCreateImageKHR = reinterpret_cast<PFNEGLCREATEIMAGEKHRPROC>(eglGetProcAddress("eglCreateImageKHR"));
@@ -84,6 +117,9 @@ public:
 
     QVariant handle(QRhi */*rhi*/) const override
     {
+        if (m_hw)
+            m_hw->cleanupTextures();
+
         if (m_texturesReady)
             return textures();
         releaseTextures();
@@ -108,15 +144,21 @@ public:
                 ::close(prime.objects[i].fd);
         });
 
-        if (prime.fourcc != VA_FOURCC_NV12) {
-            qWarning() << "prime.fourcc != VA_FOURCC_NV12";
+        uint32_t formats[2] = {0, 0};
+        if (prime.fourcc == VA_FOURCC_NV12) {
+            formats[0] = DRM_FORMAT_R8;
+            formats[1] = DRM_FORMAT_GR88;
+        } else if (prime.fourcc == VA_FOURCC_P010) {
+            formats[0] = DRM_FORMAT_R16;
+            formats[1] = DRM_FORMAT_GR1616;
+        } else {
+            qWarning() << "Unsupported VAAPI DRM fourcc:" << prime.fourcc;
             return textures();
         }
 
         vaSyncSurface(va_display, va_surface);
 
         glGenTextures(2, m_textures);
-        static const uint32_t formats[2] = { DRM_FORMAT_R8, DRM_FORMAT_GR88 };
         for (int i = 0; i < 2; ++i) {
             if (prime.layers[i].drm_format != formats[i])
                 qWarning() << "Wrong DRM format:" << prime.layers[i].drm_format << formats[i];
@@ -172,20 +214,26 @@ public:
 private:
     void releaseTextures() const
     {
-        if (m_textures[0])
-            glDeleteTextures(2, m_textures);
+        if (m_textures[0] || m_textures[1]) {
+            if (eglGetCurrentContext() != EGL_NO_CONTEXT) {
+                glDeleteTextures(2, m_textures);
+            } else if (m_hw) {
+                m_hw->queueTexturesForDeletion(m_textures[0], m_textures[1]);
+            }
+        }
         m_textures[0] = 0;
         m_textures[1] = 0;
         m_texturesReady = false;
     }
 
+    QAVHWDevice_VAAPI_DRM_EGLPrivate *m_hw = nullptr;
     mutable GLuint m_textures[2] = {0};
     mutable bool m_texturesReady = false;
 };
 
 QAVVideoBuffer *QAVHWDevice_VAAPI_DRM_EGL::videoBuffer(const QAVVideoFrame &frame) const
 {
-    return new VideoBuffer_EGL(frame);
+    return new VideoBuffer_EGL(d_ptr.get(), frame);
 }
 
 QT_END_NAMESPACE

@@ -452,6 +452,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     // Clear the stale image background before the decoded video frame arrives.
     loadedBackgroundImage_ = QImage();
     mediaKind_ = MediaKind::Video;
+    softwareDecodeFallbackTried_ = false;
     videoBackendLoaded_ = false;
     lastVideoFrame_ = QVideoFrame();
     lastFramePtsSeconds_ = -1.0;
