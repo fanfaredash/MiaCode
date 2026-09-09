@@ -362,8 +362,13 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
     }
     if (previousWaveformData) {
         session_.applyWaveformData(previousWaveformData);
-    } else if (previousPreviewTrackDurationSeconds > 0.0) {
-        state_.previewTrackDurationSeconds_ = previousPreviewTrackDurationSeconds;
+    } else {
+        // Clearing the final editor tab releases the bridge's waveform projection.
+        // Entering a difficulty creates a fresh projection from the current track.
+        if (previousPreviewTrackDurationSeconds > 0.0) {
+            state_.previewTrackDurationSeconds_ = previousPreviewTrackDurationSeconds;
+        }
+        session_.refreshWaveformCache();
     }
     if (!state_.currentFilePath_.isEmpty()) {
         session_.syncPreviewStageMediaRouteChartPath(
