@@ -16,11 +16,6 @@
 
 namespace {
 
-class TestPlainCodeEditor : public PlainCodeEditor {
-public:
-    using PlainCodeEditor::mouseDoubleClickEvent;
-};
-
 bool expect(bool condition, const QString& message, QTextStream& out, int* failed)
 {
     if (condition) {
@@ -614,7 +609,7 @@ int main(int argc, char** argv)
         out,
         &failed);
     {
-        TestPlainCodeEditor clickEditor;
+        PlainCodeEditor clickEditor;
         clickEditor.resize(480, 240);
         clickEditor.setPlainText(QStringLiteral("alpha beta"));
         clickEditor.show();
@@ -624,15 +619,23 @@ int main(int argc, char** argv)
         alphaCursor.setPosition(2);
         const QPointF alphaPosition = clickEditor.cursorRect(alphaCursor).center();
         const auto sendDoubleClick = [&clickEditor, alphaPosition]() {
-            QMouseEvent doubleClick(
-                QEvent::MouseButtonDblClick,
-                alphaPosition,
-                alphaPosition,
-                QPointF(clickEditor.viewport()->mapToGlobal(alphaPosition.toPoint())),
-                Qt::LeftButton,
-                Qt::LeftButton,
-                Qt::NoModifier);
-            clickEditor.mouseDoubleClickEvent(&doubleClick);
+            const auto sendMouseEvent = [&clickEditor, alphaPosition](
+                                            QEvent::Type type,
+                                            Qt::MouseButtons buttons) {
+                QMouseEvent event(
+                    type,
+                    alphaPosition,
+                    alphaPosition,
+                    QPointF(clickEditor.viewport()->mapToGlobal(alphaPosition.toPoint())),
+                    Qt::LeftButton,
+                    buttons,
+                    Qt::NoModifier);
+                QApplication::sendEvent(clickEditor.viewport(), &event);
+            };
+            sendMouseEvent(QEvent::MouseButtonPress, Qt::LeftButton);
+            sendMouseEvent(QEvent::MouseButtonRelease, Qt::NoButton);
+            sendMouseEvent(QEvent::MouseButtonDblClick, Qt::LeftButton);
+            sendMouseEvent(QEvent::MouseButtonRelease, Qt::NoButton);
         };
 
         expect(

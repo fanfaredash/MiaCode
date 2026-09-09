@@ -1383,7 +1383,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
 
     if (TARGET Qt6::QOffscreenIntegrationPlugin)
-        set_tests_properties(app_background_spec PROPERTIES
+        set_tests_properties(app_background_spec font_combo_width_spec PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::QOffscreenIntegrationPlugin>")
     endif()
 

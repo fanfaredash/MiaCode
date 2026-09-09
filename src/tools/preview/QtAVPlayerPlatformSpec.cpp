@@ -140,10 +140,12 @@ int main()
         ? playback.mid(commitStart, commitEnd - commitStart)
         : QString();
     ok &= require(containsAll(commit, {
-                      QStringLiteral("lastSeekMs_ = targetMs;\n    player_->seek(targetMs);"),
+                      QStringLiteral("const bool preparedLandingMatchesCommit ="),
+                      QStringLiteral("&& preparedPlaybackLandingConfirmed_"),
+                      QStringLiteral("if (!preparedLandingMatchesCommit) {\n        lastSeekMs_ = targetMs;\n        player_->seek(targetMs);\n    }"),
                       QStringLiteral("lastSeekMs_ = targetMs;\n    player_->setPosition(targetMs);"),
                   }),
-                  QStringLiteral("prepared playback commit always seeks before starting either backend"), err);
+                  QStringLiteral("prepared playback commit skips only a confirmed QtAV landing and always seeks the fallback backend"), err);
 
     if (ok) {
         out << "QtAVPlayer platform spec passed." << Qt::endl;
