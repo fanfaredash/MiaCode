@@ -72,8 +72,8 @@ int main()
 
     const auto defaultPolicy = masterMixerPolicyFromOverrides(QString(), QString());
     ok &= require(
-        defaultPolicy.bufferMs == 30.0 && defaultPolicy.threadCount == 4,
-        QStringLiteral("the master mixer defaults to a small safety buffer and four mixing threads"), err);
+        defaultPolicy.bufferMs == 0.0 && defaultPolicy.threadCount == 4,
+        QStringLiteral("the master mixer defaults to zero buffer and four mixing threads"), err);
     const auto legacyPolicy = masterMixerPolicyFromOverrides(
         QStringLiteral("0"), QStringLiteral("8"));
     ok &= require(
@@ -83,7 +83,7 @@ int main()
     const auto invalidPolicy = masterMixerPolicyFromOverrides(
         QStringLiteral("nan"), QStringLiteral("17"));
     ok &= require(
-        invalidPolicy.bufferMs == 30.0 && invalidPolicy.threadCount == 4
+        invalidPolicy.bufferMs == 0.0 && invalidPolicy.threadCount == 4
             && !invalidPolicy.bufferOverrideValid && !invalidPolicy.threadOverrideValid,
         QStringLiteral("invalid overrides fall back to safe defaults"), err);
 
