@@ -5,7 +5,9 @@
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 
-#if __has_include(<QVulkanFunctions>) && __has_include(<QVulkanInstance>)
+#if __has_include(<vulkan/vulkan.h>) \
+    && __has_include(<QVulkanFunctions>) \
+    && __has_include(<QVulkanInstance>)
 #include <QVulkanFunctions>
 #include <QVulkanInstance>
 #define MIACODE_HAS_QT_VULKAN_PROBE 1
