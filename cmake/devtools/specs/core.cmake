@@ -93,8 +93,8 @@ miacode_add_spec(app_background_settings_spec
     EXECUTION ctest STATUS active PLATFORM all
     SOURCES
         src/tools/ui/AppBackgroundSettingsSpec.cpp
-        src/app/ui/AppBackgroundSettings.h
-        src/app/ui/AppBackgroundSettings.cpp
+        src/app/ui/preferences/AppBackgroundSettings.h
+        src/app/ui/preferences/AppBackgroundSettings.cpp
     LIBS Qt6::Core
     INCLUDES src
 )
@@ -106,9 +106,9 @@ miacode_add_spec(theme_variant_resolver_spec
     EXECUTION ctest STATUS active PLATFORM all
     SOURCES
         src/tools/ui/ThemeVariantResolverSpec.cpp
-        src/app/ui/ThemeVariantResolver.h
-        src/app/ui/ThemeVariantResolver.cpp
-        src/app/ui/UiText.h
+        src/app/ui/theme/ThemeVariantResolver.h
+        src/app/ui/theme/ThemeVariantResolver.cpp
+        src/app/ui/preferences/PreferenceDocument.h
     LIBS Qt6::Core Qt6::Gui
     INCLUDES src
 )
@@ -154,8 +154,8 @@ miacode_add_spec(cover_layout_model_spec
         src/tools/cover_export/CoverCompositionState.cpp
         src/tools/cover_export/CoverCompositionPersistenceGuard.h
         src/tools/cover_export/CoverCompositionPersistenceGuard.cpp
-        src/app/ui/UiText.h
-        src/app/ui/UiText.cpp
+        src/app/ui/preferences/PreferenceDocument.h
+        src/app/ui/preferences/PreferenceDocument.cpp
     LIBS Qt6::Core Qt6::Gui Qt6::Widgets
     INCLUDES src src/app/ui
 )
@@ -396,8 +396,8 @@ miacode_add_spec(net_client_spec
         src/tools/media/PvBatchCompressionScanner.cpp
         src/tools/zip_export/ChartZipPackager.h
         src/tools/zip_export/ChartZipPackager.cpp
-        src/app/ui/UiText.h
-        src/app/ui/UiText.cpp
+        src/app/ui/preferences/PreferenceDocument.h
+        src/app/ui/preferences/PreferenceDocument.cpp
         src/common/ChartAssetPaths.h
     LIBS Qt6::Core Qt6::Network miniz
     INCLUDES src src/common src/tools src/app/ui
@@ -435,9 +435,7 @@ miacode_add_spec(dependency_allowlist_spec
 target_compile_definitions(dependency_allowlist_spec PRIVATE
     "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
-# Drift guard for the UiText localization tables: built-in en/zh/ja key parity plus
-# source/resource literal key checks. Reads the tree from disk; repo root
-# injected as a compile definition.
+# Drift guard for ID-based QTranslator catalogs (.ts parity + source literal ids).
 miacode_add_spec(ui_text_locale_spec
     OWNER src/app/ui
     CONTRACT ui-text.ui-text-locale
@@ -445,13 +443,15 @@ miacode_add_spec(ui_text_locale_spec
     EXECUTION ctest STATUS active PLATFORM all
     SOURCES
         src/tools/ui_text/UiTextLocaleSpec.cpp
-        src/app/ui/UiText.h
-        src/app/ui/UiText.cpp
+        src/app/ui/preferences/PreferenceDocument.h
+        src/app/ui/preferences/PreferenceDocument.cpp
     LIBS Qt6::Core
     INCLUDES src src/app/ui
 )
 target_compile_definitions(ui_text_locale_spec PRIVATE
-    "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+    "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\""
+    "MIACODE_EN_QM_PATH=\"${CMAKE_CURRENT_BINARY_DIR}/miacode_en.qm\"")
+add_dependencies(ui_text_locale_spec miacode_lrelease)
 
 miacode_add_spec(native_chrome_policy_spec
     OWNER src/app/ui
@@ -461,7 +461,7 @@ miacode_add_spec(native_chrome_policy_spec
     SOURCES
         src/tools/ui/NativeChromePolicySpec.cpp
         src/app/quick_shell/QuickShellPopupPosition.h
-        src/app/ui/UiNativeWindowThemePolicy.h
+        src/app/ui/chrome/NativeWindowThemePolicy.h
     LIBS Qt6::Core
     INCLUDES src
 )
@@ -473,8 +473,8 @@ miacode_add_spec(ui_text_preferences_spec
     EXECUTION ctest STATUS active PLATFORM all
     SOURCES
         src/tools/ui_text/UiTextPreferencesSpec.cpp
-        src/app/ui/UiText.h
-        src/app/ui/UiText.cpp
+        src/app/ui/preferences/PreferenceDocument.h
+        src/app/ui/preferences/PreferenceDocument.cpp
     LIBS Qt6::Core
     INCLUDES src src/app/ui
 )

@@ -1,12 +1,11 @@
 #include "runtime/export/VideoExportHost.h"
-#include "app/v2/JobProgressService.h"
+#include "app/services/JobProgressService.h"
 #include "runtime/Shared.h"
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/shell/ShellHost.h"
 
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -423,30 +422,30 @@ QString localizeExportWorkerMessageForUiLanguage(const QString& rawMessage)
     );
     const QRegularExpressionMatch renderMatch = renderProgressPattern.match(trimmed);
     if (renderMatch.hasMatch()) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.rendering_count"))
+        return qtTrId("dialog.video_export.progress.rendering_count")
             .arg(renderMatch.captured(1), renderMatch.captured(2));
     }
 
     if (trimmed == QLatin1String("Preparing SFX track...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.preparing_audio"));
+        return qtTrId("dialog.video_export.progress.preparing_audio");
     }
     if (trimmed == QLatin1String("Starting ffmpeg...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.starting_ffmpeg"));
+        return qtTrId("dialog.video_export.progress.starting_ffmpeg");
     }
     if (trimmed == QLatin1String("Rendering frames and encoding...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.rendering"));
+        return qtTrId("dialog.video_export.progress.rendering");
     }
     if (trimmed == QLatin1String("Finalizing encoded video stream...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.finalizing_encode"));
+        return qtTrId("dialog.video_export.progress.finalizing_encode");
     }
     if (trimmed == QLatin1String("Repacking MP4 for fast start...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.repacking"));
+        return qtTrId("dialog.video_export.progress.repacking");
     }
     if (trimmed == QLatin1String("Collecting export summary...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.finishing"));
+        return qtTrId("dialog.video_export.progress.finishing");
     }
     if (trimmed == QLatin1String("Export completed.")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.done"));
+        return qtTrId("dialog.video_export.progress.done");
     }
     return rawMessage;
 }
@@ -460,7 +459,7 @@ QString buildExportProgressLabelTextForUiLanguage(
 {
     QString text = localizeExportWorkerMessageForUiLanguage(rawMessage.trimmed());
     if (text.isEmpty()) {
-        text = UiText::text(QStringLiteral("dialog.video_export.progress.generic"));
+        text = qtTrId("dialog.video_export.progress.generic");
     }
     if (exportWorkerProgressUsesBusyIndicator(rawMessage)) {
         if (smoothedEtaSeconds != nullptr) {
@@ -494,7 +493,7 @@ QString buildExportProgressLabelTextForUiLanguage(
         *smoothedEtaSeconds = displayEtaSeconds;
     }
 
-    const QString etaLine = UiText::text(QStringLiteral("dialog.video_export.progress.remaining"))
+    const QString etaLine = qtTrId("dialog.video_export.progress.remaining")
         .arg(formatExportRemainingDuration(displayEtaSeconds));
     return QStringLiteral("%1\n%2").arg(text, etaLine);
 }
@@ -524,7 +523,7 @@ bool miacode::runtime::VideoExportHost::startVideoExportWorkerProcess(
     const QString executablePath = QCoreApplication::applicationFilePath();
     if (executablePath.trimmed().isEmpty() || !QFileInfo::exists(executablePath)) {
         if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.video_export.error.executable_missing"));
+            *errorMessage = qtTrId("dialog.video_export.error.executable_missing");
         }
         _mc_op_.fail(QStringLiteral("executable not found at %1").arg(executablePath));
         return false;
@@ -565,7 +564,7 @@ bool miacode::runtime::VideoExportHost::startVideoExportWorkerProcess(
     const QByteArray payload = buildVideoExportWorkerStartPayload(snapshot);
     if (process->write(payload) != payload.size()) {
         if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.video_export.error.worker_write_failed"));
+            *errorMessage = qtTrId("dialog.video_export.error.worker_write_failed");
         }
         _mc_op_.fail(QStringLiteral("stdin write short: bytes=%1").arg(payload.size()));
         process->kill();
@@ -605,10 +604,10 @@ bool miacode::runtime::VideoExportHost::runVideoExportWorkerSync(
         if (!this->startVideoExportWorkerProcess(&process, snapshot, errorMessage, forceDisableOffscreenPbo)) {
             if (errorMessage != nullptr && !firstCrashDiagnostics.trimmed().isEmpty()) {
                 *errorMessage = buildWorkerRetryFailureDetails(
-                    UiText::text(QStringLiteral("dialog.video_export.error.worker_retry_note")),
-                    UiText::text(QStringLiteral("dialog.video_export.error.worker_retry_first_attempt")),
+                    qtTrId("dialog.video_export.error.worker_retry_note"),
+                    qtTrId("dialog.video_export.error.worker_retry_first_attempt"),
                     firstCrashDiagnostics,
-                    UiText::text(QStringLiteral("dialog.video_export.error.worker_retry_final_attempt")),
+                    qtTrId("dialog.video_export.error.worker_retry_final_attempt"),
                     *errorMessage
                 );
             }
@@ -722,10 +721,10 @@ bool miacode::runtime::VideoExportHost::runVideoExportWorkerSync(
         const QString combinedRetryDiagnostics = firstCrashDiagnostics.trimmed().isEmpty()
             ? QString()
             : buildWorkerRetryFailureDetails(
-                  UiText::text(QStringLiteral("dialog.video_export.error.worker_retry_note")),
-                  UiText::text(QStringLiteral("dialog.video_export.error.worker_retry_first_attempt")),
+                  qtTrId("dialog.video_export.error.worker_retry_note"),
+                  qtTrId("dialog.video_export.error.worker_retry_first_attempt"),
                   firstCrashDiagnostics,
-                  UiText::text(QStringLiteral("dialog.video_export.error.worker_retry_final_attempt")),
+                  qtTrId("dialog.video_export.error.worker_retry_final_attempt"),
                   attemptDiagnostics
               );
         if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
@@ -734,7 +733,7 @@ bool miacode::runtime::VideoExportHost::runVideoExportWorkerSync(
                     ? resultMessage
                     : (!stderrText.isEmpty()
                         ? stderrText.split('\n').constFirst().trimmed()
-                        : UiText::text(QStringLiteral("dialog.batch_export.error.export_failed")));
+                        : qtTrId("dialog.batch_export.error.export_failed"));
                 const QString exitSummary = compactWorkerExitSummary(process.exitCode(), process.exitStatus(), summary);
                 *errorMessage = combinedRetryDiagnostics.isEmpty()
                     ? exitSummary
@@ -749,7 +748,7 @@ bool miacode::runtime::VideoExportHost::runVideoExportWorkerSync(
                     ? resultMessage
                     : (!stderrText.isEmpty()
                         ? stderrText.split('\n').constFirst().trimmed()
-                        : UiText::text(QStringLiteral("dialog.batch_export.error.export_failed")));
+                        : qtTrId("dialog.batch_export.error.export_failed"));
                 const bool genericFailure = resultMessage.trimmed().isEmpty() && stderrText.trimmed().isEmpty();
                 if (!combinedRetryDiagnostics.isEmpty()) {
                     *errorMessage = appendVideoExportDiagnostics(summary, combinedRetryDiagnostics);
@@ -772,7 +771,7 @@ bool miacode::runtime::VideoExportHost::launchVideoExportWorker(const VideoExpor
     _mc_op_.note(QStringLiteral("output=%1").arg(snapshot.outputPath));
     if (session_.videoExportWorkerProcess_ != nullptr && session_.videoExportWorkerProcess_->state() != QProcess::NotRunning) {
         if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.video_export.error.worker_busy"));
+            *errorMessage = qtTrId("dialog.video_export.error.worker_busy");
         }
         _mc_op_.fail(QStringLiteral("worker already running"));
         return false;
@@ -783,11 +782,11 @@ bool miacode::runtime::VideoExportHost::launchVideoExportWorker(const VideoExpor
     // One progress surface for every job in the shell (JobProgressOverlay).
     // The worker runs out of process, so cancellation goes through
     // cancelVideoExportWorker rather than a flag this side polls.
-    if (miacode::v2::JobProgressService* const jobProgress = session_.jobProgressService();
+    if (miacode::JobProgressService* const jobProgress = session_.jobProgressService();
         jobProgress != nullptr) {
         session_.videoExportJobToken_ = jobProgress->begin(
-            UiText::text(QStringLiteral("dialog.video_export.title")),
-            UiText::text(QStringLiteral("dialog.video_export.progress.preparing")),
+            qtTrId("dialog.video_export.title"),
+            qtTrId("dialog.video_export.progress.preparing"),
             /*cancellable=*/true);
     }
 
@@ -884,14 +883,14 @@ void miacode::runtime::VideoExportHost::handleVideoExportWorkerEvent(const QJson
     if (eventType == QLatin1String("worker_ready")) {
         if (!suppressProgressUi) {
             this->reportExportProgress(
-                1, UiText::text(QStringLiteral("dialog.video_export.progress.worker_ready")));
+                1, qtTrId("dialog.video_export.progress.worker_ready"));
         }
         return;
     }
     if (eventType == QLatin1String("accepted")) {
         if (!suppressProgressUi) {
             this->reportExportProgress(
-                2, UiText::text(QStringLiteral("dialog.video_export.progress.starting_export")));
+                2, qtTrId("dialog.video_export.progress.starting_export"));
         }
         return;
     }
@@ -935,7 +934,7 @@ void miacode::runtime::VideoExportHost::handleVideoExportWorkerEvent(const QJson
         session_.videoExportWorkerOutputPath_ = eventObject.value(QStringLiteral("output_path")).toString(session_.videoExportWorkerOutputPath_);
         session_.videoExportWorkerResultMessage_ = session_.videoExportWorkerSuccess_
             ? QStringLiteral("ok")
-            : eventObject.value(QStringLiteral("error")).toString(UiText::text(QStringLiteral("dialog.video_export.error.failed")));
+            : eventObject.value(QStringLiteral("error")).toString(qtTrId("dialog.video_export.error.failed"));
         const QString details = eventObject.value(QStringLiteral("details")).toString().trimmed();
         if (!details.isEmpty()) {
             session_.videoExportWorkerResultDetails_ =
@@ -943,7 +942,7 @@ void miacode::runtime::VideoExportHost::handleVideoExportWorkerEvent(const QJson
         }
         if (!suppressProgressUi && session_.videoExportWorkerSuccess_) {
             this->reportExportProgress(
-                100, UiText::text(QStringLiteral("dialog.video_export.progress.done")));
+                100, qtTrId("dialog.video_export.progress.done"));
         }
     }
 }
@@ -962,9 +961,9 @@ void miacode::runtime::VideoExportHost::handleVideoExportWorkerProcessFinished(i
         session_.setPreviewCanvasAspectRatio(1.0, false);
     };
 
-    const QString retryNote = UiText::text(QStringLiteral("dialog.video_export.error.worker_retry_note"));
-    const QString firstAttemptTitle = UiText::text(QStringLiteral("dialog.video_export.error.worker_retry_first_attempt"));
-    const QString finalAttemptTitle = UiText::text(QStringLiteral("dialog.video_export.error.worker_retry_final_attempt"));
+    const QString retryNote = qtTrId("dialog.video_export.error.worker_retry_note");
+    const QString firstAttemptTitle = qtTrId("dialog.video_export.error.worker_retry_first_attempt");
+    const QString finalAttemptTitle = qtTrId("dialog.video_export.error.worker_retry_final_attempt");
     const QString stderrText = QString::fromUtf8(session_.videoExportWorkerStderrBuffer_).trimmed();
     const QString stdoutTailText = QString::fromUtf8(session_.videoExportWorkerStdoutBuffer_).trimmed();
     const QString processErrorText = session_.videoExportWorkerProcess_ != nullptr
@@ -993,9 +992,9 @@ void miacode::runtime::VideoExportHost::handleVideoExportWorkerProcessFinished(i
         // cancelling a BATCH export got the app's own notice — same action, two
         // different dialogs.
         session_.applicationServices_.uiRequests().postNotice(
-            miacode::v2::NoticeSeverity::Information,
-            UiText::text(QStringLiteral("dialog.video_export.title")),
-            UiText::text(QStringLiteral("dialog.video_export.message.canceled")));
+            miacode::NoticeSeverity::Information,
+            qtTrId("dialog.video_export.title"),
+            qtTrId("dialog.video_export.message.canceled"));
         this->clearVideoExportWorkerState();
         return;
     }
@@ -1023,7 +1022,7 @@ void miacode::runtime::VideoExportHost::handleVideoExportWorkerProcessFinished(i
         session_.videoExportWorkerElapsed_.start();
         this->reportExportProgress(
             0,
-            UiText::text(QStringLiteral("dialog.video_export.progress.retrying_safe_mode")));
+            qtTrId("dialog.video_export.progress.retrying_safe_mode"));
 
         QString restartError;
         if (session_.videoExportWorkerProcess_ != nullptr
@@ -1046,14 +1045,14 @@ void miacode::runtime::VideoExportHost::handleVideoExportWorkerProcessFinished(i
         session_.videoExportWorkerSuccess_ = false;
         session_.videoExportWorkerCompletionReceived_ = false;
         session_.videoExportWorkerResultMessage_ =
-            UiText::text(QStringLiteral("dialog.video_export.error.failed"));
+            qtTrId("dialog.video_export.error.failed");
         finalAttemptDiagnostics = retryRestartError;
         session_.videoExportWorkerResultDetails_ = retryRestartError;
     } else if (!session_.videoExportWorkerCompletionReceived_) {
         session_.videoExportWorkerSuccess_ = false;
         session_.videoExportWorkerResultMessage_ = exitStatus == static_cast<int>(QProcess::CrashExit)
-            ? UiText::text(QStringLiteral("dialog.video_export.error.worker_crash"))
-            : UiText::text(QStringLiteral("dialog.video_export.error.worker_exit"));
+            ? qtTrId("dialog.video_export.error.worker_crash")
+            : qtTrId("dialog.video_export.error.worker_exit");
         finalAttemptDiagnostics = workerDiagnostics;
         session_.videoExportWorkerResultDetails_ = finalAttemptDiagnostics;
     } else if (!session_.videoExportWorkerSuccess_) {
@@ -1087,13 +1086,13 @@ void miacode::runtime::VideoExportHost::handleVideoExportWorkerProcessFinished(i
         // did — the label says 打开 but it has always been the folder.
         const QString outputPath = session_.videoExportWorkerOutputPath_;
         session_.applicationServices_.uiRequests().requestNoticeAction(
-            miacode::v2::NoticeSeverity::Information,
-            UiText::text(QStringLiteral("dialog.video_export.title")),
+            miacode::NoticeSeverity::Information,
+            qtTrId("dialog.video_export.title"),
             QStringLiteral("%1\n\n%2")
-                .arg(UiText::text(QStringLiteral("dialog.video_export.message.completed")))
+                .arg(qtTrId("dialog.video_export.message.completed"))
                 .arg(resolvedOutputName),
             QString(),
-            UiText::text(QStringLiteral("action.open")),
+            qtTrId("action.open"),
             [outputPath](bool actionChosen) {
                 if (!actionChosen) {
                     return;
@@ -1106,16 +1105,16 @@ void miacode::runtime::VideoExportHost::handleVideoExportWorkerProcessFinished(i
     } else {
         const QString details = session_.videoExportWorkerResultDetails_.trimmed();
         const QString failureTitle =
-            UiText::text(QStringLiteral("dialog.video_export.error.failed_title"));
+            qtTrId("dialog.video_export.error.failed_title");
         const QString failureText = session_.videoExportWorkerResultMessage_;
         if (session_.currentFilePath_.isEmpty()) {
             // No chart on disk, so there is no folder to offer.
             session_.applicationServices_.uiRequests().postNotice(
-                miacode::v2::NoticeSeverity::Error, failureTitle, failureText, details);
+                miacode::NoticeSeverity::Error, failureTitle, failureText, details);
         } else {
             session_.applicationServices_.uiRequests().requestNoticeAction(
-                miacode::v2::NoticeSeverity::Error, failureTitle, failureText, details,
-                UiText::text(QStringLiteral("action.open_folder")),
+                miacode::NoticeSeverity::Error, failureTitle, failureText, details,
+                qtTrId("action.open_folder"),
                 [this](bool actionChosen) {
                     if (actionChosen) {
                         session_.onOpenCurrentFolder();
@@ -1135,7 +1134,7 @@ void miacode::runtime::VideoExportHost::cancelVideoExportWorker()
     // Stay on the surface with a busy indicator: terminating the worker takes a
     // moment and hiding progress here would look like the export had finished.
     this->reportExportProgress(
-        -1, UiText::text(QStringLiteral("dialog.video_export.progress.canceling")));
+        -1, qtTrId("dialog.video_export.progress.canceling"));
     if (session_.videoExportWorkerProcess_ == nullptr || session_.videoExportWorkerProcess_->state() == QProcess::NotRunning) {
         return;
     }
@@ -1221,7 +1220,7 @@ void miacode::runtime::VideoExportHost::clearVideoExportWorkerState()
 // A negative percent means the stage has no measurable progress.
 void miacode::runtime::VideoExportHost::reportExportProgress(int percent, const QString& label)
 {
-    miacode::v2::JobProgressService* const jobProgress = session_.jobProgressService();
+    miacode::JobProgressService* const jobProgress = session_.jobProgressService();
     if (jobProgress == nullptr || jobProgress->token() != session_.videoExportJobToken_) {
         return;
     }
@@ -1234,7 +1233,7 @@ void miacode::runtime::VideoExportHost::reportExportProgress(int percent, const 
 
 void miacode::runtime::VideoExportHost::endExportProgress()
 {
-    miacode::v2::JobProgressService* const jobProgress = session_.jobProgressService();
+    miacode::JobProgressService* const jobProgress = session_.jobProgressService();
     if (jobProgress == nullptr || session_.videoExportJobToken_ == 0) {
         return;
     }

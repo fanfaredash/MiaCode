@@ -14,12 +14,12 @@
         QTimer* timelineAnalysisIdleTimer_ = nullptr;
         QTimer* bottomTabsContentScalePersistTimer_ = nullptr;
         QTimer* visualLayoutPersistTimer_ = nullptr;
-        QmlExportSession* qmlExportSession_ = nullptr;
+        miacode::ui::ExportSession* qmlExportSession_ = nullptr;
         // Shared, Widgets-free UI boundary: any flow that needs a file pick,
         // a message or a progress bar goes through these and the single QML
         // host renders it.
-        miacode::v2::UiRequestService* uiRequests_ = nullptr;
-        miacode::v2::JobProgressService* jobProgress_ = nullptr;
+        miacode::UiRequestService* uiRequests_ = nullptr;
+        miacode::JobProgressService* jobProgress_ = nullptr;
         // Chart-wide timing offset (`&first`). Lives in the difficulty-page
         // header (next to Lv), not the metadata page — see FrameBootstrap.
         // Per-difficulty designer state (`&des_N` + the "share one designer"
@@ -84,7 +84,7 @@
         // primitives writePreviewPlayingFlag / writePreviewPauseSecond).
         const PlaybackState& playback_;
         const bool& playing_ = playback_.playing_;
-        const miacode::v2::PlaybackTransportState& previewTransportState_ =
+        const miacode::PlaybackTransportState& previewTransportState_ =
             playback_.previewTransportState_;
         const double& pauseSecond_ = playback_.pauseSecond_;
         const double& previewPlaybackRate_ = playback_.previewPlaybackRate_;
@@ -407,7 +407,7 @@
         double previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
         bool previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
         // The preview appearance values that used to live here now belong to
-        // miacode::v2::PreviewAppearanceState (owned by ApplicationServices).
+        // miacode::PreviewAppearanceState (owned by ApplicationServices).
         // Session keeps its same-named members as references into that one
         // copy — see the alias block below.
         bool previewOutlineVariantUsesAutoSelection_ = true;
@@ -513,7 +513,7 @@
     // Writes through here are deliberately silent — restoring settings must not
     // look like a user edit; anything outside the window uses the typed setters
     // on PreviewAppearanceState, which publish.
-    miacode::v2::PreviewAppearanceState::Values& previewAppearanceValues_ =
+    miacode::PreviewAppearanceState::Values& previewAppearanceValues_ =
         applicationServices_.previewAppearance().values();
     std::unique_ptr<miacode::latency::LatencySandboxController> latencySandboxController_;
     PreviewRuntime*& scene_ = state_.scene_;
@@ -802,9 +802,9 @@
     bool& editorOverwriteModeEnabled_ = state_.editorOverwriteModeEnabled_;
     bool& editorAutoCompletionEnabled_ = state_.editorAutoCompletionEnabled_;
     bool& editorImeInputDisabled_ = state_.editorImeInputDisabled_;
-    QmlExportSession*& qmlExportSession_ = ui_.qmlExportSession_;
-    miacode::v2::UiRequestService*& uiRequests_ = ui_.uiRequests_;
-    miacode::v2::JobProgressService*& jobProgress_ = ui_.jobProgress_;
+    miacode::ui::ExportSession*& qmlExportSession_ = ui_.qmlExportSession_;
+    miacode::UiRequestService*& uiRequests_ = ui_.uiRequests_;
+    miacode::JobProgressService*& jobProgress_ = ui_.jobProgress_;
     QTimer*& previewHeldSeekTimer_ = ui_.previewHeldSeekTimer_;
     int& previewStatsLayoutRows_ = state_.previewStatsLayoutRows_;
     int& previewStatsLayoutCols_ = state_.previewStatsLayoutCols_;

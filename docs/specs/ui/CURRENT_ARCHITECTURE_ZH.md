@@ -3,7 +3,7 @@ lifecycle: stable-current
 owner: src/app
 canonical_id: ui.runtime-ownership
 last_verified: 2026-09-06
-code_anchors: ["src/app/main.cpp", "src/app/qml_ui/QmlUiBootstrap.cpp", "src/app/v2/ApplicationServices.h", "src/app/runtime/SessionBootstrap.cpp", "src/app/runtime/Session.h"]
+code_anchors: ["src/app/main.cpp", "src/app/ui/Bootstrap.cpp", "src/app/services/ApplicationServices.h", "src/app/runtime/SessionBootstrap.cpp", "src/app/runtime/Session.h"]
 ---
 
 # 当前应用架构与所有权
@@ -12,7 +12,7 @@ code_anchors: ["src/app/main.cpp", "src/app/qml_ui/QmlUiBootstrap.cpp", "src/app
 
 ## 前端、文档与运行时
 
-产品前端由 `src/app/qml_ui/` 的 QML 页面和 C++ model 构成，启动入口为 `QmlUiBootstrap`。
+产品前端由 `src/app/ui/` 的 QML 页面和 C++ model 构成，启动入口为 `Bootstrap`。
 QML engine 创建根窗口，`runtime::Session` 是 QObject 装配对象，拥有运行时宿主并附着根窗口。
 没有隐藏的 QMainWindow 产品窗口。
 
@@ -45,8 +45,8 @@ QML engine 创建根窗口，`runtime::Session` 是 QObject 装配对象，拥�
 
 ## 复用入口
 
-QML 控件、弹层和表单优先复用 `src/app/qml_ui/components/`；主题在 `theme/Theme.qml`，
-文案经 `UiText.qml` 和 `src/app/ui/UiText.cpp`。设置表单通过 QmlPreferencesModel 接 PreferencesStore。
+QML 控件、弹层和表单优先复用 `src/app/ui/components/`；主题在 `theme/Theme.qml`，
+文案经 Qt Linguist（`translations/*.ts` → 构建目录中的 `.qm` → `/i18n` 内嵌资源），QML 用 `qsTrId`，C++ 用 `qtTrId`；运行期由 `LocaleService` 装载与热切换。偏好持久化在 `PreferenceDocument`。
 共享请求/进度复用 UiRequestService 和 JobProgressService；文件与资源解析复用现有领域服务。
 
 仓库地图见 [开发 skill](../../../.agents/skills/miacode-dev-guide/SKILL.md)。

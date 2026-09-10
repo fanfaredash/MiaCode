@@ -2,9 +2,9 @@
 
 namespace miacode::runtime {
 
-PreviewHost::PreviewHost(miacode::v2::PreviewSurface& legacySurface,
-                         miacode::v2::PreviewPlaybackPort& playbackPort,
-                         miacode::v2::AudioClockSource& audioClockSource)
+PreviewHost::PreviewHost(miacode::PreviewSurface& legacySurface,
+                         miacode::PreviewPlaybackPort& playbackPort,
+                         miacode::AudioClockSource& audioClockSource)
     : legacySurface_(&legacySurface)
     , playbackPort_(&playbackPort)
     , audioClockSource_(&audioClockSource)
@@ -18,10 +18,10 @@ void PreviewHost::invalidateSession()
     audioClockSource_ = nullptr;
 }
 
-miacode::v2::PlaybackSnapshot PreviewHost::playbackSnapshot() const
+miacode::PlaybackSnapshot PreviewHost::playbackSnapshot() const
 {
     return playbackPort_ != nullptr ? playbackPort_->playbackSnapshot()
-                                    : miacode::v2::PlaybackSnapshot{};
+                                    : miacode::PlaybackSnapshot{};
 }
 
 double PreviewHost::currentAudioClockSecond() const
@@ -31,10 +31,10 @@ double PreviewHost::currentAudioClockSecond() const
 
 bool PreviewHost::playing() const
 {
-    return playbackTransportState() == miacode::v2::PlaybackTransportState::Playing;
+    return playbackTransportState() == miacode::PlaybackTransportState::Playing;
 }
 
-miacode::v2::PlaybackTransportState PreviewHost::playbackTransportState() const
+miacode::PlaybackTransportState PreviewHost::playbackTransportState() const
 {
     return playbackSnapshot().transportState;
 }

@@ -584,6 +584,8 @@ QString resolveFfmpegExecutable()
         appDir.filePath(QStringLiteral("../../../third_party/ffmpeg/windows/%1").arg(ffmpegName)),
         appDir.filePath(QStringLiteral("../../../third_party/ffmpeg/macos/%1").arg(ffmpegName)),
         appDir.filePath(QStringLiteral("../../../third_party/ffmpeg/linux/%1").arg(ffmpegName)),
+        QStringLiteral("/opt/homebrew/bin/%1").arg(ffmpegName),
+        QStringLiteral("/usr/local/bin/%1").arg(ffmpegName),
     };
     for (const QString& candidate : appCandidates) {
         if (fileIsExecutable(candidate)) {

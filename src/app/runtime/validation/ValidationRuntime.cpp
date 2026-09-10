@@ -6,7 +6,7 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
-#include "ui/UiText.h"
+#include "common/MuriTypes.h"
 
 #include <QtCore>
 
@@ -99,7 +99,7 @@ void miacode::runtime::ValidationHost::refreshValidationPanelForActiveField()
     }
 
     const QString chartText = session_.activeChartText();
-    const SimaiNativeValidationLocale validationLocale = miacode::v2::uiValidationLocale();
+    const SimaiNativeValidationLocale validationLocale = miacode::uiValidationLocale();
     const miacode::simai::SimaiTimingMetadata timingMetadata = session_.currentTimingMetadata();
     const Session::ValidationCacheEntry& entry = it.value();
     if (entry.chartText != chartText
@@ -119,7 +119,7 @@ Session::DocumentValidationSnapshot
 miacode::runtime::ValidationHost::documentValidationSnapshot() const
 {
     const miacode::simai::SimaiTimingMetadata timingMetadata = session_.currentTimingMetadata();
-    miacode::qml_ui::DocumentValidationProjectionInput input;
+    miacode::ui::DocumentValidationProjectionInput input;
     input.difficultyId = session_.hasActiveDifficulty() ? session_.activeDifficultyId() : 0;
     input.chartTextSignature = session_.activeChartText();
     input.timingSignature = QStringLiteral("%1|%2|%3|%4")
@@ -129,10 +129,10 @@ miacode::runtime::ValidationHost::documentValidationSnapshot() const
         .arg(timingMetadata.wholeTimeSignatureValid ? 1 : 0);
     input.timelineRevision = state_.timelineRevision_;
 
-    miacode::qml_ui::DocumentValidationProjectionCache cache;
+    miacode::ui::DocumentValidationProjectionCache cache;
     const auto it = state_.validationCacheByDifficulty_.constFind(input.difficultyId);
     if (it != state_.validationCacheByDifficulty_.constEnd()
-        && it->validationLocale == miacode::v2::uiValidationLocale()) {
+        && it->validationLocale == miacode::uiValidationLocale()) {
         const Session::ValidationCacheEntry& entry = it.value();
         cache.difficultyId = input.difficultyId;
         cache.chartTextSignature = entry.chartText;
@@ -153,18 +153,18 @@ miacode::runtime::ValidationHost::documentValidationSnapshot() const
                 cachedIssue.col,
                 cachedIssue.endCol,
                 cachedIssue.severity == SimaiNativeValidationSeverity::Warning
-                    ? miacode::qml_ui::DocumentValidationIssueSeverity::Warning
-                    : miacode::qml_ui::DocumentValidationIssueSeverity::Error,
+                    ? miacode::ui::DocumentValidationIssueSeverity::Warning
+                    : miacode::ui::DocumentValidationIssueSeverity::Error,
                 cachedIssue.displayMessage,
             });
         }
     }
-    return miacode::qml_ui::projectDocumentValidation(input, cache);
+    return miacode::ui::projectDocumentValidation(input, cache);
 }
 
 Session::QmlAnalysisSnapshot miacode::runtime::ValidationHost::qmlAnalysisSnapshot() const
 {
-    miacode::qml_ui::AnalysisProjectionInput input;
+    miacode::ui::AnalysisProjectionInput input;
     input.validation = documentValidationSnapshot();
     input.activeDifficultyId = session_.hasActiveDifficulty() ? session_.activeDifficultyId() : 0;
     input.muriDifficultyId = state_.muriAnalysisReportDifficultyId_;
@@ -181,7 +181,7 @@ Session::QmlAnalysisSnapshot miacode::runtime::ValidationHost::qmlAnalysisSnapsh
             state_.muriAnalysisReport_, state_.muriStaticReferences_);
         input.muriRows.reserve(entries.size());
         for (const MuriPanelEntry& entry : entries) {
-            miacode::qml_ui::AnalysisRow row;
+            miacode::ui::AnalysisRow row;
             row.line = qMax(1, entry.line);
             row.column = qMax(1, entry.col);
             row.endColumn = row.column;
@@ -190,13 +190,13 @@ Session::QmlAnalysisSnapshot miacode::runtime::ValidationHost::qmlAnalysisSnapsh
                 ? QStringLiteral("warning") : QStringLiteral("error");
             row.alert = entry.alertLevel == MuriAlertLevel::Warning
                 ? QStringLiteral("warning") : QStringLiteral("muri");
-            row.title = UiText::muriKindText(entry.kind);
-            row.detail = renderMuriDetail(entry.detailKind, entry.detailArgs, miacode::v2::uiValidationLocale()).trimmed();
+            row.title = muriKindText(entry.kind);
+            row.detail = renderMuriDetail(entry.detailKind, entry.detailArgs, miacode::uiValidationLocale()).trimmed();
             if (row.detail.isEmpty()) row.detail = entry.rawDetail;
             input.muriRows.append(row);
         }
     }
-    return miacode::qml_ui::projectAnalysis(input);
+    return miacode::ui::projectAnalysis(input);
 }
 
 bool miacode::runtime::ValidationHost::runValidateSimaiSilently()
@@ -209,7 +209,7 @@ bool miacode::runtime::ValidationHost::runValidateSimaiSilently()
 
     const int difficultyId = session_.activeDifficultyId();
     const QString chartText = session_.activeChartText();
-    const SimaiNativeValidationLocale validationLocale = miacode::v2::uiValidationLocale();
+    const SimaiNativeValidationLocale validationLocale = miacode::uiValidationLocale();
     const miacode::simai::SimaiTimingMetadata timingMetadata = session_.currentTimingMetadata();
     const SimaiNativeParseResult* cachedLenientResult =
         (state_.lastTimelineParseDifficultyId_ == difficultyId

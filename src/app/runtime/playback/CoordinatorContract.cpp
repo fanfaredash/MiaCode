@@ -13,10 +13,10 @@ void PlaybackCoordinator::invalidateSession()
     identity_.invalidate();
 }
 
-miacode::v2::PlaybackSnapshot PlaybackCoordinator::playbackSnapshot() const
+miacode::PlaybackSnapshot PlaybackCoordinator::playbackSnapshot() const
 {
     if (!identity_.active()) {
-        const miacode::v2::PlaybackCallbackStamp stamp = identity_.currentStamp();
+        const miacode::PlaybackCallbackStamp stamp = identity_.currentStamp();
         return {
             stamp.sessionGeneration,
             stamp.documentRevision,
@@ -25,7 +25,7 @@ miacode::v2::PlaybackSnapshot PlaybackCoordinator::playbackSnapshot() const
             0.0,
             0.0,
             1.0,
-            miacode::v2::PlaybackTransportState::Stopped,
+            miacode::PlaybackTransportState::Stopped,
         };
     }
     return {
@@ -41,7 +41,7 @@ miacode::v2::PlaybackSnapshot PlaybackCoordinator::playbackSnapshot() const
 }
 
 bool PlaybackCoordinator::acceptsPlaybackCallback(
-    const miacode::v2::PlaybackCallbackStamp& stamp) const
+    const miacode::PlaybackCallbackStamp& stamp) const
 {
     return identity_.accepts(stamp);
 }
@@ -70,7 +70,7 @@ void PlaybackCoordinator::endScrub(double second)
     endScrub(second, true);
 }
 
-// ---- miacode::v2::PlaybackStateAuthority ----
+// ---- miacode::PlaybackStateAuthority ----
 //
 // See PlaybackStateAuthority.h for what separates these from the
 // PlaybackControl command overrides above: none of the three below are a

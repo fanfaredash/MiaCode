@@ -1,6 +1,6 @@
 #include "tools/cover_export/CoverCompositionState.h"
 
-#include "UiText.h"
+#include "preferences/PreferenceDocument.h"
 
 #include <QJsonArray>
 
@@ -142,14 +142,14 @@ QJsonObject CoverCompositionState::migrateToCurrent(const QJsonObject& root)
 
 QJsonObject CoverCompositionState::loadPreferences()
 {
-    const QJsonObject root = UiText::loadPreferencesObject();
+    const QJsonObject root = PreferenceDocument::loadPreferencesObject();
     const QJsonObject app = root.value(QStringLiteral("app")).toObject();
     return app.value(QStringLiteral("cover_export")).toObject();
 }
 
 bool CoverCompositionState::savePreferences(const QJsonObject& preferences)
 {
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
     const QJsonObject existing = app.value(QStringLiteral("cover_export")).toObject();
     QJsonObject merged = preferences;
@@ -163,7 +163,7 @@ bool CoverCompositionState::savePreferences(const QJsonObject& preferences)
     }
     app.insert(QStringLiteral("cover_export"), merged);
     root.insert(QStringLiteral("app"), app);
-    return UiText::savePreferencesObject(root);
+    return PreferenceDocument::savePreferencesObject(root);
 }
 
 QStringList CoverCompositionState::loadRecentFiles()
@@ -186,7 +186,7 @@ void CoverCompositionState::pushRecentFile(const QString& path)
     if (trimmed.isEmpty()) {
         return;
     }
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
     QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
 
@@ -206,18 +206,18 @@ void CoverCompositionState::pushRecentFile(const QString& path)
     cover.insert(QStringLiteral("recentFiles"), arr);
     app.insert(QStringLiteral("cover_export"), cover);
     root.insert(QStringLiteral("app"), app);
-    UiText::savePreferencesObject(root);
+    PreferenceDocument::savePreferencesObject(root);
 }
 
 void CoverCompositionState::clearRecentFiles()
 {
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
     QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
     cover.insert(QStringLiteral("recentFiles"), QJsonArray());
     app.insert(QStringLiteral("cover_export"), cover);
     root.insert(QStringLiteral("app"), app);
-    UiText::savePreferencesObject(root);
+    PreferenceDocument::savePreferencesObject(root);
 }
 
 QList<CoverUserPreset> CoverCompositionState::loadUserPresets()
@@ -243,7 +243,7 @@ void CoverCompositionState::saveUserPreset(const QString& name, const QJsonObjec
         return;
     }
 
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
     QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
 
@@ -266,7 +266,7 @@ void CoverCompositionState::saveUserPreset(const QString& name, const QJsonObjec
     cover.insert(QStringLiteral("presets"), arr);
     app.insert(QStringLiteral("cover_export"), cover);
     root.insert(QStringLiteral("app"), app);
-    UiText::savePreferencesObject(root);
+    PreferenceDocument::savePreferencesObject(root);
 }
 
 void CoverCompositionState::removeUserPreset(const QString& name)
@@ -276,7 +276,7 @@ void CoverCompositionState::removeUserPreset(const QString& name)
         return;
     }
 
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
     QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
     QJsonArray arr;
@@ -290,7 +290,7 @@ void CoverCompositionState::removeUserPreset(const QString& name)
     cover.insert(QStringLiteral("presets"), arr);
     app.insert(QStringLiteral("cover_export"), cover);
     root.insert(QStringLiteral("app"), app);
-    UiText::savePreferencesObject(root);
+    PreferenceDocument::savePreferencesObject(root);
 }
 
 void CoverCompositionState::renameUserPreset(const QString& oldName, const QString& newName)
@@ -301,7 +301,7 @@ void CoverCompositionState::renameUserPreset(const QString& oldName, const QStri
         return;
     }
 
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
     QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
     QJsonArray arr;
@@ -319,7 +319,7 @@ void CoverCompositionState::renameUserPreset(const QString& oldName, const QStri
     cover.insert(QStringLiteral("presets"), arr);
     app.insert(QStringLiteral("cover_export"), cover);
     root.insert(QStringLiteral("app"), app);
-    UiText::savePreferencesObject(root);
+    PreferenceDocument::savePreferencesObject(root);
 }
 
 }  // namespace miacode::cover_export

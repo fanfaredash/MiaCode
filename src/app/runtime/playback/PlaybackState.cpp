@@ -1,6 +1,6 @@
 #include "runtime/playback/PlaybackCoordinator.h"
-#include "app/v2/ApplicationServices.h"
-#include "app/v2/EditorSyncController.h"
+#include "app/services/ApplicationServices.h"
+#include "app/services/EditorSyncController.h"
 #include "runtime/Shared.h"
 
 #include "BracketScopeHighlighter.h"

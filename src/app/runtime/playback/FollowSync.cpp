@@ -1,8 +1,8 @@
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Session.h"
 
-#include "app/v2/ApplicationServices.h"
-#include "app/v2/EditorSyncController.h"
+#include "app/services/ApplicationServices.h"
+#include "app/services/EditorSyncController.h"
 #include "common/PreviewInteractionConfig.h"
 
 #include <QtCore>
@@ -29,7 +29,7 @@ void miacode::runtime::PlaybackCoordinator::setTouchPadAuthoringAnchor(double se
 // controller, which the coordinator reaches directly via services_.editorSync().
 void miacode::runtime::PlaybackCoordinator::clearPreviewFollowDecoration()
 {
-    miacode::v2::EditorFollowState follow;
+    miacode::EditorFollowState follow;
     follow.playbackActive = state_.playing_;
     services_.editorSync().publishFollow(follow);
 }
@@ -85,7 +85,7 @@ void miacode::runtime::PlaybackCoordinator::updatePreviewFollowDecorationForTime
 
     QElapsedTimer timer;
     timer.start();
-    miacode::v2::EditorFollowState follow;
+    miacode::EditorFollowState follow;
     follow.difficultyId = activeDifficultyId();
     // The workspace revision QML last committed — the same identity
     // requestEditorNavigation publishes, and the one the editor compares

@@ -1,6 +1,6 @@
 #include "core/scene/PreviewHudState.h"
 
-#include "UiText.h"
+#include "preferences/PreferenceDocument.h"
 
 #include <QFileInfo>
 #include <QFontDatabase>
@@ -70,7 +70,7 @@ QString normalizedHudFontPath(const QString& path)
 
 QString persistedHudFontPath(miacode::preview::scene::PreviewHudFontArea area)
 {
-    const QJsonObject root = UiText::loadPreferencesObject();
+    const QJsonObject root = PreferenceDocument::loadPreferencesObject();
     const QJsonObject app = root.value(QStringLiteral("app")).toObject();
     const QJsonObject videoExport = app.value(QStringLiteral("video_export")).toObject();
     const QJsonObject areaPaths = videoExport.value(QStringLiteral("hud_font_paths")).toObject();
@@ -434,7 +434,7 @@ int previewHudFontAreaIndex(PreviewHudFontArea area)
 
 void setPreviewHudCustomFontPath(PreviewHudFontArea area, const QString& fontPath)
 {
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
     QJsonObject videoExport = app.value(QStringLiteral("video_export")).toObject();
     const QString normalizedPath = fontPath.isEmpty() ? QString() : QFileInfo(fontPath).absoluteFilePath();
@@ -447,7 +447,7 @@ void setPreviewHudCustomFontPath(PreviewHudFontArea area, const QString& fontPat
     videoExport.insert(QStringLiteral("hud_font_paths"), areaPaths);
     app.insert(QStringLiteral("video_export"), videoExport);
     root.insert(QStringLiteral("app"), app);
-    UiText::savePreferencesObject(root);
+    PreferenceDocument::savePreferencesObject(root);
 
     CachedHudFont& cached = cachedHudFont(area);
     cached.path = persistedHudFontPath(area);
@@ -458,7 +458,7 @@ void setPreviewHudCustomFontPath(PreviewHudFontArea area, const QString& fontPat
 
 void setPreviewHudCustomFontPath(const QString& fontPath)
 {
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
     QJsonObject videoExport = app.value(QStringLiteral("video_export")).toObject();
     const QString normalizedPath = fontPath.isEmpty() ? QString() : QFileInfo(fontPath).absoluteFilePath();
@@ -469,7 +469,7 @@ void setPreviewHudCustomFontPath(const QString& fontPath)
     }
     app.insert(QStringLiteral("video_export"), videoExport);
     root.insert(QStringLiteral("app"), app);
-    UiText::savePreferencesObject(root);
+    PreferenceDocument::savePreferencesObject(root);
 
     cachedHudFonts().clear();
 }

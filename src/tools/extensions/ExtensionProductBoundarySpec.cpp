@@ -29,7 +29,8 @@ bool testArchiveBoundary(QTextStream& out)
 {
     const QString cmake = readFile(QStringLiteral("CMakeLists.txt"));
     const QString windowsPackage = readFile(QStringLiteral("scripts/build/package-win.ps1"));
-    const QString uiText = readFile(QStringLiteral("src/app/ui/UiText.cpp"));
+    const QString preferencesStore = readFile(QStringLiteral("src/app/ui/preferences/PreferenceDocument.cpp"));
+    const QString localeService = readFile(QStringLiteral("src/app/ui/preferences/LocaleService.cpp"));
     const QString fixture = readFile(QStringLiteral("tools/extensions/extension-api-registry.json"));
     return require(!cmake.contains(QStringLiteral("ExtensionManager.cpp"))
                      && !cmake.contains(QStringLiteral("EmbeddedExtensionRuntime.cpp"))
@@ -39,8 +40,9 @@ bool testArchiveBoundary(QTextStream& out)
                    QStringLiteral("Windows package has no extension deployment"), out)
         && require(cmake.contains(QStringLiteral("TARGET_FILE_DIR:MiaCode>/extensions")),
                    QStringLiteral("product build removes stale extension payload"), out)
-        && require(!uiText.contains(QStringLiteral("scanExtensionLanguagePacks")),
-                   QStringLiteral("UiText has no external extension language scan"), out)
+        && require(!preferencesStore.contains(QStringLiteral("scanExtensionLanguagePacks"))
+                       && !localeService.contains(QStringLiteral("scanExtensionLanguagePacks")),
+                   QStringLiteral("preferences and locale have no external extension language scan"), out)
         && require(!fixture.isEmpty(), QStringLiteral("archive API fixture exists"), out);
 }
 

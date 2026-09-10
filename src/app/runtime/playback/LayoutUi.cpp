@@ -1,6 +1,6 @@
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
-#include "app/v2/ApplicationServices.h"
+#include "app/services/ApplicationServices.h"
 
 #include "common/ContentDurationConfig.h"
 #include "preview/runtime/PreviewRuntime.h"

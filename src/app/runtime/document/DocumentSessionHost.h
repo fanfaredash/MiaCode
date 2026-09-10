@@ -2,19 +2,19 @@
 
 #include "runtime/Session.h"
 
-#include "app/v2/DocumentBridge.h"
-#include "app/v2/EditorPageRouter.h"
-#include "app/v2/PlaybackDocumentPort.h"
+#include "app/services/DocumentBridge.h"
+#include "app/services/EditorPageRouter.h"
+#include "app/services/PlaybackDocumentPort.h"
 
 class QTextCursor;
 
 namespace miacode::runtime {
 
-class DocumentSessionHost final : public miacode::v2::DocumentBridge,
-                                      public miacode::v2::EditorPageRouter,
-                                      public miacode::v2::PlaybackDocumentPort {
+class DocumentSessionHost final : public miacode::DocumentBridge,
+                                      public miacode::EditorPageRouter,
+                                      public miacode::PlaybackDocumentPort {
 public:
-    using CommitKind = miacode::v2::DocumentBridge::CommitKind;
+    using CommitKind = miacode::DocumentBridge::CommitKind;
 
     DocumentSessionHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
@@ -45,7 +45,7 @@ public:
     // chart clean. Also used after a whole-source replacement, where the user
     // can hand-edit &des_N past the mode's back.
     void reconcileUnifiedDocumentDesigner(
-        miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason reason) override;
+        miacode::DocumentBridge::UnifiedDesignerReconcileReason reason) override;
     bool openFileAtPath(const QString& path, bool showErrors = true);
     void restoreBackupFilePath(const QString& path, bool mentionAbnormalExit = false);
     // Continuation of restoreBackupFilePath once the confirm is answered.
@@ -111,12 +111,12 @@ public:
     bool redoChartEditorWithSelectionRestore();
     QString resolveInitialOpenDirectory() const;
     void setLastOpenDirectory(const QString& pathOrDir);
-    using DroppedChartCandidate = miacode::v2::ChartDropCandidate;
-    miacode::v2::DocumentImportAdapter chartDropImportAdapter();
+    using DroppedChartCandidate = miacode::ChartDropCandidate;
+    miacode::DocumentImportAdapter chartDropImportAdapter();
     void finishChartsFromAudioDrop(
         const QList<DroppedChartCandidate>& candidates,
         QElapsedTimer dropTimer,
-        std::function<void(const miacode::v2::ChartDropCreateResult&)> onFinished);
+        std::function<void(const miacode::ChartDropCreateResult&)> onFinished);
     void onNormalizeWholeChart();
     // DifficultyList.qml owns the confirmation; this method only applies the
     // already-confirmed document mutation.
@@ -159,7 +159,7 @@ public:
         std::function<void(std::function<void(bool)>)> handler) override;
     void importDroppedAudio(const QStringList& audioPaths, quint64 requestId,
                             quint64 generation,
-                            miacode::v2::ChartDropImportService::Completion completion) override;
+                            miacode::ChartDropImportService::Completion completion) override;
     void releaseChartDropImport() override;
 
     bool hasActiveDifficulty() const override;

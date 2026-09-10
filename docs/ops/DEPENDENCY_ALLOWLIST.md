@@ -35,9 +35,9 @@ Qt 最低版本锁定：`6.8`
 | --- | --- | --- | --- | --- | --- |
 | `Qt6::Core` | 宿主 | 全平台 | 全模块 | 进程启动 | 链接期；全量 CTest |
 | `Qt6::Gui` | 宿主 | 全平台 | `QGuiApplication`、`QImage`/`QPainter`（封面与 HUD 合成）、字体 | 进程启动 | 链接期；`cover_composite_renderer_spec` |
-| `Qt6::Qml` | 宿主 | 全平台 | `QQmlApplicationEngine`（`QmlUiBootstrap`）、全部 `Qml*` 模型 | 进程启动 | 链接期；`qml_*_spec` 组 |
+| `Qt6::Qml` | 宿主 | 全平台 | `QQmlApplicationEngine`（`Bootstrap`）、全部 `Qml*` 模型 | 进程启动 | 链接期；`qml_*_spec` 组 |
 | `Qt6::Quick` | 宿主 | 全平台 | `QQuickWindow`、`src/preview/quick_scene/`、`src/timeline/quick/` | 进程启动 | 链接期；`qml_*_spec` 组 |
-| `Qt6::QuickControls2` | 宿主 | 全平台 | `src/app/qml_ui/` 全部 QML 页面与控件 | 首个 QML 组件实例化 | 链接期；`qml_main_menu_spec` 等 |
+| `Qt6::QuickControls2` | 宿主 | 全平台 | `src/app/ui/` 全部 QML 页面与控件 | 首个 QML 组件实例化 | 链接期；`qml_main_menu_spec` 等 |
 | `Qt6::Multimedia` | 媒体 | 全平台 | `QtPreviewSfxRuntime*`（判定音效）、`QVideoFrame` 桥接 | 预览首次播放 / 首帧解码 | 链接期；`HAVE_QT_MULTIMEDIA=1`；预览手工回归 |
 | `Qt6::MultimediaQuickPrivate` | 媒体 | `WIN32 OR APPLE` | **不由 `src/` 直接使用**；仅供 `third_party/QtAVPlayer` 的 `QT_AVPLAYER_MULTIMEDIA` 桥编译 `QAVVideoFrame -> QVideoFrame` | 背景视频首帧解码 | 链接期；`qtavplayer_platform_spec`；本文「QtAVPlayer 媒体适配层」表 |
 | `${QtAVPlayer_LIBS}` | 媒体 | `WIN32 OR APPLE`（需 `MIACODE_FFMPEG_DEV_DIR`） | `PreviewStageMediaHost*`（PV/BG 解码）、`PreviewSharedD3D11Device`（D3D11VA 共享设备） | 背景视频首帧解码 | `qtavplayer_platform_spec`；macOS 打包契约 |
@@ -45,7 +45,7 @@ Qt 最低版本锁定：`6.8`
 | `bass` | 媒体 | 全平台（Win: `bass.lib`，macOS: `libbass.dylib`） | `BassPreviewAudioBackend`、`BassExportAudioBackend` | 预览音频后端初始化 | `MIACODE_HAS_BASS_AUDIO=1`；macOS 打包契约校验 dylib 已随包 |
 | `bassmix` | 媒体 | 全平台 | 同上（混音总线） | 同上 | 同上 |
 | `miniz` | 导出 | 全平台 | `ChartZipPackager`（ZIP 打包导出） | 触发 ZIP 导出 | `chart_zip_packager_spec` |
-| `-framework AppKit` | 平台 | `APPLE` | `UiNativeWindowThemeMac.mm`、`QmlUiWindowChrome.mm`（原生标题栏/外观） | 根窗口创建 | 链接期；macOS 冷启动走查 |
+| `-framework AppKit` | 平台 | `APPLE` | `NativeWindowThemeMac.mm`、`WindowChrome.mm`（原生标题栏/外观） | 根窗口创建 | 链接期；macOS 冷启动走查 |
 | `d3d11` | 平台 | `WIN32` | 共享预览设备、D3D11 导出会话、stage-media host（`src/preview/runtime/`） | 预览首次创建渲染设备 | 链接期；Windows 冷启动走查 |
 | `dxgi` | 平台 | `WIN32` | `GpuDevicePolicy`、`ProcessDiagnostics`、`TimelineQuickItem`（适配器枚举与显存计量） | 启动诊断 / 预览创建 | 链接期；Windows 冷启动走查 |
 | `d3dcompiler` | 平台 | `WIN32`（MinGW 必需；MSVC 走 `#pragma comment`） | QtAVPlayer 的 `D3DCompile` | 背景视频首帧解码 | 链接期（MinGW 缺失即链接失败） |
@@ -57,7 +57,7 @@ Qt 最低版本锁定：`6.8`
 | `Wtsapi32` | 平台 | `WIN32` | 会话锁定/解锁通知（卡顿冻结诊断） | 启动诊断注册 | 链接期 |
 | `version` | 平台 | `WIN32`（MinGW） | 启动诊断的文件版本查询 | 启动诊断 | 链接期 |
 | `rstrtmgr` | 平台 | `WIN32`（MinGW） | 媒体工具的 Restart Manager 占用进程查找 | 媒体工具报「文件被占用」时 | 链接期 |
-| `dwmapi` | 平台 | `WIN32` | `QmlUiWindowChrome` 的 `DwmExtendFrameIntoClientArea` | 根窗口创建 | 链接期；Windows 冷启动走查 |
+| `dwmapi` | 平台 | `WIN32` | `WindowChrome` 的 `DwmExtendFrameIntoClientArea` | 根窗口创建 | 链接期；Windows 冷启动走查 |
 
 ## 构建期组件
 
@@ -78,7 +78,7 @@ Qt 最低版本锁定：`6.8`
 | --- | --- | --- |
 | `Qt6::Network` | Net 页面已从 v2 产品运行时移除（见架构文档第 10 节）。引擎代码保留但**不进产品**，否则一个没有用户入口的依赖会被误当成产品依赖。 | `net_client_spec`（`src/tools/net/`，仅 `MIACODE_BUILD_DEV_TOOLS=ON` 时编译）。恢复 Net 页面时把本行移回允许表，并在允许表里写明入口与加载时机。 |
 | `Qt6::Test` | 只属于 dev-tools spec 可执行文件，不得进入产品进程。 | `MIACODE_BUILD_DEV_TOOLS` 分支下的各 spec target |
-| `Qt6::Svg` | 产品齿轮图标已迁移到 `src/app/qml_ui/resources/icons/settings.svg`；产品 C++ target 不得直接编译或链接 Qt SVG。 | QML 资源的运行时 SVG plugin 是否随打包产物提供，另行按打包验收。 |
+| `Qt6::Svg` | 产品齿轮图标已迁移到 `src/app/ui/resources/icons/settings.svg`；产品 C++ target 不得直接编译或链接 Qt SVG。 | QML 资源的运行时 SVG plugin 是否随打包产物提供，另行按打包验收。 |
 | `Qt6::Widgets` | 产品页面、文档保存/离开确认和运行时辅助件已迁移到 QML/纯 Qt API；产品 target 不得重新引入 QWidget 生命周期。 | 仅允许遗留 dev-tool spec target 使用；重新进入 `MiaCode` 链接行视为回退。 |
 
 ## 传递依赖：本文管不到、也不假装管得到的部分

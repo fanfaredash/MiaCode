@@ -149,7 +149,7 @@ The W-patterns are also condensed in user memory `reference-widget-dialog-clippi
   width/gap — cf. `makeTransportIcon` in ExportCoverDialog.cpp, `makeSettingsGearIcon`).
 - Baked sprite borders / asset top-crops for the intro card frame (superseded by QML
   stroke + device-pixel snap).
-- Raw CJK literals in C++ (mojibake risk) — use `l10n()` / `UiText` map / `QStringLiteral`.
+- Raw CJK literals in C++ (mojibake risk) — use `qtTrId` / `QStringLiteral`.
 
 ## Maintenance
 

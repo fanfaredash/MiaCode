@@ -3,13 +3,12 @@
 #include "runtime/media/MediaJobsHost.h"
 #include "runtime/document/DocumentSessionHost.h"
 
-#include "app/v2/ApplicationServices.h"
-#include "app/v2/LatencyEngine.h"
+#include "app/services/ApplicationServices.h"
+#include "app/services/LatencyEngine.h"
 
 #include "BracketScopeHighlighter.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
 #include "MainEntrypoints.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
@@ -44,14 +43,14 @@ using namespace miacode::runtime::preview_timeline_detail;
 
 miacode::runtime::PlaybackCoordinator::PlaybackCoordinator(
     QObject& owner,
-    miacode::v2::ApplicationServices& services,
+    miacode::ApplicationServices& services,
     RuntimeContext::Ui& ui,
     RuntimeContext::State& state,
     RuntimeContext::PlaybackState& playbackState,
-    miacode::v2::PlaybackPreferencesPort& preferences,
-    miacode::v2::PlaybackValidationPort& validation,
-    miacode::v2::PlaybackDocumentPort& documents,
-    miacode::v2::PlaybackPreviewPort& preview,
+    miacode::PlaybackPreferencesPort& preferences,
+    miacode::PlaybackValidationPort& validation,
+    miacode::PlaybackDocumentPort& documents,
+    miacode::PlaybackPreviewPort& preview,
     quint64 sessionGeneration)
     : owner_(owner)
     , services_(services)
@@ -482,8 +481,8 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorOffset(double se
 {
     const double normalized = qIsFinite(seconds) ? seconds : 0.0;
     const QString serialized = QString::number(normalized, 'f', 3);
-    miacode::v2::ChartWorkspace& workspace = services_.workspace();
-    workspace.updateDocumentField(miacode::v2::ChartWorkspaceDocumentField::First, serialized);
+    miacode::ChartWorkspace& workspace = services_.workspace();
+    workspace.updateDocumentField(miacode::ChartWorkspaceDocumentField::First, serialized);
     state_.documentDirty_ = workspace.snapshot().dirty;
     documents_.updateDirtyState();
     resetPreviewTrackTimelineOffsets();
@@ -495,7 +494,7 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorBpm(double bpm)
     if (!qIsFinite(bpm) || bpm <= 0.0) {
         return;
     }
-    miacode::v2::ChartWorkspace& workspace = services_.workspace();
+    miacode::ChartWorkspace& workspace = services_.workspace();
     const QString serializedBpm = QString::number(bpm, 'f', 3);
     workspace.upsertExtraField(QStringLiteral("wholebpm"), serializedBpm);
     state_.documentDirty_ = workspace.snapshot().dirty;
@@ -505,7 +504,7 @@ void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorBpm(double bpm)
 void miacode::runtime::PlaybackCoordinator::applyLatencyDetectorClockCount(int clockCount)
 {
     const int normalized = qMax(1, clockCount);
-    miacode::v2::ChartWorkspace& workspace = services_.workspace();
+    miacode::ChartWorkspace& workspace = services_.workspace();
     workspace.upsertExtraField(QStringLiteral("clock_count"), QString::number(normalized));
     state_.documentDirty_ = workspace.snapshot().dirty;
     documents_.updateDirtyState();

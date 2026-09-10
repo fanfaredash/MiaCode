@@ -1,4 +1,4 @@
-﻿#include "app/v2/UiRequestService.h"
+﻿#include "app/services/UiRequestService.h"
 #include "runtime/document/DocumentSessionHost.h"
 #include "runtime/Shared.h"
 #include "runtime/editor/EditorHost.h"
@@ -6,7 +6,6 @@
 #include "BracketScopeHighlighter.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -154,17 +153,17 @@ QVariantList miacode::runtime::DocumentSessionHost::backupDocumentEntries()
 
 void miacode::runtime::DocumentSessionHost::restoreBackupFilePath(const QString& path, bool mentionAbnormalExit)
 {
-    miacode::v2::UiRequestService* const requests = session_.uiRequestService();
+    miacode::UiRequestService* const requests = session_.uiRequestService();
     if (requests == nullptr) {
         return;
     }
-    const QString title = UiText::text(QStringLiteral("dialog.restore_backup.title"));
+    const QString title = qtTrId("dialog.restore_backup.title");
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     const QFileInfo backupInfo(normalizedPath);
     if (normalizedPath.isEmpty() || !backupInfo.exists() || !backupInfo.isFile()) {
         requests->postNotice(
-            miacode::v2::NoticeSeverity::Warning, title,
-            UiText::text(QStringLiteral("dialog.restore_backup.missing"))
+            miacode::NoticeSeverity::Warning, title,
+            qtTrId("dialog.restore_backup.missing")
                 .arg(QDir::toNativeSeparators(normalizedPath)));
         return;
     }
@@ -175,9 +174,9 @@ void miacode::runtime::DocumentSessionHost::restoreBackupFilePath(const QString&
     requests->requestConfirmation(
         title,
         mentionAbnormalExit
-            ? UiText::text(QStringLiteral("dialog.restore_backup.abnormal_exit_confirm"))
+            ? qtTrId("dialog.restore_backup.abnormal_exit_confirm")
                   .arg(backupTimestampLabel)
-            : UiText::text(QStringLiteral("dialog.restore_backup.confirm")).arg(backupTimestampLabel),
+            : qtTrId("dialog.restore_backup.confirm").arg(backupTimestampLabel),
         title,
         [this, normalizedPath, title](bool accepted) {
             if (accepted) {
@@ -188,7 +187,7 @@ void miacode::runtime::DocumentSessionHost::restoreBackupFilePath(const QString&
 
 void miacode::runtime::DocumentSessionHost::applyBackupFile(const QString& normalizedPath, const QString& title)
 {
-    miacode::v2::UiRequestService* const requests = session_.uiRequestService();
+    miacode::UiRequestService* const requests = session_.uiRequestService();
     if (requests == nullptr) {
         return;
     }
@@ -205,16 +204,16 @@ void miacode::runtime::DocumentSessionHost::applyBackupFile(const QString& norma
     QFile file(normalizedPath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         requests->postNotice(
-            miacode::v2::NoticeSeverity::Error, title,
-            UiText::text(QStringLiteral("dialog.restore_backup.read_failed"))
+            miacode::NoticeSeverity::Error, title,
+            qtTrId("dialog.restore_backup.read_failed")
                 .arg(QDir::toNativeSeparators(normalizedPath)));
         return;
     }
 
     const QString backupText = decodeChartBackupText(file.readAll());
 
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
-    const miacode::v2::ChartWorkspaceResult replaced = workspace.replaceSource(backupText);
+    miacode::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    const miacode::ChartWorkspaceResult replaced = workspace.replaceSource(backupText);
     if (!replaced.accepted) {
         workspace.openSource(backupText, state_.currentFilePath_);
         workspace.rebindSavePoint(diskReferenceText);
@@ -222,7 +221,7 @@ void miacode::runtime::DocumentSessionHost::applyBackupFile(const QString& norma
     // A backup can carry designer names the live document had unified; the
     // restored content decides whether the mode still holds.
     reconcileUnifiedDocumentDesigner(
-        miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason::SourceReplaced);
+        miacode::DocumentBridge::UnifiedDesignerReconcileReason::SourceReplaced);
     loadDocument();
     state_.autosaveReferenceContentSignature_ = autosaveContentSignature(diskReferenceText);
     state_.autosaveLastLatestContentSignature_.clear();
@@ -236,8 +235,8 @@ void miacode::runtime::DocumentSessionHost::applyBackupFile(const QString& norma
     // the confirmation of a successful restore goes to the shared notice
     // surface instead of vanishing.
     requests->postNotice(
-        miacode::v2::NoticeSeverity::Information, title,
-        UiText::text(QStringLiteral("status.restore_backup.loaded")));
+        miacode::NoticeSeverity::Information, title,
+        qtTrId("status.restore_backup.loaded"));
 }
 
 void miacode::runtime::DocumentSessionHost::schedulePendingAbnormalExitBackupRestore()
@@ -458,10 +457,10 @@ namespace {
 
 // Saving is on the v2 path (Session::saveDocument / saveDocumentAs), so its
 // failures have to reach the QML shell rather than a Widgets box.
-void postSaveFailureThrough(miacode::v2::UiRequestService* requests, const QString& text)
+void postSaveFailureThrough(miacode::UiRequestService* requests, const QString& text)
 {
     if (requests != nullptr) {
-        requests->postNotice(miacode::v2::NoticeSeverity::Error,
+        requests->postNotice(miacode::NoticeSeverity::Error,
                              QStringLiteral("Save Failed"), text);
     }
 }

@@ -1,6 +1,5 @@
 #include "timeline/quick/TimelineQuickItem.h"
 
-#include "UiText.h"
 
 #include <QDateTime>
 #include <QElapsedTimer>

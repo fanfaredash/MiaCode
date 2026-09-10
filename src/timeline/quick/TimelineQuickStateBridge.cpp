@@ -8,11 +8,12 @@
 #include "common/DebugOptions.h"
 #include "common/InputShortcutGesture.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
+#include "preferences/PreferenceDocument.h"
 #include "common/TimelineThemeConfig.h"
 #include "timeline/TimelineSceneStateBuilder.h"
 
 #include <QVariant>
+#include <QCoreApplication>
 
 namespace {
 
@@ -44,7 +45,7 @@ int zoomPresetIndexForScale(const QVector<double>& zoomPresets, double scale, in
 
 SimaiNativeValidationLocale timelineUiValidationLocale()
 {
-    const QString token = UiText::resolvedLanguageToken();
+    const QString token = PreferenceDocument::resolvedLanguageToken();
     if (token.startsWith(QStringLiteral("zh"))) {
         return SimaiNativeValidationLocale::Chinese;
     }
@@ -58,28 +59,11 @@ QString muriAlertLevelText(MuriAlertLevel level)
 {
     switch (level) {
     case MuriAlertLevel::Muri:
-        return UiText::text(QStringLiteral("validation.muri.alert.muri"));
+        return qtTrId("validation.muri.alert.muri");
     case MuriAlertLevel::Warning:
-        return UiText::text(QStringLiteral("validation.muri.alert.warning"));
+        return qtTrId("validation.muri.alert.warning");
     }
-    return UiText::text(QStringLiteral("validation.muri.alert.muri"));
-}
-
-QString muriKindText(MuriKind kind)
-{
-    switch (kind) {
-    case MuriKind::SlideTooFast:
-        return UiText::text(QStringLiteral("validation.muri.kind.slide_too_fast"));
-    case MuriKind::SlideHeadTap:
-        return UiText::text(QStringLiteral("validation.muri.kind.slide_head_tap"));
-    case MuriKind::TapOnSlide:
-        return UiText::text(QStringLiteral("validation.muri.kind.tap_on_slide"));
-    case MuriKind::Overlap:
-        return UiText::text(QStringLiteral("validation.muri.kind.overlap"));
-    case MuriKind::MultiTouch:
-        return UiText::text(QStringLiteral("validation.muri.kind.multi_touch"));
-    }
-    return UiText::text(QStringLiteral("validation.muri.alert.muri"));
+    return qtTrId("validation.muri.alert.muri");
 }
 
 bool usesTriggerSecondPlacement(const MuriDiagnostic& diagnostic)

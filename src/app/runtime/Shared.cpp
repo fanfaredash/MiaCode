@@ -1,6 +1,6 @@
 #include "runtime/Shared.h"
 
-#include "app/v2/ApplicationServices.h"
+#include "app/services/ApplicationServices.h"
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -91,7 +91,7 @@ SimaiNativeValidationLocale uiValidationLocale()
 {
     // One implementation, owned by the non-Widget application layer. The name
     // remains as the shared runtime entry point for the parser/UI locale map.
-    return miacode::v2::uiValidationLocale();
+    return miacode::uiValidationLocale();
 }
 
 QByteArray autosaveContentSignature(const QString& text)
@@ -175,7 +175,7 @@ double probeAudioDurationSeconds(const QString& trackPath)
 // single-writer grep/spec pattern still matches this exact line.
 void writePreviewPlayingFlag(
     RuntimeContext::PlaybackState& state,
-    miacode::v2::ShellNotifications& notifications,
+    miacode::ShellNotifications& notifications,
     bool playing)
 {
     if (state.playing_ == playing) {
@@ -183,10 +183,10 @@ void writePreviewPlayingFlag(
     }
     state.playing_ = playing;
     state.previewTransportState_ = playing
-        ? miacode::v2::PlaybackTransportState::Playing
-        : (state.previewTransportState_ == miacode::v2::PlaybackTransportState::Stopped
-               ? miacode::v2::PlaybackTransportState::Stopped
-               : miacode::v2::PlaybackTransportState::Paused);
+        ? miacode::PlaybackTransportState::Playing
+        : (state.previewTransportState_ == miacode::PlaybackTransportState::Stopped
+               ? miacode::PlaybackTransportState::Stopped
+               : miacode::PlaybackTransportState::Paused);
     QMetaObject::invokeMethod(
         &notifications,
         [&notifications]() { emit notifications.presentationChanged(); },

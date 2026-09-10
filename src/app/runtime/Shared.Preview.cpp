@@ -1,7 +1,6 @@
 #include "runtime/Shared.h"
 
 #include "QtPreviewSfxRuntime.h"
-#include "UiText.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "common/AssetPaths.h"
 #include "common/DebugLog.h"
@@ -23,6 +22,7 @@
 #endif
 
 #include <cstdio>
+#include <QCoreApplication>
 
 namespace miacode::runtime::shared {
 
@@ -387,10 +387,10 @@ QString previewSkinDisplayName(const QString& directoryName)
 {
     const QString normalized = normalizePreviewSkinDirectoryName(directoryName);
     if (normalized.compare(standardPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
-        return UiText::text(QStringLiteral("dialog.render_settings.video.skin.standard"));
+        return qtTrId("dialog.render_settings.video.skin.standard");
     }
     if (normalized.compare(dxPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
-        return UiText::text(QStringLiteral("dialog.render_settings.video.skin.dx"));
+        return qtTrId("dialog.render_settings.video.skin.dx");
     }
     return normalized;
 }

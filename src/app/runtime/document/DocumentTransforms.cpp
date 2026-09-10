@@ -2,7 +2,6 @@
 #include "runtime/editor/EditorHost.h"
 #include "runtime/Shared.h"
 
-#include "UiText.h"
 #include "common/OperationLog.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"

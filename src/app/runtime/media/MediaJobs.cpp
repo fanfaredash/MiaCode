@@ -1,11 +1,10 @@
-#include "app/v2/UiRequestService.h"
+#include "app/services/UiRequestService.h"
 #include "runtime/media/MediaJobsHost.h"
 #include "runtime/Shared.h"
 #include "runtime/shell/ShellHost.h"
 
 #include "AppVersion.h"
 #include "QtPreviewSfxRuntime.h"
-#include "UiText.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
 #include "common/Id3TagReader.h"
@@ -132,16 +131,16 @@ void miacode::runtime::MediaJobsHost::showMediaOperationCompleteDialog(
     const QString& summary,
     const QString& producedFilePath)
 {
-    miacode::v2::UiRequestService* const requests = session_.uiRequestService();
+    miacode::UiRequestService* const requests = session_.uiRequestService();
     if (requests == nullptr) {
         return;
     }
     requests->requestNoticeAction(
-        miacode::v2::NoticeSeverity::Information,
+        miacode::NoticeSeverity::Information,
         title,
         summary,
         QDir::toNativeSeparators(producedFilePath),
-        UiText::text(QStringLiteral("dialogs.open_folder")),
+        qtTrId("dialogs.open_folder"),
         [producedFilePath](bool openFolder) {
             if (!openFolder) {
                 return;

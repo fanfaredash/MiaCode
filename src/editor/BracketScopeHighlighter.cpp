@@ -1,5 +1,5 @@
 #include "BracketScopeHighlighter.h"
-#include "UiTheme.h"
+#include "theme/UiTheme.h"
 
 #include <QColor>
 #include <QTextBlock>

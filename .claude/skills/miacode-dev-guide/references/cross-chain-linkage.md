@@ -13,7 +13,7 @@
 | 导出选项与素材 | QML session / preferences → runtime export snapshot → `src/tools/video_export/VideoExportSnapshot.cpp` 序列化 → worker task；预览、视频及封面检查适用的同一设置 |
 | 文件、媒体与资源解析 | `src/common/AssetPaths.h`、`src/common/ChartAssetPaths.h`、ChartMediaService ↔ 预览/导出/导入/打包 |
 
-谱面信息保存由 `QmlDocumentModel::publishWorkspaceCommit` 通过单次事件定时器合并字段修改，
+谱面信息保存由 `DocumentModel::publishWorkspaceCommit` 通过单次事件定时器合并字段修改，
 调用 `ChartWorkspaceFileService::save(ChartWorkspace::MetadataSection)`。全局字段、难度等级与七个谱师
 槽位进入自动保存范围；难度正文保留独立保存状态。元数据页支持其他 `&` 字段编辑、音频标签读取、
 封面提取、背景媒体导入和 PV 移除。离开文档前提交输入框内容，写入失败保留修改并报告错误。

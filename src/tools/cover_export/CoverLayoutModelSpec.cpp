@@ -2,7 +2,7 @@
 #include "tools/cover_export/CoverCompositionPersistenceGuard.h"
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/CoverFrameExportPlan.h"
-#include "app/ui/UiText.h"
+#include "app/ui/preferences/PreferenceDocument.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -531,7 +531,7 @@ int main(int argc, char** argv)
     QStandardPaths::setTestModeEnabled(true);
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("MiaCodeCoverLayoutModelSpec"));
-    QFile::remove(UiText::preferencesFilePath());
+    QFile::remove(PreferenceDocument::preferencesFilePath());
     QTextStream err(stderr);
     if (!testCompositionPersistenceLifecycle(err)) return 1;
     if (!testMultiFrameModel(err)) return 1;
@@ -548,6 +548,6 @@ int main(int argc, char** argv)
     if (!testExportPlanPreservesFrameTimes(err)) return 1;
     if (!testCoverPresetPersistence(err)) return 1;
     if (!testOutputDirectoryRoundTrip(err)) return 1;
-    QFile::remove(UiText::preferencesFilePath());
+    QFile::remove(PreferenceDocument::preferencesFilePath());
     return 0;
 }

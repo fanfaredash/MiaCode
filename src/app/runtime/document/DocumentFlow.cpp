@@ -1,5 +1,5 @@
 ﻿#include "runtime/document/DocumentSessionHost.h"
-#include "app/v2/UiRequestService.h"
+#include "app/services/UiRequestService.h"
 #include "runtime/Shared.h"
 #include "runtime/export/VideoExportHost.h"
 #include "runtime/shell/ShellHost.h"
@@ -7,7 +7,6 @@
 #include "BracketScopeHighlighter.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -140,8 +139,8 @@ bool Session::openFileAtPath(const QString& path, bool showErrors)
 // of which the v2 shell reaches, so what it has to say goes to the shell.
 void Session::postShellNotice(const QString& title, const QString& text)
 {
-    if (miacode::v2::UiRequestService* const requests = uiRequestService()) {
-        requests->postNotice(miacode::v2::NoticeSeverity::Warning, title, text);
+    if (miacode::UiRequestService* const requests = uiRequestService()) {
+        requests->postNotice(miacode::NoticeSeverity::Warning, title, text);
     }
 }
 
@@ -163,8 +162,8 @@ bool Session::openStartupTarget(const QString& path)
         applicationServices_.workspace().openSource(SimaiDocument::createEmpty().toText());
         loadDocument();
         postShellNotice(
-            UiText::text(QStringLiteral("dialog.open_startup_folder.missing_maidata.title")),
-            UiText::text(QStringLiteral("dialog.open_startup_folder.missing_maidata.message"))
+            qtTrId("dialog.open_startup_folder.missing_maidata.title"),
+            qtTrId("dialog.open_startup_folder.missing_maidata.message")
                 .arg(QDir::toNativeSeparators(info.absoluteFilePath()))
         );
         return false;
@@ -175,8 +174,8 @@ bool Session::openStartupTarget(const QString& path)
     }
 
     postShellNotice(
-        UiText::text(QStringLiteral("dialog.open_startup_target.missing.title")),
-        UiText::text(QStringLiteral("dialog.open_startup_target.missing.message"))
+        qtTrId("dialog.open_startup_target.missing.title"),
+        qtTrId("dialog.open_startup_target.missing.message")
             .arg(QDir::toNativeSeparators(normalizedPath))
     );
     return false;
@@ -249,7 +248,7 @@ bool Session::saveToPath(const QString& path)
 void Session::handleAudioDrop(const QStringList& audioPaths,
                                  quint64 requestId,
                                  quint64 generation,
-                                 miacode::v2::ChartDropImportService::Completion completion)
+                                 miacode::ChartDropImportService::Completion completion)
 {
     if (documents_ == nullptr || chartDropImportService_ == nullptr) {
         if (completion) {

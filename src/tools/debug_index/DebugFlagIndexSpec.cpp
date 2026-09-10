@@ -100,7 +100,7 @@ const QSet<QString> kSourcePreprocessorMacros = {
     // Per-field static assertion generator in PlaybackStorageBoundarySpec.cpp.
     // Stage 4.9e-4.
     QStringLiteral("MIACODE_PLAYBACK_STORAGE_MOVED"),
-    // Setter-boilerplate generator in qml_ui/TimelineThemeBridge.cpp.
+    // Setter-boilerplate generator in ui/TimelineThemeBridge.cpp.
     QStringLiteral("MIACODE_TIMELINE_THEME_SETTER"),
 };
 

@@ -1,0 +1,580 @@
+#include "ChartWorkspace.h"
+
+#include "core/chart/document/SimaiTimingMetadata.h"
+
+#include <QHash>
+#include <QRegularExpression>
+
+#include <utility>
+
+namespace miacode {
+namespace {
+
+struct SourceFieldSpan {
+    int valueLine = 1;
+    int valueColumn = 1;
+};
+
+struct EffectiveSourceSpans {
+    QHash<int, SourceFieldSpan> inote;
+    QHash<int, SourceFieldSpan> level;
+
+    SourceFieldSpan forDifficulty(int difficultyId) const
+    {
+        return inote.contains(difficultyId)
+            ? inote.value(difficultyId) : level.value(difficultyId);
+    }
+};
+
+EffectiveSourceSpans effectiveSourceSpans(const QString& source)
+{
+    EffectiveSourceSpans spans;
+    const QRegularExpression header(QStringLiteral(R"((?m)^[^\S\r\n]*&(inote|lv)_(\d+)=)"));
+    QRegularExpressionMatchIterator fields = header.globalMatch(source);
+    while (fields.hasNext()) {
+        const QRegularExpressionMatch match = fields.next();
+        bool idOk = false;
+        const int id = match.captured(2).toInt(&idOk);
+        if (!idOk) continue;
+        const int valueStart = match.capturedEnd(0);
+        const int line = source.left(valueStart).count(QLatin1Char('\n')) + 1;
+        const int lastNewline = source.lastIndexOf(QLatin1Char('\n'), valueStart - 1);
+        const SourceFieldSpan span{line, valueStart - lastNewline};
+        if (match.captured(1) == QLatin1String("inote")) {
+            spans.inote.insert(id, span);
+        } else {
+            spans.level.insert(id, span);
+        }
+    }
+    return spans;
+}
+
+// Same fallback order as MainWindow::activateInitialField: last-opened if it
+// still exists, otherwise Master → Re:Master → Expert → Utage → Advanced →
+// Basic → Easy. Empty or invalid inote slots are still difficulties; picking
+// the smallest id would land the editor on a blank Basic in a Master chart.
+int resolveOpenDifficultyId(const SimaiDocument& document, int requested)
+{
+    if (document.difficulty(requested) != nullptr) {
+        return requested;
+    }
+    const QVector<int> ids = document.difficultyIds();
+    if (ids.isEmpty()) {
+        return 0;
+    }
+    static const int kPreferredOrder[] = {5, 6, 4, 7, 3, 2, 1};
+    for (int id : kPreferredOrder) {
+        if (ids.contains(id)) {
+            return id;
+        }
+    }
+    return ids.constFirst();
+}
+
+}  // namespace
+
+ChartWorkspace::ChartWorkspace(QObject* parent)
+    : QObject(parent)
+{
+}
+
+ChartWorkspacePreflightResult ChartWorkspace::preflightSource(
+    const QString& source, SimaiNativeValidationLocale locale)
+{
+    ChartWorkspacePreflightResult result;
+    result.candidate = SimaiDocument::fromText(source);
+    const miacode::simai::SimaiTimingMetadata timing =
+        miacode::simai::buildTimingMetadata(result.candidate);
+    const EffectiveSourceSpans spans = effectiveSourceSpans(source);
+
+    result.accepted = true;
+    for (const int difficultyId : result.candidate.difficultyIds()) {
+        const SimaiDifficultyData* difficulty = result.candidate.difficulty(difficultyId);
+        if (difficulty == nullptr) continue;
+        const SimaiNativeValidationReport report = SimaiNativeParser::buildValidationReport(
+            difficulty->chart, locale, nullptr, timing);
+        const SourceFieldSpan span = spans.forDifficulty(difficultyId);
+        for (const SimaiNativeValidationIssue& issue : report.issues) {
+            const int line = span.valueLine + issue.line - 1;
+            const int column = issue.line == 1 ? span.valueColumn + issue.col - 1 : issue.col;
+            const int endColumn = issue.line == 1
+                ? span.valueColumn + issue.endCol - 1 : issue.endCol;
+            result.issues.append({line, column, endColumn,
+                issue.severity == SimaiNativeValidationSeverity::Warning
+                    ? ChartWorkspaceIssueSeverity::Warning : ChartWorkspaceIssueSeverity::Error,
+                issue.displayMessage});
+        }
+        result.accepted = result.accepted && report.errorCount == 0;
+    }
+    return result;
+}
+
+ChartWorkspaceResult ChartWorkspace::openSource(
+    const QString& source, const QString& filePath, int preferredDifficultyId)
+{
+    const ChartWorkspacePreflightResult preflight =
+        preflightSource(source, SimaiNativeValidationLocale::English);
+    // Maidata field parse is the open gate. Chart-body diagnostics (empty
+    // inote, unmatched brackets, unknown tokens) stay on the result for the
+    // validation panel; they must not refuse the file. v1 loadDocument uses
+    // SimaiDocument::fromText the same way.
+    document_ = preflight.candidate;
+    const int requestedDifficulty = preferredDifficultyId > 0
+        ? preferredDifficultyId : activeDifficultyId_;
+    activeDifficultyId_ = resolveOpenDifficultyId(document_, requestedDifficulty);
+    filePath_ = filePath;
+    hasDocument_ = true;
+    // A new document arrives with the mode off. Whether the project's stored
+    // preference may turn it back on is the application layer's decision, and
+    // it is made without writing a single byte into the document.
+    unifiedDesignerEnabled_ = false;
+    sourceText_ = document_.toText();
+    savedSourceText_ = sourceText_;
+    savedDocument_ = document_;
+    dirty_ = false;
+    ChartWorkspaceResult result = commit();
+    result.issues = preflight.issues;
+    return result;
+}
+
+ChartWorkspaceResult ChartWorkspace::replaceSource(const QString& source)
+{
+    if (!hasDocument_) return reject();
+    const ChartWorkspacePreflightResult preflight =
+        preflightSource(source, SimaiNativeValidationLocale::English);
+    if (!preflight.accepted) return reject(preflight.issues);
+
+    const QString canonicalSource = preflight.candidate.toText();
+    if (canonicalSource == sourceText_) return acceptWithoutChange();
+
+    const int previousDifficulty = activeDifficultyId_;
+    document_ = preflight.candidate;
+    activeDifficultyId_ = document_.difficulty(previousDifficulty) != nullptr
+        ? previousDifficulty : resolveOpenDifficultyId(document_, 0);
+    refreshSourceAndDirty();
+    return commit();
+}
+
+ChartWorkspaceResult ChartWorkspace::replaceActiveDifficultyChart(const QString& chartText)
+{
+    if (!hasDocument_) return reject();
+    SimaiDifficultyData* difficulty = document_.difficulty(activeDifficultyId_);
+    if (difficulty == nullptr) return reject();
+    if (difficulty->chart == chartText) return acceptWithoutChange();
+
+    // A visible source editor must be able to publish incomplete tokens while
+    // the user is typing. Strict validation belongs to the complete-source
+    // replacement transaction above, not this incremental text transaction.
+    difficulty->chart = chartText;
+    refreshSourceAndDirty();
+    return commit();
+}
+
+bool ChartWorkspace::updateDocumentField(
+    ChartWorkspaceDocumentField field, const QString& value)
+{
+    if (!hasDocument_) return false;
+    if (field == ChartWorkspaceDocumentField::Designer && unifiedDesignerEnabled_) {
+        return unifyDesigners(value);
+    }
+    bool changed = false;
+    switch (field) {
+    case ChartWorkspaceDocumentField::Title:
+        changed = document_.title != value;
+        document_.title = value;
+        break;
+    case ChartWorkspaceDocumentField::Artist:
+        changed = document_.artist != value;
+        document_.artist = value;
+        break;
+    case ChartWorkspaceDocumentField::First:
+        changed = document_.first != value;
+        document_.first = value;
+        break;
+    case ChartWorkspaceDocumentField::Designer:
+        changed = document_.designer != value;
+        document_.designer = value;
+        break;
+    case ChartWorkspaceDocumentField::VideoPath:
+        changed = document_.videoPath != value;
+        document_.videoPath = value;
+        break;
+    }
+    if (!changed) return false;
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+ChartWorkspaceResult ChartWorkspace::replaceExtraFields(const QString& value)
+{
+    return replaceExtraFields(value, QString());
+}
+
+ChartWorkspaceResult ChartWorkspace::replaceExtraFields(
+    const QString& value, const QString& clockCount)
+{
+    if (!hasDocument_) return reject();
+
+    const QVector<SimaiPropertyIssue> propertyIssues =
+        SimaiDocument::invalidPropertyLineNumbers(value);
+    if (!propertyIssues.isEmpty()) {
+        QVector<ChartWorkspaceIssue> issues;
+        issues.reserve(propertyIssues.size());
+        for (const SimaiPropertyIssue& issue : propertyIssues) {
+            issues.append({issue.line, issue.column, issue.endColumn,
+                ChartWorkspaceIssueSeverity::Error,
+                QStringLiteral("Expected an extra field in the form &key=value."),
+                issue.code});
+        }
+        return reject(issues);
+    }
+
+    QVector<SimaiRawField> fields = SimaiDocument::parseUnmanagedFields(value, true);
+    if (!clockCount.isNull()) {
+        fields.append({QStringLiteral("clock_count"), clockCount});
+    }
+    SimaiDocument::ensureDefaultClockCount(&fields);
+    if (fields == document_.extraFields) return acceptWithoutChange();
+    document_.extraFields = std::move(fields);
+    refreshSourceAndDirty();
+    return commit();
+}
+
+bool ChartWorkspace::updateDifficultyField(
+    int difficultyId, ChartWorkspaceDifficultyField field, const QString& value)
+{
+    if (!hasDocument_) return false;
+    SimaiDifficultyData* difficulty = document_.difficulty(difficultyId);
+    if (difficulty == nullptr) return false;
+    if (field == ChartWorkspaceDifficultyField::Designer && unifiedDesignerEnabled_) {
+        return unifyDesigners(value);
+    }
+    switch (field) {
+    case ChartWorkspaceDifficultyField::Level:
+        if (difficulty->level == value) return false;
+        difficulty->level = value;
+        break;
+    case ChartWorkspaceDifficultyField::Designer:
+        if (difficulty->designer == value) return false;
+        difficulty->designer = value;
+        break;
+    }
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::selectDifficulty(int difficultyId)
+{
+    if (!hasDocument_ || activeDifficultyId_ == difficultyId
+        || document_.difficulty(difficultyId) == nullptr) {
+        return false;
+    }
+    activeDifficultyId_ = difficultyId;
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::addDifficulty(int difficultyId)
+{
+    if (!hasDocument_ || !SimaiDocument::isDifficultyId(difficultyId)
+        || document_.difficulty(difficultyId) != nullptr) {
+        return false;
+    }
+    // Read the slot's chart-less &des_N before materializing the difficulty:
+    // once difficulties_ owns the id, toText() stops emitting the standalone
+    // record, so an unadopted name would silently vanish from the file.
+    const QString recordedDesigner = document_.designerForSlot(difficultyId);
+    SimaiDifficultyData& created = document_.ensureDifficulty(difficultyId);
+    // Under the unified mode a new difficulty joins the shared name at birth.
+    // The broadcast only fires on an edit, so without this seed the difficulty
+    // would sit blank until the next designer edit — the v1 gap this replaces.
+    created.designer = unifiedDesignerEnabled_ ? document_.designer : recordedDesigner;
+    activeDifficultyId_ = difficultyId;
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::removeDifficulty(int difficultyId)
+{
+    if (!hasDocument_ || document_.difficulty(difficultyId) == nullptr) return false;
+    document_.removeDifficulty(difficultyId);
+    if (activeDifficultyId_ == difficultyId) {
+        activeDifficultyId_ = resolveOpenDifficultyId(document_, 0);
+    }
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::unifyDesigners(const QString& canonicalName)
+{
+    if (!hasDocument_) return false;
+    bool changed = document_.designer != canonicalName;
+    document_.designer = canonicalName;
+    const QVector<QPair<int, QString>> designerSlots = document_.perDifficultyDesigners();
+    for (const QPair<int, QString>& slot : designerSlots) {
+        if (slot.second == canonicalName) continue;
+        document_.setDesignerForSlot(slot.first, canonicalName);
+        changed = true;
+    }
+    if (!changed) return false;
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::setUnifiedDesignerEnabled(bool enabled)
+{
+    if (unifiedDesignerEnabled_ == enabled) return false;
+    unifiedDesignerEnabled_ = enabled;
+    // Mode only: no document field moves here, so dirty state must not move
+    // either. The commit exists so the shell can repaint the checkbox.
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::setDesignerForSlot(int difficultyId, const QString& name)
+{
+    if (!hasDocument_ || !SimaiDocument::isDifficultyId(difficultyId)) return false;
+    if (unifiedDesignerEnabled_) return unifyDesigners(name);
+    if (document_.designerForSlot(difficultyId) == name) return false;
+    document_.setDesignerForSlot(difficultyId, name);
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::upsertExtraField(const QString& key, const QString& value)
+{
+    if (!hasDocument_ || key.trimmed().isEmpty()) return false;
+    QVector<SimaiRawField> fields = document_.extraFields;
+    bool found = false;
+    for (SimaiRawField& field : fields) {
+        if (field.key.compare(key, Qt::CaseInsensitive) != 0) continue;
+        if (field.value == value) return false;
+        field.value = value;
+        found = true;
+        break;
+    }
+    if (!found) {
+        fields.append({key, value});
+    }
+    SimaiDocument::ensureDefaultClockCount(&fields);
+    if (fields == document_.extraFields) return false;
+    document_.extraFields = std::move(fields);
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::replaceDifficultyChart(int difficultyId, const QString& chartText)
+{
+    if (!hasDocument_) return false;
+    SimaiDifficultyData* difficulty = document_.difficulty(difficultyId);
+    if (difficulty == nullptr) return false;
+    if (difficulty->chart == chartText) return false;
+    difficulty->chart = chartText;
+    refreshSourceAndDirty();
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::markSaved(const QString& filePath)
+{
+    if (!hasDocument_) return false;
+    const QString nextFilePath = filePath.isEmpty() ? filePath_ : filePath;
+    if (!dirty_ && filePath_ == nextFilePath) return false;
+    savedSourceText_ = sourceText_;
+    savedDocument_ = document_;
+    dirty_ = false;
+    filePath_ = nextFilePath;
+    commit();
+    return true;
+}
+
+ChartWorkspaceResult ChartWorkspace::closeDocument()
+{
+    if (!hasDocument_) return acceptWithoutChange();
+    document_ = SimaiDocument();
+    savedDocument_ = SimaiDocument();
+    sourceText_.clear();
+    savedSourceText_.clear();
+    filePath_.clear();
+    activeDifficultyId_ = 0;
+    hasDocument_ = false;
+    dirty_ = false;
+    unifiedDesignerEnabled_ = false;
+    return commit();
+}
+
+ChartWorkspaceResult ChartWorkspace::revertDifficultyChart(int difficultyId)
+{
+    if (!hasDocument_) return reject();
+    if (difficultyId <= 0) {
+        if (sourceText_ == savedSourceText_) return acceptWithoutChange();
+        document_ = savedDocument_;
+        activeDifficultyId_ = resolveOpenDifficultyId(document_, activeDifficultyId_);
+        refreshSourceAndDirty();
+        return commit();
+    }
+    SimaiDifficultyData* difficulty = document_.difficulty(difficultyId);
+    const SimaiDifficultyData* saved = savedDocument_.difficulty(difficultyId);
+    if (difficulty == nullptr) return reject();
+
+    if (saved == nullptr) {
+        // The current difficulty was added after the save point. Restore a
+        // possible chart-less designer slot from that save point before
+        // removing the materialized difficulty, otherwise discard would
+        // silently lose a standalone &des_N record.
+        document_.removeDifficulty(difficultyId);
+        document_.setDesignerForSlot(
+            difficultyId, savedDocument_.designerForSlot(difficultyId));
+        activeDifficultyId_ = resolveOpenDifficultyId(document_, activeDifficultyId_);
+    } else if (difficulty->chart == saved->chart) {
+        return acceptWithoutChange();
+    } else {
+        difficulty->chart = saved->chart;
+    }
+    refreshSourceAndDirty();
+    return commit();
+}
+
+bool ChartWorkspace::rebindSavePoint(const QString& savedSourceText)
+{
+    if (!hasDocument_) return false;
+    savedSourceText_ = savedSourceText;
+    savedDocument_ = SimaiDocument::fromText(savedSourceText);
+    dirty_ = sourceText_ != savedSourceText_;
+    commit();
+    return true;
+}
+
+QVector<int> ChartWorkspace::computeDirtyDifficultyIds() const
+{
+    QVector<int> ids;
+    if (!hasDocument_) return ids;
+    for (const int id : document_.difficultyIds()) {
+        const SimaiDifficultyData* current = document_.difficulty(id);
+        const SimaiDifficultyData* saved = savedDocument_.difficulty(id);
+        if (current == nullptr) continue;
+        if (saved == nullptr || saved->chart != current->chart) {
+            ids.append(id);
+        }
+    }
+    return ids;
+}
+
+QString ChartWorkspace::textForSectionSave(int difficultyId) const
+{
+    if (!hasDocument_) return QString();
+    return documentForSectionSave(difficultyId).toText();
+}
+
+SimaiDocument ChartWorkspace::documentForSectionSave(int difficultyId) const
+{
+    if (difficultyId == 0) return document_;
+    SimaiDocument merged = savedDocument_;
+    if (difficultyId == MetadataSection) {
+        merged.title = document_.title;
+        merged.artist = document_.artist;
+        merged.first = document_.first;
+        merged.designer = document_.designer;
+        merged.videoPath = document_.videoPath;
+        merged.extraFields = document_.extraFields;
+        for (int id = 1; id <= 7; ++id) {
+            const auto* current = document_.difficulty(id);
+            const auto* saved = savedDocument_.difficulty(id);
+            if (current == nullptr && saved != nullptr)
+                continue;
+            if (current != nullptr && (saved != nullptr || !current->level.isEmpty()))
+                merged.ensureDifficulty(id).level = current->level;
+            merged.setDesignerForSlot(id, document_.designerForSlot(id));
+        }
+        return merged;
+    }
+    const SimaiDifficultyData* current = document_.difficulty(difficultyId);
+    if (current == nullptr) return merged;
+    // ensureDifficulty, not difficulty(): a difficulty created since the save
+    // point has nothing on disk yet, and saving it must add it rather than
+    // silently drop the work.
+    merged.ensureDifficulty(difficultyId) = *current;
+    const auto* saved = savedDocument_.difficulty(difficultyId);
+    merged.difficulty(difficultyId)->level = saved != nullptr ? saved->level : QString();
+    merged.difficulty(difficultyId)->designer = savedDocument_.designerForSlot(difficultyId);
+    return merged;
+}
+
+bool ChartWorkspace::markSectionSaved(int difficultyId, const QString& filePath)
+{
+    if (!hasDocument_) return false;
+    const QString nextFilePath = filePath.isEmpty() ? filePath_ : filePath;
+    if (difficultyId == 0) return markSaved(nextFilePath);
+
+    if (difficultyId != MetadataSection && document_.difficulty(difficultyId) == nullptr) return false;
+    savedDocument_ = documentForSectionSave(difficultyId);
+    savedSourceText_ = savedDocument_.toText();
+    filePath_ = nextFilePath;
+    // The document as a whole can still differ: other sections keep whatever
+    // they had, saved or not.
+    dirty_ = sourceText_ != savedSourceText_;
+    commit();
+    return true;
+}
+
+bool ChartWorkspace::metadataDirty() const
+{
+    if (!hasDocument_) return false;
+    if (document_.title != savedDocument_.title || document_.artist != savedDocument_.artist
+        || document_.first != savedDocument_.first || document_.designer != savedDocument_.designer
+        || document_.videoPath != savedDocument_.videoPath || document_.extraFields != savedDocument_.extraFields)
+        return true;
+    for (int id = 1; id <= 7; ++id) {
+        const auto* current = document_.difficulty(id);
+        const auto* saved = savedDocument_.difficulty(id);
+        if (current == nullptr && saved != nullptr)
+            continue;
+        if (current != nullptr && current->level != (saved != nullptr ? saved->level : QString()))
+            return true;
+        if (document_.designerForSlot(id) != savedDocument_.designerForSlot(id)) return true;
+    }
+    return false;
+}
+
+ChartWorkspaceSnapshot ChartWorkspace::snapshot() const
+{
+    return {sourceText_, filePath_, activeDifficultyId_, revision_, dirty_, hasDocument_,
+            computeDirtyDifficultyIds()};
+}
+
+const SimaiDocument& ChartWorkspace::document() const
+{
+    return document_;
+}
+
+ChartWorkspaceResult ChartWorkspace::reject(const QVector<ChartWorkspaceIssue>& issues) const
+{
+    return {false, revision_, issues};
+}
+
+ChartWorkspaceResult ChartWorkspace::commit()
+{
+    ++revision_;
+    emit changed(revision_);
+    return {true, revision_, {}};
+}
+
+ChartWorkspaceResult ChartWorkspace::acceptWithoutChange() const
+{
+    return {true, revision_, {}};
+}
+
+void ChartWorkspace::refreshSourceAndDirty()
+{
+    sourceText_ = document_.toText();
+    dirty_ = sourceText_ != savedSourceText_;
+}
+
+}  // namespace miacode

@@ -8,7 +8,7 @@
 #include <QtGlobal>
 
 #include "SimaiNativeParser.h"
-#include "WindowParityMetrics.h"
+#include "chrome/WindowParityMetrics.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "runtime/RuntimeContext.h"
@@ -16,7 +16,7 @@
 class QFileInfo;
 class QObject;
 
-namespace miacode::v2 {
+namespace miacode {
 class ShellNotifications;
 }
 
@@ -105,7 +105,7 @@ inline void writePreviewPauseSecond(
 // here.
 void writePreviewPlayingFlag(
     RuntimeContext::PlaybackState& state,
-    miacode::v2::ShellNotifications& notifications,
+    miacode::ShellNotifications& notifications,
     bool playing);
 
 inline constexpr int kEmbeddedPreviewPanelMinWidth = miacode::window_parity::kEmbeddedPreviewPanelMinWidth;

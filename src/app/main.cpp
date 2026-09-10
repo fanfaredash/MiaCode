@@ -1,6 +1,7 @@
 #include "AppVersion.h"
-#include "qml_ui/QmlUiBootstrap.h"
-#include "UiText.h"
+#include "ui/Bootstrap.h"
+#include "preferences/PreferenceDocument.h"
+#include "preferences/LocaleService.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
@@ -518,7 +519,7 @@ int main(int argc, char* argv[])
 
     {
         QStringList cjkUiFamilies;
-        const QString uiLanguageToken = UiText::resolvedLanguageToken();
+        const QString uiLanguageToken = PreferenceDocument::resolvedLanguageToken();
         if (uiLanguageToken.startsWith(QStringLiteral("zh"))) {
             cjkUiFamilies = QStringList{"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC"};
         } else if (uiLanguageToken.startsWith(QStringLiteral("ja"))) {
@@ -542,6 +543,9 @@ int main(int argc, char* argv[])
         }
     }
     logStartupStage("ui_font_ready");
+
+    miacode::LocaleService::instance().applyResolvedLanguage();
+    logStartupStage("ui_locale_ready");
 
     if (cliVideoExportWorkerRequested) {
         QString cliError;
@@ -624,8 +628,8 @@ int main(int argc, char* argv[])
 #endif
         // Scope the bootstrap so it is destroyed before the teardown timing below.
         {
-            QmlUiBootstrap qmlUiBootstrap(appIcon);
-            if (!qmlUiBootstrap.start(startupOpenTarget)) {
+            miacode::ui::Bootstrap uiBootstrap(appIcon);
+            if (!uiBootstrap.start(startupOpenTarget)) {
 #ifdef Q_OS_WIN
                 miacode::oplog::appendStartupBeaconLine("phase=qml_ui_bootstrap_failed");
 #endif

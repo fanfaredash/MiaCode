@@ -34,7 +34,7 @@ lifecycle: stable-current
 owner: src/app
 canonical_id: ui.runtime-ownership
 last_verified: 2026-09-06
-code_anchors: ["src/app/v2/ApplicationServices.h", "src/app/runtime/Session.h"]
+code_anchors: ["src/app/services/ApplicationServices.h", "src/app/runtime/Session.h"]
 ---
 ```
 

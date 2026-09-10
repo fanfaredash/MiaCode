@@ -211,6 +211,7 @@ struct MuriAnalysisReport {
 
 QString makeMarkerAnalysisKey(const TimelineNoteMarker& marker);
 QString muriKindDisplayName(MuriKind kind, bool chineseUi);
+QString muriKindText(MuriKind kind);
 QString muriAlertLevelDisplayName(MuriAlertLevel level, bool chineseUi);
 QString muriDetailKindKey(MuriDetailKind kind);
 QString renderMuriDetail(

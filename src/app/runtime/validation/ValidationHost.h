@@ -2,11 +2,11 @@
 
 #include "runtime/Session.h"
 
-#include "app/v2/PlaybackValidationPort.h"
+#include "app/services/PlaybackValidationPort.h"
 
 namespace miacode::runtime {
 
-class ValidationHost final : public miacode::v2::PlaybackValidationPort {
+class ValidationHost final : public miacode::PlaybackValidationPort {
 public:
     ValidationHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 

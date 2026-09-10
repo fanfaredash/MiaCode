@@ -23,7 +23,7 @@ bool miacode::runtime::DocumentSessionHost::applyDocumentDesignerSlots(
 {
     MC_OP("miacode::runtime::DocumentSessionHost::applyDocumentDesignerSlots");
     _mc_op_.note(QStringLiteral("slots=%1 unified=%2").arg(slotValues.size()).arg(unified ? 1 : 0));
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::ChartWorkspace& workspace = session_.applicationServices_.workspace();
     if (!workspace.snapshot().hasDocument) {
         return false;
     }
@@ -62,13 +62,13 @@ bool miacode::runtime::DocumentSessionHost::applyDocumentDesignerSlots(
 // writer (applyDocumentDesignerSlots, above) stays above this line, which is
 // also how QmlDocumentLifecycleContractSpec states the rule.
 void miacode::runtime::DocumentSessionHost::reconcileUnifiedDocumentDesigner(
-    miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason reason)
+    miacode::DocumentBridge::UnifiedDesignerReconcileReason reason)
 {
-    if (reason == miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason::SourceReplaced) {
+    if (reason == miacode::DocumentBridge::UnifiedDesignerReconcileReason::SourceReplaced) {
         demoteUnifiedDesignerAfterSourceReplacement();
         return;
     }
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::ChartWorkspace& workspace = session_.applicationServices_.workspace();
     // A pending choice belonged to the document that just went away.
     state_.pendingUnifiedDesignerPreferenceValid_ = false;
     workspace.setUnifiedDesignerEnabled(false);
@@ -106,7 +106,7 @@ void miacode::runtime::DocumentSessionHost::reconcileUnifiedDocumentDesigner(
 
 void miacode::runtime::DocumentSessionHost::demoteUnifiedDesignerAfterSourceReplacement()
 {
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::ChartWorkspace& workspace = session_.applicationServices_.workspace();
     if (!workspace.unifiedDesignerEnabled()
         || workspace.document().isUnifiedDesignerTriviallySafe()) {
         return;

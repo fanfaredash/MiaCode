@@ -19,11 +19,11 @@ bool PlaybackPreviewSurfaceAdapter::playing() const
     return coordinator_ != nullptr && coordinator_->playing();
 }
 
-miacode::v2::PlaybackTransportState PlaybackPreviewSurfaceAdapter::playbackTransportState() const
+miacode::PlaybackTransportState PlaybackPreviewSurfaceAdapter::playbackTransportState() const
 {
     return coordinator_ != nullptr
         ? coordinator_->playbackTransportState()
-        : miacode::v2::PlaybackTransportState::Stopped;
+        : miacode::PlaybackTransportState::Stopped;
 }
 
 double PlaybackPreviewSurfaceAdapter::positionSeconds() const

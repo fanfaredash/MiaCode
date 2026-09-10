@@ -2,7 +2,7 @@
 
 #include "LatencyTestChartBuilder.h"
 
-#include "app/v2/PlaybackStateAuthority.h"
+#include "app/services/PlaybackStateAuthority.h"
 #include "common/ChartClockCount.h"
 #include "runtime/Session.h"
 #include "runtime/Shared.h"

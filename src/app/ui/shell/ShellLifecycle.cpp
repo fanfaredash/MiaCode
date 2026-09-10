@@ -1,0 +1,55 @@
+#include "shell/ShellLifecycle.h"
+
+#include "common/DebugLog.h"
+
+namespace miacode::ui {
+
+namespace {
+void appendLifecycleLog(const QString& action, const QString& payload = QString())
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/shell_lifecycle"),
+        payload.isEmpty() ? action : QStringLiteral("%1 %2").arg(action, payload),
+        true);
+}
+}  // namespace
+
+ShellLifecycle::ShellLifecycle(miacode::EditorPageRouter*& routerSlot,
+                                     QObject* parent)
+    : QObject(parent)
+    , routerSlot_(&routerSlot)
+{
+}
+
+void ShellLifecycle::requestClose()
+{
+    if (closeRequestInFlight_) {
+        // Escape, the title-bar button and ⌘Q can all arrive while the prompt
+        // is up. One question is enough.
+        appendLifecycleLog(QStringLiteral("confirm_close"), QStringLiteral("result=already_asking"));
+        return;
+    }
+    if (router() == nullptr) {
+        appendLifecycleLog(QStringLiteral("confirm_close"), QStringLiteral("result=no_backend"));
+        emit closeDecided(true);
+        return;
+    }
+    closeRequestInFlight_ = true;
+    router()->requestShellClose([this](bool confirmed) {
+        closeRequestInFlight_ = false;
+        appendLifecycleLog(QStringLiteral("confirm_close"),
+                           QStringLiteral("result=%1").arg(confirmed ? "accepted" : "cancelled"));
+        emit closeDecided(confirmed);
+    });
+}
+
+void ShellLifecycle::notifyRootCloseAccepted(const QString& source)
+{
+    const QString normalized =
+        source.trimmed().isEmpty() ? QStringLiteral("qml_root_close") : source.trimmed();
+    appendLifecycleLog(QStringLiteral("root_close_accepted"), QStringLiteral("source=%1").arg(normalized));
+    emit rootCloseAccepted(normalized);
+}
+
+}  // namespace miacode::ui

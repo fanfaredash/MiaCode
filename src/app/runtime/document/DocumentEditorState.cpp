@@ -147,7 +147,7 @@ bool miacode::runtime::DocumentSessionHost::undoDeletedDifficultyField()
     }
 
     session_.stopQtPreviewPlayback(true);
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::ChartWorkspace& workspace = session_.applicationServices_.workspace();
     if (!workspace.addDifficulty(deletedState.difficultyId)) {
         return false;
     }
@@ -155,7 +155,7 @@ bool miacode::runtime::DocumentSessionHost::undoDeletedDifficultyField()
         deletedState.difficultyId, deletedState.difficultyData.chart);
     workspace.updateDifficultyField(
         deletedState.difficultyId,
-        miacode::v2::ChartWorkspaceDifficultyField::Level,
+        miacode::ChartWorkspaceDifficultyField::Level,
         deletedState.difficultyData.level);
     // Under the unified mode the snapshot's designer may be a name the shared
     // one has since moved past. Restoring it verbatim would broadcast that
@@ -165,7 +165,7 @@ bool miacode::runtime::DocumentSessionHost::undoDeletedDifficultyField()
         : deletedState.difficultyData.designer;
     workspace.updateDifficultyField(
         deletedState.difficultyId,
-        miacode::v2::ChartWorkspaceDifficultyField::Designer,
+        miacode::ChartWorkspaceDifficultyField::Designer,
         designer);
     state_.validationCacheByDifficulty_.remove(deletedState.difficultyId);
     state_.documentDirty_ = true;

@@ -1,7 +1,7 @@
 #include "MainEntrypoints.h"
 
 #include "runtime/Session.h"
-#include "app/v2/ApplicationServices.h"
+#include "app/services/ApplicationServices.h"
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
@@ -347,7 +347,7 @@ int runCliVideoExport(QGuiApplication& app, QString* errorMessage)
     // The CLI export path builds the same application services the shell does:
     // they own the document domain and the job/UI boundaries, and the window
     // only borrows them (stage 3.5 item 1).
-    miacode::v2::ApplicationServices applicationServices;
+    miacode::ApplicationServices applicationServices;
     Session window(applicationServices);
     QString resolvedOutputPath;
     QString exportError;

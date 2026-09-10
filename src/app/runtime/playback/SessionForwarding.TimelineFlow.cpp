@@ -15,7 +15,7 @@
 #include "common/ChartClockCount.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/WaveformCache.h"
-#include "app/qml_ui/export/QmlExportSession.h"
+#include "app/ui/export/ExportSession.h"
 
 #include <QtCore>
 
@@ -203,12 +203,12 @@ void Session::handleEditorPointerInteraction(int difficultyId)
     syncEditorCursorToPreviewSecond(qMax(0.0, pauseSecond_), true, false);
 }
 
-miacode::v2::EditorSyncController& Session::editorSyncController()
+miacode::EditorSyncController& Session::editorSyncController()
 {
     return *editorSyncController_;
 }
 
-const miacode::v2::EditorSyncController& Session::editorSyncController() const
+const miacode::EditorSyncController& Session::editorSyncController() const
 {
     return *editorSyncController_;
 }
@@ -266,7 +266,7 @@ void Session::requestSelectionRangeExport(int difficultyId, int selectionStart, 
     if (qmlExportSession_ == nullptr) {
         return;
     }
-    // Stash the range on the export session before asking QmlEditorPageHost to
+    // Stash the range on the export session before asking PageHost to
     // switch pages: seedFromDifficulty() (run on page entry) resets the whole
     // task including the range, so the range must be pending state that is
     // applied after that seed rather than a value set here directly.

@@ -3,6 +3,8 @@
 #include "core/chart/parser/SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
 
+#include <QCoreApplication>
+
 namespace {
 
 struct MuriDetailTemplateRow {
@@ -375,6 +377,23 @@ QString muriKindDisplayName(MuriKind kind, bool chineseUi)
         return chineseUi ? QStringLiteral("多押") : QStringLiteral("Multi-touch");
     }
     return chineseUi ? QStringLiteral("无理") : QStringLiteral("Muri");
+}
+
+QString muriKindText(MuriKind kind)
+{
+    switch (kind) {
+    case MuriKind::SlideTooFast:
+        return qtTrId("validation.muri.kind.slide_too_fast");
+    case MuriKind::SlideHeadTap:
+        return qtTrId("validation.muri.kind.slide_head_tap");
+    case MuriKind::TapOnSlide:
+        return qtTrId("validation.muri.kind.tap_on_slide");
+    case MuriKind::Overlap:
+        return qtTrId("validation.muri.kind.overlap");
+    case MuriKind::MultiTouch:
+        return qtTrId("validation.muri.kind.multi_touch");
+    }
+    return QString();
 }
 
 QString muriDetailKindKey(MuriDetailKind kind)

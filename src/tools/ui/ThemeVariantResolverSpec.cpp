@@ -1,4 +1,4 @@
-#include "app/ui/ThemeVariantResolver.h"
+#include "app/ui/theme/ThemeVariantResolver.h"
 
 #include <QCoreApplication>
 #include <QTextStream>
@@ -15,19 +15,19 @@ bool testDeterministicMappings(QTextStream& out)
 {
     using miacode::ui::ThemeVariant;
     using miacode::ui::ThemeVariantResolver;
-    return require(ThemeVariantResolver::resolve(UiText::ThemePreference::Light, Qt::ColorScheme::Dark)
+    return require(ThemeVariantResolver::resolve(PreferenceDocument::ThemePreference::Light, Qt::ColorScheme::Dark)
                        == ThemeVariant::Light,
                    QStringLiteral("explicit light wins"), out)
-        && require(ThemeVariantResolver::resolve(UiText::ThemePreference::Dark, Qt::ColorScheme::Light)
+        && require(ThemeVariantResolver::resolve(PreferenceDocument::ThemePreference::Dark, Qt::ColorScheme::Light)
                        == ThemeVariant::Dark,
                    QStringLiteral("explicit dark wins"), out)
-        && require(ThemeVariantResolver::resolve(UiText::ThemePreference::System, Qt::ColorScheme::Light)
+        && require(ThemeVariantResolver::resolve(PreferenceDocument::ThemePreference::System, Qt::ColorScheme::Light)
                        == ThemeVariant::Light,
                    QStringLiteral("system light"), out)
-        && require(ThemeVariantResolver::resolve(UiText::ThemePreference::System, Qt::ColorScheme::Dark)
+        && require(ThemeVariantResolver::resolve(PreferenceDocument::ThemePreference::System, Qt::ColorScheme::Dark)
                        == ThemeVariant::Dark,
                    QStringLiteral("system dark"), out)
-        && require(ThemeVariantResolver::resolve(UiText::ThemePreference::System, Qt::ColorScheme::Unknown)
+        && require(ThemeVariantResolver::resolve(PreferenceDocument::ThemePreference::System, Qt::ColorScheme::Unknown)
                        == ThemeVariant::Dark,
                    QStringLiteral("unknown system scheme falls back to dark"), out);
 }
