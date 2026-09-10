@@ -36,6 +36,9 @@ ApplicationWindow {
             value |= Qt.ExpandedClientAreaHint
                     | Qt.NoTitleBarBackgroundHint
         }
+        if (Qt.platform.os === "linux" && window.platform.customTitleBar) {
+            value |= Qt.FramelessWindowHint
+        }
         return value
     }
     title: (mainView.documentSession.dirty ? "* " : "") + Qt.application.name
@@ -212,5 +215,13 @@ ApplicationWindow {
         sourceEditorFocused: window.sourceEditorFocused
         chartCommandsEnabled: window.applicationContext.document.currentDifficultyId > 0
         onChartTransformRequested: opId => mainView.applyChartTransform(opId)
+    }
+
+    Loader {
+        active: Qt.platform.os === "linux" && window.platform.customTitleBar
+        anchors.fill: parent
+        sourceComponent: WindowResizeBorder {
+            hostWindow: window
+        }
     }
 }

@@ -25,7 +25,7 @@ public:
 
     bool customTitleBar() const
     {
-#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
         return true;
 #else
         return false;
@@ -36,7 +36,7 @@ public:
 
     bool captionButtons() const
     {
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
         return true;
 #else
         return false;
