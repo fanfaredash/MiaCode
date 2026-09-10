@@ -219,6 +219,9 @@ void refreshPreviewStageMediaRouteDebugState(RuntimeContext::State& state, bool 
         videoFrameStallCount = state.previewStageMediaHost_->videoFrameStallCount();
         videoFrameStalled = state.previewStageMediaHost_->videoFrameStalled();
     }
+    const QString videoDecodeDesc = state.previewStageMediaHost_ != nullptr
+        ? state.previewStageMediaHost_->videoDecodeDescription()
+        : QString();
     state.scene_->setExternalStageMediaProfileSummary(
         // StageMediaHost::quickShellPreviewUsesSeparateSurface() is a hardcoded
         // `return false;` — folded in here.
@@ -230,7 +233,8 @@ void refreshPreviewStageMediaRouteDebugState(RuntimeContext::State& state, bool 
         videoFrameRate,
         videoFrameIntervalAvgMs,
         videoFrameIntervalMaxMs,
-        videoFrameStallCount
+        videoFrameStallCount,
+        videoDecodeDesc
     );
     state.scene_->setExternalStageMediaDebugState(
         mediaType,

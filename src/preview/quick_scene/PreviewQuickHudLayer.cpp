@@ -820,6 +820,17 @@ void paintPreviewHudOverlay(
                 fpsFont,
                 shadowOffset
             );
+            drawHudText(
+                painter,
+                QStringLiteral("debug.external_video_decode"),
+                QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
+                QStringLiteral("Decode: %1")
+                    .arg(state->media.externalVideoDecodeDesc.trimmed().isEmpty()
+                        ? QStringLiteral("None")
+                        : state->media.externalVideoDecodeDesc),
+                fpsFont,
+                shadowOffset
+            );
             const QString frameAgeText = state->media.externalVideoFrameAgeMs >= 0
                 ? QString::number(state->media.externalVideoFrameAgeMs)
                 : QStringLiteral("na");

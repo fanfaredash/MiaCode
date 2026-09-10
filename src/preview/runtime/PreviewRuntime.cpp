@@ -419,7 +419,8 @@ void PreviewRuntime::setExternalStageMediaProfileSummary(
     double videoFrameRate,
     double videoFrameIntervalAvgMs,
     double videoFrameIntervalMaxMs,
-    qint64 videoFrameStallCount)
+    qint64 videoFrameStallCount,
+    const QString& videoDecodeDesc)
 {
     externalStageMediaSeparateSurfaceActive_ = separateSurfaceActive;
     externalStageMediaHasResolvedMedia_ = hasResolvedMedia;
@@ -432,6 +433,7 @@ void PreviewRuntime::setExternalStageMediaProfileSummary(
     frameState_.media.externalVideoFrameIntervalAvgMs = qMax(0.0, videoFrameIntervalAvgMs);
     frameState_.media.externalVideoFrameIntervalMaxMs = qMax(0.0, videoFrameIntervalMaxMs);
     frameState_.media.externalVideoFrameStallCount = qMax<qint64>(0, videoFrameStallCount);
+    frameState_.media.externalVideoDecodeDesc = videoDecodeDesc;
     publishFrameStateSnapshot();
 }
 

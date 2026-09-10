@@ -154,6 +154,8 @@ public:
     // MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO still wins on top.
     void setVideoDecodePreference(bool preferSoftware);
     bool videoDecodePrefersSoftware() const { return videoDecodePreferSoftware_; }
+    bool videoDecodeUsesSoftware() const;
+    QString videoDecodeDescription() const;
 
 signals:
     void mediaStateChanged();
