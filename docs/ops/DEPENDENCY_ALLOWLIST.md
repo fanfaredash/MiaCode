@@ -39,10 +39,10 @@ Qt 最低版本锁定：`6.8`
 | `Qt6::Quick` | 宿主 | 全平台 | `QQuickWindow`、`src/preview/quick_scene/`、`src/timeline/quick/` | 进程启动 | 链接期；`qml_*_spec` 组 |
 | `Qt6::QuickControls2` | 宿主 | 全平台 | `src/app/ui/` 全部 QML 页面与控件 | 首个 QML 组件实例化 | 链接期；`qml_main_menu_spec` 等 |
 | `Qt6::Multimedia` | 媒体 | 全平台 | `QtPreviewSfxRuntime*`（判定音效）、`QVideoFrame` 桥接 | 预览首次播放 / 首帧解码 | 链接期；`HAVE_QT_MULTIMEDIA=1`；预览手工回归 |
-| `Qt6::MultimediaQuickPrivate` | 媒体 | `WIN32 OR APPLE` | **不由 `src/` 直接使用**；仅供 `third_party/QtAVPlayer` 的 `QT_AVPLAYER_MULTIMEDIA` 桥编译 `QAVVideoFrame -> QVideoFrame` | 背景视频首帧解码 | 链接期；`qtavplayer_platform_spec`；本文「QtAVPlayer 媒体适配层」表 |
-| `${QtAVPlayer_LIBS}` | 媒体 | `WIN32 OR APPLE`（需 `MIACODE_FFMPEG_DEV_DIR`） | `PreviewStageMediaHost*`（PV/BG 解码）、`PreviewSharedD3D11Device`（D3D11VA 共享设备） | 背景视频首帧解码 | `qtavplayer_platform_spec`；macOS 打包契约 |
+| `Qt6::MultimediaQuickPrivate` | 媒体 | `WIN32 OR APPLE OR Linux` | **不由 `src/` 直接使用**；仅供 `third_party/QtAVPlayer` 的 `QT_AVPLAYER_MULTIMEDIA` 桥编译 `QAVVideoFrame -> QVideoFrame` | 背景视频首帧解码 | 链接期；`qtavplayer_platform_spec`；本文「QtAVPlayer 媒体适配层」表 |
+| `${QtAVPlayer_LIBS}` | 媒体 | `WIN32 OR APPLE`（需 `MIACODE_FFMPEG_DEV_DIR`）；Linux 用主机 pkg-config FFmpeg + libva | `PreviewStageMediaHost*`（PV/BG 解码）、`PreviewSharedD3D11Device`（D3D11VA 共享设备） | 背景视频首帧解码 | `qtavplayer_platform_spec`；macOS 打包契约 |
 | `soundtouch` | 媒体 | 全平台 | 变速播放与音频处理（`src/audio/`、`src/tools/media/`） | 首次变速播放 / 音频处理作业 | 链接期；音频手工回归 |
-| `bass` | 媒体 | 全平台（Win: `bass.lib`，macOS: `libbass.dylib`） | `BassPreviewAudioBackend`、`BassExportAudioBackend` | 预览音频后端初始化 | `MIACODE_HAS_BASS_AUDIO=1`；macOS 打包契约校验 dylib 已随包 |
+| `bass` | 媒体 | 全平台（Win: `bass.lib`，macOS: `libbass.dylib`，Linux: `libbass.so`） | `BassPreviewAudioBackend`、`BassExportAudioBackend` | 预览音频后端初始化 | `MIACODE_HAS_BASS_AUDIO=1`；macOS 打包契约校验 dylib 已随包 |
 | `bassmix` | 媒体 | 全平台 | 同上（混音总线） | 同上 | 同上 |
 | `miniz` | 导出 | 全平台 | `ChartZipPackager`（ZIP 打包导出） | 触发 ZIP 导出 | `chart_zip_packager_spec` |
 | `-framework AppKit` | 平台 | `APPLE` | `NativeWindowThemeMac.mm`、`WindowChrome.mm`（原生标题栏/外观） | 根窗口创建 | 链接期；macOS 冷启动走查 |

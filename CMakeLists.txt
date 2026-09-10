@@ -108,9 +108,9 @@ endif()
 
 # MultimediaQuickPrivate exposes the private QtMultimedia headers
 # (qhwvideobuffer_p.h / qvideotexturehelper_p.h) that QtAVPlayer's
-# QAVVideoFrame -> QVideoFrame bridge needs. The Windows and macOS
+# QAVVideoFrame -> QVideoFrame bridge needs. The Windows, macOS, and Linux
 # QtAVPlayer preview backends use it (see the QtAVPlayer block below).
-if (WIN32 OR APPLE)
+if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_package(Qt6 6.8 REQUIRED COMPONENTS MultimediaQuickPrivate)
 endif()
 
@@ -944,7 +944,7 @@ target_sources(MiaCode PRIVATE
     src/tools/video_export/LegacyExportAudioBackend.cpp
 )
 
-if (WIN32 OR APPLE)
+if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(MiaCode PRIVATE
         src/audio/BassPreviewAudioBackend.h
         src/audio/BassPreviewAudioBackend.cpp
@@ -1017,6 +1017,42 @@ elseif (APPLE)
             "$<TARGET_FILE_DIR:MiaCode>/../Frameworks"
         COMMENT "Deploying macOS BASS runtime libraries"
     )
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+        set(MIACODE_BASS_LINUX_ARCH "x86_64")
+    elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+        set(MIACODE_BASS_LINUX_ARCH "aarch64")
+    else()
+        message(FATAL_ERROR "MiaCode's bundled Linux BASS runtime currently supports x86_64 and aarch64 only")
+    endif()
+
+    set(MIACODE_BASS_LINUX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/linux/${MIACODE_BASS_LINUX_ARCH}")
+    set(MIACODE_BASS_LINUX_LIBRARIES
+        "${MIACODE_BASS_LINUX_DIR}/libbass.so"
+        "${MIACODE_BASS_LINUX_DIR}/libbassmix.so"
+        "${MIACODE_BASS_LINUX_DIR}/libbass_fx.so"
+    )
+    foreach(MIACODE_BASS_LIBRARY IN LISTS MIACODE_BASS_LINUX_LIBRARIES)
+        if (NOT EXISTS "${MIACODE_BASS_LIBRARY}")
+            message(FATAL_ERROR "Missing required Linux BASS runtime: ${MIACODE_BASS_LIBRARY}")
+        endif()
+    endforeach()
+
+    target_link_libraries(MiaCode PRIVATE
+        "${MIACODE_BASS_LINUX_DIR}/libbass.so"
+        "${MIACODE_BASS_LINUX_DIR}/libbassmix.so"
+        ${CMAKE_DL_LIBS}
+    )
+    set_target_properties(MiaCode PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+    )
+    add_custom_command(TARGET MiaCode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${MIACODE_BASS_LINUX_LIBRARIES}
+            $<TARGET_FILE_DIR:MiaCode>
+        COMMENT "Deploying Linux BASS runtime libraries"
+    )
 endif()
 
 # Extension packages are archive/offline inputs only. Remove any stale
@@ -1046,47 +1082,65 @@ target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 # Replaces QMediaPlayer for PV/BG decoding inside PreviewStageMediaHost; see
 # docs/ops/DEBUG_INDEX.md. QtAVPlayer is the
 # MIT-licensed source vendored under third_party/QtAVPlayer, compiled straight
-# into MiaCode. It links external FFmpeg shared libraries whose dev SDK
-# (headers + libraries) is supplied through MIACODE_FFMPEG_DEV_DIR. Windows
-# uses the provisioned n7.1 LGPL SDK; macOS uses the project-provisioned 6.1.2
-# SDK (`scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`).
+# into MiaCode. Windows and macOS use the project-selected FFmpeg SDK through
+# MIACODE_FFMPEG_DEV_DIR. Linux resolves FFmpeg and VA-API from the host
+# toolchain through pkg-config.
 #
-# Windows and macOS use QtAVPlayer. Windows selects D3D11VA where available;
-# macOS selects the vendored VideoToolbox/Metal hwdevice. Other platforms keep
-# the QMediaPlayer path — MIACODE_USE_QTAVPLAYER stays undefined there.
+# All desktop platforms use QtAVPlayer. Windows selects D3D11VA, macOS selects
+# VideoToolbox/Metal, and Linux selects VA-API through DRM/EGL.
 # ---------------------------------------------------------------------------
-if (WIN32 OR APPLE)
+if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     if (WIN32)
         set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/dev")
-    else()
+    elseif (APPLE)
         set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/macos/dev")
     endif()
-    set(MIACODE_FFMPEG_DEV_DIR "${MIACODE_FFMPEG_DEV_DIR_DEFAULT}"
-        CACHE PATH "FFmpeg shared dev SDK root (include/ + lib/) for the QtAVPlayer preview backend")
-    if (NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/include" OR NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/lib")
-        if (APPLE)
-            set(MIACODE_FFMPEG_PROVISION_COMMAND
-                "bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh")
-        else()
-            set(MIACODE_FFMPEG_PROVISION_COMMAND
-                "scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1")
+    if (WIN32 OR APPLE)
+        set(MIACODE_FFMPEG_DEV_DIR "${MIACODE_FFMPEG_DEV_DIR_DEFAULT}"
+            CACHE PATH "FFmpeg shared dev SDK root (include/ + lib/) for the QtAVPlayer preview backend")
+        if (NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/include" OR NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/lib")
+            if (APPLE)
+                set(MIACODE_FFMPEG_PROVISION_COMMAND
+                    "bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh")
+            else()
+                set(MIACODE_FFMPEG_PROVISION_COMMAND
+                    "scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1")
+            endif()
+            message(FATAL_ERROR
+                "FFmpeg dev SDK not found at '${MIACODE_FFMPEG_DEV_DIR}'. "
+                "Run '${MIACODE_FFMPEG_PROVISION_COMMAND}', or pass "
+                "-DMIACODE_FFMPEG_DEV_DIR=<root containing include/ lib/>.")
         endif()
-        message(FATAL_ERROR
-            "FFmpeg dev SDK not found at '${MIACODE_FFMPEG_DEV_DIR}'. "
-            "Run '${MIACODE_FFMPEG_PROVISION_COMMAND}', or pass "
-            "-DMIACODE_FFMPEG_DEV_DIR=<root containing include/ lib/>.")
-    endif()
-    if (APPLE AND MIACODE_FFMPEG_DEV_DIR MATCHES "^/(opt/homebrew|usr/local)/")
-        message(FATAL_ERROR
-            "macOS release builds must use the project-provisioned FFmpeg SDK, not Homebrew: "
-            "${MIACODE_FFMPEG_DEV_DIR}. Run bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh.")
-    endif()
+        if (APPLE AND MIACODE_FFMPEG_DEV_DIR MATCHES "^/(opt/homebrew|usr/local)/")
+            message(FATAL_ERROR
+                "macOS release builds must use the project-provisioned FFmpeg SDK, not Homebrew: "
+                "${MIACODE_FFMPEG_DEV_DIR}. Run bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh.")
+        endif()
 
-    # find_library() in QtAVPlayer.cmake resolves the FFmpeg import libs from
-    # <prefix>/lib; prepending the dev root makes our SDK win over any system one.
-    list(PREPEND CMAKE_PREFIX_PATH "${MIACODE_FFMPEG_DEV_DIR}")
+        # find_library() in QtAVPlayer.cmake resolves the FFmpeg import libs from
+        # <prefix>/lib; prepending the dev root makes our SDK win over any system one.
+        list(PREPEND CMAKE_PREFIX_PATH "${MIACODE_FFMPEG_DEV_DIR}")
+    else()
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(MIACODE_FFMPEG REQUIRED IMPORTED_TARGET
+            libavfilter libavcodec libavformat libavutil libswresample libswscale)
+        pkg_check_modules(MIACODE_VAAPI REQUIRED IMPORTED_TARGET libva libva-drm libdrm)
+        find_library(AVFILTER_LIBRARY NAMES avfilter
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        find_library(AVCODEC_LIBRARY NAMES avcodec
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        find_library(AVFORMAT_LIBRARY NAMES avformat
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        find_library(AVUTIL_LIBRARY NAMES avutil
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        find_library(SWRESAMPLE_LIBRARY NAMES swresample
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        find_library(SWSCALE_LIBRARY NAMES swscale
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        set(QT_AVPLAYER_VA_DRM ON CACHE BOOL "" FORCE)
+    endif()
 
     set(QTAVPLAYER_SRC "${CMAKE_CURRENT_SOURCE_DIR}/third_party/QtAVPlayer/src")
     set(QT_AVPLAYER_DIR "${QTAVPLAYER_SRC}/QtAVPlayer")
@@ -1113,8 +1167,11 @@ if (WIN32 OR APPLE)
     target_sources(MiaCode PRIVATE ${QtAVPlayer_SOURCES})
     target_include_directories(MiaCode PRIVATE
         "${QTAVPLAYER_SRC}"                  # makes <QtAVPlayer/...> resolve
-        "${MIACODE_FFMPEG_DEV_DIR}/include"  # makes <libavcodec/...> resolve
     )
+    if (WIN32 OR APPLE)
+        target_include_directories(MiaCode PRIVATE
+            "${MIACODE_FFMPEG_DEV_DIR}/include")
+    endif()
     # QT_AVPLAYER_MULTIMEDIA : build the QAVVideoFrame -> QVideoFrame bridge.
     # QT_BUILD_QTAVPLAYER_LIB: export QtAVPlayer symbols (sources live in the exe).
     # MIACODE_USE_QTAVPLAYER  : switch PreviewStageMediaHost onto the new backend.
@@ -1130,6 +1187,11 @@ if (WIN32 OR APPLE)
         Qt6::MultimediaQuickPrivate
         ${QtAVPlayer_LIBS}
     )
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_libraries(MiaCode PRIVATE
+            PkgConfig::MIACODE_FFMPEG
+            PkgConfig::MIACODE_VAAPI)
+    endif()
 
     if (WIN32)
         # Runtime: the preview backend loads these next to MiaCode.exe. The
@@ -1145,7 +1207,7 @@ if (WIN32 OR APPLE)
                 $<TARGET_FILE_DIR:MiaCode>
             VERBATIM
         )
-    else()
+    elseif (APPLE)
         # The project-local macOS SDK has @rpath install names. Make the local
         # app bundle runnable too, then let the release packager stage the
         # same six dylibs in its final Frameworks directory.

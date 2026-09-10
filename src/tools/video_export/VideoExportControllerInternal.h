@@ -93,6 +93,8 @@ struct VideoEncoderConfig {
     QStringList extraArgs;
     bool isHardware = false;
     int explicitBframes = -1;
+    bool needsVaapiHwUpload = false;
+    QString vaapiDevicePath;
 };
 
 struct SystemMemoryInfo {

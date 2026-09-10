@@ -337,6 +337,13 @@ bool shouldPreferHardwareEncoderInAutoMode(
     return true;
 #endif
 
+#ifdef Q_OS_LINUX
+    if (reason != nullptr) {
+        *reason = QStringLiteral("linux_prefers_vaapi");
+    }
+    return true;
+#endif
+
     const qint64 pixelsPerSecond =
         static_cast<qint64>(qMax(1, outputWidth)) * qMax(1, outputHeight) * qMax(1, fps);
     const qint64 availMiB = bytesToMiB(memoryInfo.availablePhysicalBytes);
@@ -629,6 +636,32 @@ bool hasEncoderToken(const QString& encodersOutput, const QString& encoderName)
     return pattern.match(encodersOutput).hasMatch();
 }
 
+QString resolveVaapiDevicePath()
+{
+    const QString fromEnv = qEnvironmentVariable("MIACODE_EXPORT_VAAPI_DEVICE").trimmed();
+    if (!fromEnv.isEmpty()) {
+        return QFileInfo::exists(fromEnv) ? fromEnv : QString();
+    }
+    const QStringList preferred{
+        QStringLiteral("/dev/dri/renderD128"),
+        QStringLiteral("/dev/dri/renderD129"),
+    };
+    for (const QString& path : preferred) {
+        if (QFileInfo::exists(path)) {
+            return path;
+        }
+    }
+    const QDir driDir(QStringLiteral("/dev/dri"));
+    const QStringList renderNodes = driDir.entryList(
+        QStringList{QStringLiteral("renderD*")},
+        QDir::System,
+        QDir::Name);
+    if (!renderNodes.isEmpty()) {
+        return driDir.absoluteFilePath(renderNodes.first());
+    }
+    return {};
+}
+
 bool probeEncoderRuntimeAvailability(
     const QString& ffmpegPath,
     const VideoEncoderConfig& candidate,
@@ -654,18 +687,34 @@ bool probeEncoderRuntimeAvailability(
     QStringList args{
         QStringLiteral("-hide_banner"),
         QStringLiteral("-loglevel"), QStringLiteral("error"),
-        QStringLiteral("-f"), QStringLiteral("lavfi"),
-        QStringLiteral("-i"),
-        QStringLiteral("color=c=black:s=%1x%2:r=%3:d=%4")
-            .arg(probeSize.width())
-            .arg(probeSize.height())
-            .arg(safeFps)
-            .arg(QString::number(probeDurationSeconds, 'f', 3)),
-        QStringLiteral("-an"),
-        QStringLiteral("-frames:v"), QString::number(probeFrameCount),
-        QStringLiteral("-c:v"), candidate.codec,
-        QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p")
     };
+    if (candidate.needsVaapiHwUpload) {
+        if (candidate.vaapiDevicePath.isEmpty()) {
+            if (detail != nullptr) {
+                *detail = QStringLiteral("vaapi_device_missing");
+            }
+            return false;
+        }
+        args << QStringLiteral("-init_hw_device")
+             << QStringLiteral("vaapi=va:%1").arg(candidate.vaapiDevicePath)
+             << QStringLiteral("-filter_hw_device")
+             << QStringLiteral("va");
+    }
+    args << QStringLiteral("-f") << QStringLiteral("lavfi")
+         << QStringLiteral("-i")
+         << QStringLiteral("color=c=black:s=%1x%2:r=%3:d=%4")
+                .arg(probeSize.width())
+                .arg(probeSize.height())
+                .arg(safeFps)
+                .arg(QString::number(probeDurationSeconds, 'f', 3))
+         << QStringLiteral("-an")
+         << QStringLiteral("-frames:v") << QString::number(probeFrameCount);
+    if (candidate.needsVaapiHwUpload) {
+        args << QStringLiteral("-vf") << QStringLiteral("format=nv12,hwupload");
+    } else {
+        args << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p");
+    }
+    args << QStringLiteral("-c:v") << candidate.codec;
     if (candidate.explicitBframes >= 0) {
         args << QStringLiteral("-bf") << QString::number(candidate.explicitBframes);
     }
@@ -765,6 +814,9 @@ VideoEncoderConfig chooseVideoEncoder(
     const bool hasLibx264 = hasEncoderToken(output, QStringLiteral("libx264"));
     const bool hasOpenH264 = hasEncoderToken(output, QStringLiteral("libopenh264"));
     const bool hasMpeg4 = hasEncoderToken(output, QStringLiteral("mpeg4"));
+    const bool hasH264Vaapi = hasEncoderToken(output, QStringLiteral("h264_vaapi"));
+    const bool hasHevcVaapi = hasEncoderToken(output, QStringLiteral("hevc_vaapi"));
+    const QString vaapiDevicePath = (hasH264Vaapi || hasHevcVaapi) ? resolveVaapiDevicePath() : QString();
 #ifdef Q_OS_MACOS
     const bool hasH264Videotoolbox = hasEncoderToken(output, QStringLiteral("h264_videotoolbox"));
     const bool hasHevcVideotoolbox = hasEncoderToken(output, QStringLiteral("hevc_videotoolbox"));
@@ -847,6 +899,14 @@ VideoEncoderConfig chooseVideoEncoder(
         }
 #endif
 
+        if (codec == QLatin1String("h264_vaapi") || codec == QLatin1String("hevc_vaapi")) {
+            item.extraArgs = bitrateArgs;
+            item.explicitBframes = isH264Codec ? 0 : -1;
+            item.needsVaapiHwUpload = true;
+            item.vaapiDevicePath = vaapiDevicePath;
+            return item;
+        }
+
         if (preset == VideoExportPreset::Fast) {
             item.extraArgs = bitrateArgs;
             item.explicitBframes = isH264Codec ? 0 : -1;
@@ -891,15 +951,20 @@ VideoEncoderConfig chooseVideoEncoder(
             pushCandidate(QStringLiteral("h264_videotoolbox"), true);
         }
 #endif
+        if (hasH264Vaapi && !vaapiDevicePath.isEmpty()) {
+            pushCandidate(QStringLiteral("h264_vaapi"), true);
+        }
         if (hasH264Nvenc) {
             pushCandidate(QStringLiteral("h264_nvenc"), true);
         }
         if (hasH264Qsv) {
             pushCandidate(QStringLiteral("h264_qsv"), true);
         }
+#ifndef Q_OS_LINUX
         if (hasH264Amf) {
             pushCandidate(QStringLiteral("h264_amf"), true);
         }
+#endif
         if (hasH264Mf) {
             pushCandidate(QStringLiteral("h264_mf"), true);
         }
@@ -909,15 +974,20 @@ VideoEncoderConfig chooseVideoEncoder(
                 pushCandidate(QStringLiteral("hevc_videotoolbox"), true);
             }
 #endif
+            if (hasHevcVaapi && !vaapiDevicePath.isEmpty()) {
+                pushCandidate(QStringLiteral("hevc_vaapi"), true);
+            }
             if (hasHevcNvenc) {
                 pushCandidate(QStringLiteral("hevc_nvenc"), true);
             }
             if (hasHevcQsv) {
                 pushCandidate(QStringLiteral("hevc_qsv"), true);
             }
+#ifndef Q_OS_LINUX
             if (hasHevcAmf) {
                 pushCandidate(QStringLiteral("hevc_amf"), true);
             }
+#endif
             if (hasHevcMf) {
                 pushCandidate(QStringLiteral("hevc_mf"), true);
             }
@@ -956,9 +1026,14 @@ VideoEncoderConfig chooseVideoEncoder(
         if (forcedMatches(QStringLiteral("hevc_qsv")) && hasHevcQsv) {
             pushCandidate(QStringLiteral("hevc_qsv"), true);
         }
+        if (forcedMatches(QStringLiteral("hevc_vaapi")) && hasHevcVaapi && !vaapiDevicePath.isEmpty()) {
+            pushCandidate(QStringLiteral("hevc_vaapi"), true);
+        }
+#ifndef Q_OS_LINUX
         if (forcedMatches(QStringLiteral("hevc_amf")) && hasHevcAmf) {
             pushCandidate(QStringLiteral("hevc_amf"), true);
         }
+#endif
         if (forcedMatches(QStringLiteral("hevc_mf")) && hasHevcMf) {
             pushCandidate(QStringLiteral("hevc_mf"), true);
         }
@@ -968,9 +1043,14 @@ VideoEncoderConfig chooseVideoEncoder(
         if (forcedMatches(QStringLiteral("h264_qsv")) && hasH264Qsv) {
             pushCandidate(QStringLiteral("h264_qsv"), true);
         }
+        if (forcedMatches(QStringLiteral("h264_vaapi")) && hasH264Vaapi && !vaapiDevicePath.isEmpty()) {
+            pushCandidate(QStringLiteral("h264_vaapi"), true);
+        }
+#ifndef Q_OS_LINUX
         if (forcedMatches(QStringLiteral("h264_amf")) && hasH264Amf) {
             pushCandidate(QStringLiteral("h264_amf"), true);
         }
+#endif
         if (forcedMatches(QStringLiteral("h264_mf")) && hasH264Mf) {
             pushCandidate(QStringLiteral("h264_mf"), true);
         }
@@ -1027,6 +1107,11 @@ VideoEncoderConfig chooseVideoEncoder(
                         .arg(x264Plan.preset)
                         .arg(x264Plan.crf)
                         .arg(x264Plan.bframes);
+                }
+                if (config.needsVaapiHwUpload) {
+                    detail += QStringLiteral(" vaapiDevice=%1")
+                        .arg(config.vaapiDevicePath.isEmpty() ? QStringLiteral("missing")
+                                                              : config.vaapiDevicePath);
                 }
                 *probeLog = detail;
             }
@@ -1094,17 +1179,20 @@ VideoEncoderConfig chooseVideoEncoder(
 
     if (probeLog != nullptr) {
         QString detail = QStringLiteral(
-            "encoder_probe hevc_nvenc=%1 hevc_qsv=%2 hevc_amf=%3 hevc_mf=%4 "
-            "h264_nvenc=%5 h264_qsv=%6 h264_amf=%7 h264_mf=%8 libx264=%9 libopenh264=%10 mpeg4=%11 "
-            "selected=%12 hw=%13 bitrateK=%14 maxrateK=%15 size=%16x%17 autoMode=%18 hwFirst=%19 modeReason=%20 preset=%21")
+            "encoder_probe hevc_nvenc=%1 hevc_qsv=%2 hevc_amf=%3 hevc_mf=%4 hevc_vaapi=%5 "
+            "h264_nvenc=%6 h264_qsv=%7 h264_amf=%8 h264_mf=%9 h264_vaapi=%10 "
+            "libx264=%11 libopenh264=%12 mpeg4=%13 "
+            "selected=%14 hw=%15 bitrateK=%16 maxrateK=%17 size=%18x%19 autoMode=%20 hwFirst=%21 modeReason=%22 preset=%23")
             .arg(hasHevcNvenc ? 1 : 0)
             .arg(hasHevcQsv ? 1 : 0)
             .arg(hasHevcAmf ? 1 : 0)
             .arg(hasHevcMf ? 1 : 0)
+            .arg(hasHevcVaapi ? 1 : 0)
             .arg(hasH264Nvenc ? 1 : 0)
             .arg(hasH264Qsv ? 1 : 0)
             .arg(hasH264Amf ? 1 : 0)
             .arg(hasH264Mf ? 1 : 0)
+            .arg(hasH264Vaapi ? 1 : 0)
             .arg(hasLibx264 ? 1 : 0)
             .arg(hasOpenH264 ? 1 : 0)
             .arg(hasMpeg4 ? 1 : 0)
@@ -1132,6 +1220,11 @@ VideoEncoderConfig chooseVideoEncoder(
                 .arg(x264Plan.preset)
                 .arg(x264Plan.crf)
                 .arg(x264Plan.bframes);
+        }
+        if (config.needsVaapiHwUpload) {
+            detail += QStringLiteral(" vaapiDevice=%1")
+                .arg(config.vaapiDevicePath.isEmpty() ? QStringLiteral("missing")
+                                                      : config.vaapiDevicePath);
         }
         *probeLog = detail;
     }

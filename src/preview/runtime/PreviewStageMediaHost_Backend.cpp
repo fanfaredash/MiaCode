@@ -232,6 +232,13 @@ void PreviewStageMediaHost::initializeBackendObjects()
             .arg(QString::fromLatin1(qVersion()))
             .arg(useSoftware ? 1 : 0)
             .arg(QString::fromLatin1(prefName)));
+#elif defined(Q_OS_LINUX)
+    appendPreviewStageMediaLog(
+        QStringLiteral("media_backend"),
+        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=vaapi qt_runtime_version=%1 force_software=%2 pref=%3 renderer_bridge=drm_egl")
+            .arg(QString::fromLatin1(qVersion()))
+            .arg(useSoftware ? 1 : 0)
+            .arg(QString::fromLatin1(prefName)));
 #else
     appendPreviewStageMediaLog(
         QStringLiteral("media_backend"),

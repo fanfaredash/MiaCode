@@ -344,7 +344,7 @@ target_sources(preview_audio_worker_spec PRIVATE
 )
 target_compile_definitions(preview_audio_worker_spec PRIVATE
     "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-if (WIN32 OR APPLE)
+if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(preview_audio_worker_spec PRIVATE
         src/audio/BassPreviewAudioBackend.h
         src/audio/BassPreviewAudioBackend.cpp
@@ -372,6 +372,17 @@ if (WIN32 OR APPLE)
         target_link_libraries(preview_audio_worker_spec PRIVATE
             "${MIACODE_BASS_MACOS_DIR}/libbass.dylib"
             "${MIACODE_BASS_MACOS_DIR}/libbassmix.dylib"
+        )
+    elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_libraries(preview_audio_worker_spec PRIVATE
+            "${MIACODE_BASS_LINUX_DIR}/libbass.so"
+            "${MIACODE_BASS_LINUX_DIR}/libbassmix.so"
+            ${CMAKE_DL_LIBS}
+        )
+        add_custom_command(TARGET preview_audio_worker_spec POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${MIACODE_BASS_LINUX_LIBRARIES}
+                $<TARGET_FILE_DIR:preview_audio_worker_spec>
         )
     endif()
 endif()

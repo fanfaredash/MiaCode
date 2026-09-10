@@ -16,7 +16,7 @@
 
 class QVideoSink;
 #ifdef MIACODE_USE_QTAVPLAYER
-// Preview decode backend on Windows: FFmpeg via QtAVPlayer (vendored under
+// Desktop preview decode backend: FFmpeg via QtAVPlayer (vendored under
 // third_party/QtAVPlayer).
 // QVideoFrame is included (not just forward-declared) because lastVideoFrame_
 // is held by value for frame-replay when a VideoOutput attaches late.
@@ -47,7 +47,7 @@ public:
     enum class MediaKind {
         None,
         Image,
-        Video,    // FFmpeg/QtAVPlayer-backed on Windows; QMediaPlayer elsewhere
+        Video,    // FFmpeg/QtAVPlayer-backed on every desktop platform
     };
     Q_ENUM(MediaKind)
 

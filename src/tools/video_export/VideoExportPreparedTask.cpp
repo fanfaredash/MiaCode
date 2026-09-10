@@ -832,6 +832,25 @@ VideoExportResult VideoExportController::exportPreparedTask(
         &encoderProbeLog
     );
     appendVideoExportLog(QStringLiteral("encoder_select"), encoderProbeLog);
+    if (encoderConfig.needsVaapiHwUpload) {
+        if (encoderConfig.vaapiDevicePath.isEmpty()) {
+            result.message = QStringLiteral("VAAPI encoder selected but no DRM render node was found.");
+            result.details = withExportLogPath(
+                QStringLiteral("Set MIACODE_EXPORT_VAAPI_DEVICE to a /dev/dri/renderD* path."));
+            appendVideoExportLog(QStringLiteral("fail_vaapi_device_missing"), result.message);
+            return result;
+        }
+        constexpr int kAfterLoglevelError = 4;
+        args.insert(kAfterLoglevelError, QStringLiteral("-init_hw_device"));
+        args.insert(
+            kAfterLoglevelError + 1,
+            QStringLiteral("vaapi=va:%1").arg(encoderConfig.vaapiDevicePath));
+        args.insert(kAfterLoglevelError + 2, QStringLiteral("-filter_hw_device"));
+        args.insert(kAfterLoglevelError + 3, QStringLiteral("va"));
+        appendVideoExportLog(
+            QStringLiteral("vaapi_device"),
+            QStringLiteral("path=%1").arg(encoderConfig.vaapiDevicePath));
+    }
     const int idealThreadCount = qMax(1, QThread::idealThreadCount());
     const qint64 availMiB = bytesToMiB(memoryInfo.availablePhysicalBytes);
     const int encoderThreads = qBound(
@@ -1101,12 +1120,18 @@ VideoExportResult VideoExportController::exportPreparedTask(
         : QStringLiteral("straight");
     filterParts << QStringLiteral("[base][overlay_src]overlay=0:0:format=rgb:alpha=%1[vout]")
                        .arg(overlayAlphaMode);
+    const QString mappedVideoPad = encoderConfig.needsVaapiHwUpload
+        ? QStringLiteral("[vout_hw]")
+        : QStringLiteral("[vout]");
+    if (encoderConfig.needsVaapiHwUpload) {
+        filterParts << QStringLiteral("[vout]format=nv12,hwupload[vout_hw]");
+    }
 
     args << QStringLiteral("-filter_threads") << QString::number(filterThreads);
     args << QStringLiteral("-filter_complex_threads") << QString::number(filterThreads);
     args << QStringLiteral("-filter_complex") << filterParts.join(';');
     args << QStringLiteral("-map")
-         << QStringLiteral("[vout]")
+         << mappedVideoPad
          << QStringLiteral("-map")
          << QStringLiteral("[aout]")
          << QStringLiteral("-fps_mode")
@@ -1118,10 +1143,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
          << QStringLiteral("-g")
          << QString::number(qMax(1, task.fps * sizePolicy.gopSeconds))
          << QStringLiteral("-c:v")
-         << encoderConfig.codec
-         << QStringLiteral("-pix_fmt")
-         << QStringLiteral("yuv420p")
-         << QStringLiteral("-c:a")
+         << encoderConfig.codec;
+    if (!encoderConfig.needsVaapiHwUpload) {
+        args << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p");
+    }
+    args << QStringLiteral("-c:a")
          << QStringLiteral("aac")
          << QStringLiteral("-b:a")
          // Clamp into the dropdown's accepted range so any out-of-band

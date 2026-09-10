@@ -2,7 +2,7 @@
 
 ## 构建与 Spec
 
-- 依赖和平台入口查 `README.md`、`scripts/README.md`；Windows/macOS 脚本位于 `scripts/build/`。
+- 依赖和平台入口查 `README.md`、`scripts/README.md`；Windows/macOS 脚本位于 `scripts/build/`。Linux 预览解码用主机 pkg-config 的 FFmpeg 与 libva，音频用 `third_party/bass/lib/linux/`；导出独立 `ffmpeg` 由 `scripts/ffmpeg/ensure-linux-ffmpeg.sh` 准备。
 - Linux 产品可执行文件生成到 `build/bin/MiaCode`；Qt 按模块 URI 管理构建期 QML 目录。
 - 日常构建使用 Release；复用已配置的构建目录，先检查 CMakeCache，不硬编码开发者机器路径。
 - 可执行规格由 `MIACODE_BUILD_DEV_TOOLS=ON` 启用；domain manifests 位于 `cmake/devtools/specs/`，注册规则查 `cmake/devtools/MiaCodeSpecRegistry.cmake`。

@@ -98,7 +98,7 @@ third_party/**/*.dylib
 third_party/**/*.a
 
 # BASS runtime libraries are intentionally distributed for the non-commercial
-# Windows and macOS builds; keep these exceptions narrow and in sync with the
+# Windows, macOS, and Linux builds; keep these exceptions narrow and in sync with the
 # platform packaging scripts.
 !third_party/bass/bin/
 !third_party/bass/bin/win64/
@@ -113,6 +113,15 @@ third_party/**/*.a
 !third_party/bass/lib/macos/universal/libbassmix.dylib
 !third_party/bass/lib/macos/universal/libbass_fx.dylib
 !third_party/bass/lib/macos/universal/libbassopus.dylib
+!third_party/bass/lib/linux/
+!third_party/bass/lib/linux/x86_64/
+!third_party/bass/lib/linux/x86_64/libbass.so
+!third_party/bass/lib/linux/x86_64/libbassmix.so
+!third_party/bass/lib/linux/x86_64/libbass_fx.so
+!third_party/bass/lib/linux/aarch64/
+!third_party/bass/lib/linux/aarch64/libbass.so
+!third_party/bass/lib/linux/aarch64/libbassmix.so
+!third_party/bass/lib/linux/aarch64/libbass_fx.so
 
 # scripts whitelist: ignore all by default, allow only release/infra scripts.
 scripts/*
@@ -135,6 +144,7 @@ scripts/debug/*
 !scripts/ffmpeg/
 scripts/ffmpeg/*
 !scripts/ffmpeg/ensure-macos-ffmpeg.sh
+!scripts/ffmpeg/ensure-linux-ffmpeg.sh
 !scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh
 !scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1
 !scripts/ffmpeg/ensure-windows-ffmpeg.ps1
