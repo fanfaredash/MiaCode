@@ -79,6 +79,7 @@ public:
     static qreal secondToSceneXExact(const TimelineSceneLayoutMetrics& metrics, double second);
     static TimelineSceneState build(const TimelineSceneBuildRequest& request);
     static int secondToSceneX(const TimelineSceneState& state, double second);
+    static qreal secondToSceneXExact(const TimelineSceneState& state, double second);
     static double sceneXToSecond(const TimelineSceneState& state, qreal x);
 };
 

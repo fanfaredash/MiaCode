@@ -205,37 +205,24 @@ void updateLayerSlot(QSGNode* slot, UpdateFn&& updateFn)
     }
 }
 
-// Phase-4e-old-opt — replaces a string-concat-per-paint hot path with a
-// numeric hash accumulator. The previous version built a QString of the
-// form `font.toString() + color.name() + ...` per label/marker, which
-// at ~100 labels typical for a long chart cost ~10 KB of heap allocs +
-// memcpy per paint. The hash here is mixed with the FNV-style 0x9E3779B9
-// constant + bit-rotation so that small changes (one label colour
-// flipping) flip many bits, keeping comparison robustness.
-quint64 timelineThemeSignatureHash(const miacode::timeline::TimelineSceneState& state)
+// Theme identity comes from the palette, independent of which chart labels
+// and markers happen to be visible in the current scroll window.
+quint64 timelineThemeSignatureHash()
 {
+    const auto& colors = miacode::timeline::timelineChromeColors();
     quint64 h = 0;
     const auto mix = [&](quint64 v) {
         // Boost-style hash combine. The magic constant is ~ golden
         // ratio in 64 bits; XOR + shift produces good diffusion.
         h ^= v + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2);
     };
-    for (const auto& label : state.laneLabels) {
-        mix(qHash(label.font));
-        mix(static_cast<quint64>(label.color.rgba()));
-    }
-    for (const auto& label : state.headerLabels) {
-        mix(qHash(label.font));
-        mix(static_cast<quint64>(label.color.rgba()));
-    }
-    for (const auto& marker : state.headerMarkers) {
-        mix(static_cast<quint64>(marker.color.rgba()));
-    }
-    if (state.hasEntryMarker) {
-        mix(static_cast<quint64>(state.entryMarker.color.rgba()));
-    }
-    if (state.hasCursorMarker) {
-        mix(static_cast<quint64>(state.cursorMarker.color.rgba()));
+    for (const QColor& color : {
+             colors.window, colors.header, colors.sidebar, colors.base,
+             colors.border, colors.axis,
+             colors.gridMajor, colors.gridSubdivision, colors.gridMinor,
+             colors.laneEven, colors.laneOdd,
+             colors.label, colors.textSecondary, colors.waveStroke}) {
+        mix(static_cast<quint64>(color.rgba()));
     }
     return h;
 }
@@ -314,8 +301,10 @@ void applyDynamicSceneState(
     state->hasDragCenterLine = false;
 
     const miacode::timeline::TimelineThemeColors theme = miacode::timeline::timelineThemeColors();
-    const int cursorX =
-        miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(*state, stateBridge->cursorSeconds());
+    // Cached-scene updates use the same sub-pixel coordinates as a full scene
+    // build and centerOnSecond(), so the followed playhead stays at the center.
+    const qreal cursorX =
+        miacode::timeline::TimelineSceneStateBuilder::secondToSceneXExact(*state, stateBridge->cursorSeconds());
     if (cursorX > state->timelineLeft) {
         state->hasCursorMarker = true;
         const qreal headerScale = 0.5 + (qBound(0.5, state->contentScale, 1.0) * 0.5);
@@ -338,8 +327,8 @@ void applyDynamicSceneState(
         };
     }
 
-    const int playheadX =
-        miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(*state, stateBridge->playheadSeconds());
+    const qreal playheadX =
+        miacode::timeline::TimelineSceneStateBuilder::secondToSceneXExact(*state, stateBridge->playheadSeconds());
     if (!stateBridge->playheadIndicatorSuppressed() && playheadX > state->timelineLeft) {
         state->hasPlayheadLine = true;
         state->playheadLine = miacode::timeline::TimelineSceneLine{
@@ -351,7 +340,7 @@ void applyDynamicSceneState(
     }
 
     if (dragActive) {
-        const int dragCenterX = state->viewportSize.width() / 2;
+        const qreal dragCenterX = state->viewportSize.width() / 2.0;
         if (dragCenterX > state->timelineLeft) {
             state->hasDragCenterLine = true;
             state->dragCenterLine = miacode::timeline::TimelineSceneLine{
@@ -1233,49 +1222,43 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     QElapsedTimer timer;
     if (rebuildNeeded) {
         timer.start();
-    }
-    miacode::timeline::TimelineSceneBuildRequest request;
-    request.snapshot = stateBridge_->renderSnapshot();
-    request.waveformData = stateBridge_->waveformData();
-    request.muriMarkersByLocation = stateBridge_->muriMarkersByLocation();
-    request.muriMarkerTooltips = stateBridge_->muriMarkerTooltips();
-    request.viewportSize = viewportSize;
-    request.headerLineNumberFont = stateBridge_->headerLineNumberFont();
-    request.skinDirectory = stateBridge_->skinDirectory();
-    request.horizontalScrollValue = stateBridge_->horizontalScrollValue();
-    // Phase 7 — opt into scroll-bucket culling. Builder emits
-    // primitives for visible viewport ± bucketSize px (so 3 total
-    // viewports of horizontal coverage). Layers will rebuild their
-    // QSG children when the bucket-bumped revision in
-    // applyDynamicSceneState changes.
-    request.horizontalCullPaddingPx = bucketSize;
-    request.headerLeftLimit = headerLeftLimit_;
-    request.headerRightLimit = headerRightLimit_ > 0 ? headerRightLimit_ : request.viewportSize.width();
-    request.headerMarkerLeftLimit = headerMarkerLeftLimit_;
-    request.headerMarkerRightLimit =
-        headerMarkerRightLimit_ > 0 ? headerMarkerRightLimit_ : request.viewportSize.width();
-    request.zoomScale = stateBridge_->zoomScale();
-    request.contentScale = stateBridge_->contentScale();
-    request.fitViewportHeight = true;
-    request.waveformBrightness = stateBridge_->waveformBrightness();
-    request.measureLineBrightness = stateBridge_->measureLineBrightness();
-    request.waveformPhaseCompensationSeconds = stateBridge_->waveformPhaseCompensationSeconds();
-    request.playbackEntrySeconds = stateBridge_->playbackEntrySeconds();
-    request.playheadSeconds = stateBridge_->playheadSeconds();
-    request.cursorSeconds = stateBridge_->cursorSeconds();
-    request.playheadUpperLimitSeconds = stateBridge_->playheadUpperLimitSeconds();
-    request.showSlideTracks = stateBridge_->showSlideTracks();
-    request.playheadIndicatorSuppressed = stateBridge_->playheadIndicatorSuppressed();
-    request.dragActive = dragActive_;
-    request.appearanceRevision = appearanceRevision_;
-    request.layoutRevision = stateBridge_->layoutRevision();
-    request.gridRevision = stateBridge_->gridRevision();
-    request.waveformRevision = stateBridge_->waveformRevision();
-    request.headerRevision = stateBridge_->headerRevision();
-    request.notesRevision = stateBridge_->notesRevision();
-    request.overlayRevision = stateBridge_->overlayRevision();
-    request.overlayDynamicRevision = overlayDynamicRevisionForState(stateBridge_, dragActive_);
-    if (rebuildNeeded) {
+        miacode::timeline::TimelineSceneBuildRequest request;
+        request.snapshot = stateBridge_->renderSnapshot();
+        request.waveformData = stateBridge_->waveformData();
+        request.muriMarkersByLocation = stateBridge_->muriMarkersByLocation();
+        request.muriMarkerTooltips = stateBridge_->muriMarkerTooltips();
+        request.viewportSize = viewportSize;
+        request.headerLineNumberFont = stateBridge_->headerLineNumberFont();
+        request.skinDirectory = stateBridge_->skinDirectory();
+        request.horizontalScrollValue = currentScroll;
+        // Emit a viewport of padding on each side for transform-only scrolling.
+        request.horizontalCullPaddingPx = bucketSize;
+        request.headerLeftLimit = headerLeftLimit_;
+        request.headerRightLimit = headerRightLimit_ > 0 ? headerRightLimit_ : request.viewportSize.width();
+        request.headerMarkerLeftLimit = headerMarkerLeftLimit_;
+        request.headerMarkerRightLimit =
+            headerMarkerRightLimit_ > 0 ? headerMarkerRightLimit_ : request.viewportSize.width();
+        request.zoomScale = stateBridge_->zoomScale();
+        request.contentScale = stateBridge_->contentScale();
+        request.fitViewportHeight = true;
+        request.waveformBrightness = stateBridge_->waveformBrightness();
+        request.measureLineBrightness = stateBridge_->measureLineBrightness();
+        request.waveformPhaseCompensationSeconds = stateBridge_->waveformPhaseCompensationSeconds();
+        request.playbackEntrySeconds = stateBridge_->playbackEntrySeconds();
+        request.playheadSeconds = stateBridge_->playheadSeconds();
+        request.cursorSeconds = stateBridge_->cursorSeconds();
+        request.playheadUpperLimitSeconds = stateBridge_->playheadUpperLimitSeconds();
+        request.showSlideTracks = stateBridge_->showSlideTracks();
+        request.playheadIndicatorSuppressed = stateBridge_->playheadIndicatorSuppressed();
+        request.dragActive = dragActive_;
+        request.appearanceRevision = appearanceRevision_;
+        request.layoutRevision = stateBridge_->layoutRevision();
+        request.gridRevision = stateBridge_->gridRevision();
+        request.waveformRevision = stateBridge_->waveformRevision();
+        request.headerRevision = stateBridge_->headerRevision();
+        request.notesRevision = stateBridge_->notesRevision();
+        request.overlayRevision = stateBridge_->overlayRevision();
+        request.overlayDynamicRevision = overlayDynamicRevisionForState(stateBridge_, dragActive_);
         cachedSceneState_ = miacode::timeline::TimelineSceneStateBuilder::build(request);
         cachedSceneStateValid_ = true;
         cachedSceneBuildViewportSize_ = viewportSize;
@@ -1432,16 +1415,15 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         resetNodeTreeBeforeTextureInvalidation = true;
     }
 
-    miacode::timeline::TimelineSceneState state = currentSceneState();
-    const quint64 themeSignature = timelineThemeSignatureHash(state);
+    const quint64 themeSignature = timelineThemeSignatureHash();
     if (cachedThemeSignatureValid_ && cachedThemeSignature_ != themeSignature) {
         ++appearanceRevision_;
         pendingThemeInvalidation_ = true;
         resetNodeTreeBeforeTextureInvalidation = true;
-        state = currentSceneState();
     }
-    cachedThemeSignature_ = timelineThemeSignatureHash(state);
+    cachedThemeSignature_ = themeSignature;
     cachedThemeSignatureValid_ = true;
+    const miacode::timeline::TimelineSceneState state = currentSceneState();
 
     if (resetNodeTreeBeforeTextureInvalidation && oldNode != nullptr) {
         delete oldNode;

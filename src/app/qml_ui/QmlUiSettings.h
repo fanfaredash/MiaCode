@@ -101,7 +101,7 @@ signals:
 private:
     static constexpr int kSidebarMinimumContentWidth = 120;
     static constexpr int kSidebarMaximumContentWidth = 272;
-    static constexpr double kBottomPanelMinimumHeightRatio = 0.2;
+    static constexpr double kBottomPanelMinimumHeightRatio = 0.15;
     static constexpr double kBottomPanelMaximumHeightRatio = 0.65;
     static constexpr double kPreviewMinimumWidthRatio = 0.3;
     static constexpr double kPreviewMaximumWidthRatio = 0.5;

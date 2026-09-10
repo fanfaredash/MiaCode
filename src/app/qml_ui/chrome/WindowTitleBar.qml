@@ -25,9 +25,26 @@ Rectangle {
 
     // 标题以窗口中心为轴，左右留白取菜单与窗口按钮所需空间的较大值。
     readonly property real menuGap: 16
+    readonly property real minimumMenuWidth: root.useEmbeddedMenu
+        ? (mainMenuLoader.item ? mainMenuLoader.item.overflowButtonWidth : 30)
+        : 0
+    readonly property real mainMenuFullWidth: root.useEmbeddedMenu && mainMenuLoader.item
+        ? mainMenuLoader.item.fullWidth : 0
+    readonly property real brandCollapsedWidth: Theme.titleBarBrandIconSize + 2 * root.brandContentPadding
+    readonly property real brandFullWidth: Theme.titleBarBrandIconSize + 7
+        + (brandText ? Math.ceil(brandText.implicitWidth) : 0) + 2 * root.brandContentPadding
+    readonly property real minimumLeftMargin: root.brandLeadingMargin + brandCollapsedWidth + minimumMenuWidth + menuGap
+    // 按标题文字宽度预留居中区域，两侧至少预留最小边距保证居中对称。
+    readonly property real preferredTitleWidth: Math.min(titleLabel.implicitWidth, Math.max(0,
+        width - 2 * Math.max(minimumLeftMargin, captionButtons.width + menuGap)))
+    // 居中标题左侧提供给菜单与图标的可用空间。空间紧缩时优先折叠品牌文字，再折叠后续菜单项。
+    readonly property real availableMenuAreaWidth: Math.max(0,
+        (width - preferredTitleWidth) / 2 - menuGap - root.brandLeadingMargin)
+    readonly property bool brandTextVisible: !root.useEmbeddedMenu
+        || (availableMenuAreaWidth >= brandFullWidth + mainMenuFullWidth)
     readonly property real menuLeft: brand.x + brand.width
     readonly property real menuAvailableWidth: root.useEmbeddedMenu
-        ? Math.max(0, width / 2 - menuGap - menuLeft)
+        ? Math.max(minimumMenuWidth, (width - preferredTitleWidth) / 2 - menuGap - menuLeft)
         : 0
     readonly property real titleAreaLeft: menuHost.x + menuHost.width + menuGap
     readonly property real titleAreaRight: width - captionButtons.width - menuGap
@@ -57,11 +74,11 @@ Rectangle {
         Accessible.name: "MiaCode"
         z: 2
 
-        implicitWidth: brandContent.implicitWidth + leftPadding + rightPadding
+        implicitWidth: root.brandTextVisible ? root.brandFullWidth : root.brandCollapsedWidth
 
         contentItem: Row {
             id: brandContent
-            spacing: 7
+            spacing: brandText.visible ? 7 : 0
 
             Image {
                 width: Theme.titleBarBrandIconSize
@@ -72,7 +89,9 @@ Rectangle {
             }
 
             Text {
+                id: brandText
                 anchors.verticalCenter: parent.verticalCenter
+                visible: root.brandTextVisible
                 text: "MiaCode"
                 color: brand.hovered || brandMenu.active
                        ? Theme.colors.text.active : Theme.colors.text.chrome
@@ -80,6 +99,11 @@ Rectangle {
                 font.pixelSize: Theme.uiFontSize
                 font.bold: true
             }
+        }
+
+        Tooltip {
+            visible: brand.hovered && !root.brandTextVisible && !brandMenu.active
+            text: "MiaCode"
         }
 
         onClicked: {

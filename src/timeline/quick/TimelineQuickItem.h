@@ -146,10 +146,7 @@ private:
     QPointF hoverTooltipPosition_;
     quint64 appearanceRevision_ = 0;
     qreal cachedDevicePixelRatio_ = 0.0;
-    // Phase-4e-old-opt — was QString built via per-paint label-name
-    // concat; replaced by a 64-bit hash. `0` is sentinel for
-    // "uninitialised" (no chart loaded yet); a real chart will hash to
-    // some non-zero value with overwhelming probability.
+    // Palette identity stays independent of scroll-window contents and marker visibility.
     quint64 cachedThemeSignature_ = 0;
     bool cachedThemeSignatureValid_ = false;
     bool pendingThemeInvalidation_ = false;

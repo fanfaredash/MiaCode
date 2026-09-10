@@ -25,11 +25,14 @@ Item {
     property real availableWidth: Number.POSITIVE_INFINITY
 
     readonly property int overflowButtonWidth: 30
+    readonly property real fullWidth: fileButton.implicitWidth + editButton.implicitWidth
+        + adjustButton.implicitWidth + toolsButton.implicitWidth + previewButton.implicitWidth
     property int visibleCount: 5
     property bool layoutReady: false
     property var _activeMenu: null
 
     implicitHeight: 34
+    implicitWidth: fullWidth
     height: parent ? parent.height : implicitHeight
     // Shrink-wrap to whole visible controls
     width: barRow.width
