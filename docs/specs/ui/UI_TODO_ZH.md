@@ -4,7 +4,7 @@ lifecycle: working
 
 > 工作资料：包含待复核的实现描述或阶段目标，不能整体视为当前规范；以代码和 [文档索引](../../INDEX.md) 中的现行契约为准。
 
-# QML UI v2 当前 Todolist
+# UI 当前任务
 
 > 更新：2026-09-05。已解决内容移至
 > [QML_UI_V2_PHASE1_ARCHIVE_2026-09-05_ZH.md](QML_UI_V2_PHASE1_ARCHIVE_2026-09-05_ZH.md)，

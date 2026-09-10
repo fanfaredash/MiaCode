@@ -450,7 +450,7 @@ miacode_add_spec(ui_text_locale_spec
 )
 target_compile_definitions(ui_text_locale_spec PRIVATE
     "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\""
-    "MIACODE_EN_QM_PATH=\"${CMAKE_CURRENT_BINARY_DIR}/miacode_en.qm\"")
+    "MIACODE_EN_US_QM_PATH=\"${CMAKE_CURRENT_BINARY_DIR}/en_US.qm\"")
 add_dependencies(ui_text_locale_spec miacode_lrelease)
 
 miacode_add_spec(native_chrome_policy_spec

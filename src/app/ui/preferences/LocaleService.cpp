@@ -13,12 +13,12 @@ namespace {
 QString qmResourcePathForToken(const QString& token)
 {
     if (token.startsWith(QStringLiteral("zh"))) {
-        return QStringLiteral(":/i18n/miacode_zh_CN.qm");
+        return QStringLiteral(":/i18n/zh_CN.qm");
     }
     if (token.startsWith(QStringLiteral("ja"))) {
-        return QStringLiteral(":/i18n/miacode_ja_JP.qm");
+        return QStringLiteral(":/i18n/ja_JP.qm");
     }
-    return QStringLiteral(":/i18n/miacode_en.qm");
+    return QStringLiteral(":/i18n/en_US.qm");
 }
 
 }  // namespace

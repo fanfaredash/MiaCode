@@ -614,6 +614,12 @@ set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.fanfaredash.MiaCode"
 )
 
+if(UNIX AND NOT APPLE)
+    set_target_properties(MiaCode PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin"
+    )
+endif()
+
 if (WIN32 AND EXISTS "${MIACODE_APP_ICON}")
     file(TO_CMAKE_PATH "${MIACODE_APP_ICON}" MIACODE_APP_ICON_RC_PATH)
     set(MIACODE_APP_RC "${CMAKE_CURRENT_BINARY_DIR}/generated/miacode_app_icon.rc")
@@ -834,9 +840,9 @@ qt_add_qml_module(MiaCode
 )
 
 set(MIACODE_TRANSLATION_TS_FILES
-    translations/miacode_en.ts
-    translations/miacode_zh_CN.ts
-    translations/miacode_ja_JP.ts
+    translations/en_US.ts
+    translations/zh_CN.ts
+    translations/ja_JP.ts
 )
 qt_add_lrelease(
     LRELEASE_TARGET miacode_lrelease

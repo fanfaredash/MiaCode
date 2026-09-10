@@ -39,12 +39,12 @@ lifecycle: working
 | 责任 | 新建/修改文件 |
 | --- | --- |
 | 文档事务与 revision 快照 | `src/app/mainwindow/MainWindow.h`、`MainWindowMemberStorage.inc`、`sections/document/MainWindow.DocumentBridge.cpp`、`sections/validation/MainWindow.ValidationRuntime.cpp`、`sections/timeline/MainWindow.TimelineAnalysisFlow.cpp` |
-| QML 文档/分析投影 | `src/app/qml_ui/QmlDocumentModel.*`；新建 `QmlAnalysisModel.*`、必要时 `QmlDocumentProjection.*`；`QmlApplicationContext.*`、`CMakeLists.txt` |
-| QML root 和拖放 | `src/app/qml_ui/QmlUiBootstrap.*`；复用 `src/app/ui/ChartDropOverlay.*` 与 `MainWindow.WindowInteraction.cpp` |
-| timeline 操作面 | `src/app/qml_ui/timeline/BottomPanel.qml`、`BottomTabBar.qml`、`src/app/qml_ui/layout/MainSplitView.qml`、`src/app/qml_ui/ViewState.qml`、`QmlUiSettings.*`；复用 `QuickShellController.*` 与 `TimelineQuickItem` |
-| QML 编辑策略与界面 | 新建 `src/editor/SimaiTextEditPolicy.*`、`src/app/qml_ui/QmlEditorController.*`；修改 `QmlApplicationContext.*`、`SourceEditor.qml`、`EditorPane.qml`、`LineNumberGutter.qml`，必要时新建 `editor/CompletionPopup.qml`、`FindReplaceBar.qml`、`BookmarkModel` QML 组件 |
-| 自动化验证 | 新建 `src/tools/qml_ui/*Spec.cpp`；修改 `CMakeLists.txt`；保留并扩展 `src/tools/editor/PlainCodeEditorSpec.cpp`、`SimaiCompletionCatalogSpec.cpp`、`TimelineModelSpec.cpp`、`MuriSpec.cpp`、`TouchPadAuthoringStateSpec.cpp` |
-| 维护文档 | `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`、`.agents/skills/miacode-dev-guide/references/{feature-index,cross-chain-linkage}.md`（只在入口/跨链契约确有变化时） |
+| QML 文档/分析投影 | `src/app/ui/document/DocumentModel.*`；新建 `QmlAnalysisModel.*`、必要时 `QmlDocumentProjection.*`；`QmlApplicationContext.*`、`CMakeLists.txt` |
+| QML root 和拖放 | `src/app/ui/Bootstrap.*`；复用 `src/app/ui/ChartDropOverlay.*` 与 `MainWindow.WindowInteraction.cpp` |
+| timeline 操作面 | `src/app/ui/timeline/BottomPanel.qml`、`BottomTabBar.qml`、`src/app/ui/layout/MainSplitView.qml`、`src/app/ui/ViewState.qml`、`QmlUiSettings.*`；复用 `QuickShellController.*` 与 `TimelineQuickItem` |
+| QML 编辑策略与界面 | 新建 `src/editor/SimaiTextEditPolicy.*`、`src/app/ui/editor/EditorController.*`；修改 `QmlApplicationContext.*`、`SourceEditor.qml`、`EditorPane.qml`、`LineNumberGutter.qml`，必要时新建 `editor/CompletionPopup.qml`、`FindReplaceBar.qml`、`BookmarkModel` QML 组件 |
+| 自动化验证 | 新建 `src/tools/ui/*Spec.cpp`；修改 `CMakeLists.txt`；保留并扩展 `src/tools/editor/PlainCodeEditorSpec.cpp`、`SimaiCompletionCatalogSpec.cpp`、`TimelineModelSpec.cpp`、`MuriSpec.cpp`、`TouchPadAuthoringStateSpec.cpp` |
+| 维护文档 | `docs/specs/ui/UI_TODO_ZH.md`、`.agents/skills/miacode-dev-guide/references/{feature-index,cross-chain-linkage}.md`（只在入口/跨链契约确有变化时） |
 
 ## 阶段 1：完成单一文档与状态边界（P0）
 
@@ -56,8 +56,8 @@ lifecycle: working
 - Modify: `src/app/mainwindow/sections/document/MainWindow.DocumentBridge.cpp`
 - Modify: `src/app/mainwindow/sections/validation/MainWindow.ValidationRuntime.cpp`
 - Modify: `src/app/mainwindow/sections/timeline/MainWindow.TimelineAnalysisFlow.cpp`
-- Create: `src/app/qml_ui/QmlDocumentProjection.{h,cpp}`
-- Test: `src/tools/qml_ui/QmlDocumentProjectionSpec.cpp`
+- Create: `src/app/ui/document/DocumentProjection.{h,cpp}`
+- Test: `src/tools/ui/QmlDocumentProjectionSpec.cpp`
 
 - [ ] **Step 1: 编写失败 spec，覆盖 revision 门控。**
 
@@ -91,10 +91,10 @@ lifecycle: working
 
 **Files:**
 
-- Modify: `src/app/qml_ui/QmlDocumentModel.{h,cpp}`
-- Modify: `src/app/qml_ui/QmlApplicationContext.{h,cpp}`
-- Modify: `src/app/qml_ui/editor/SourceEditor.qml`、`EditorPane.qml`
-- Test: `src/tools/qml_ui/QmlDocumentProjectionSpec.cpp`
+- Modify: `src/app/ui/document/DocumentModel.{h,cpp}`
+- Modify: `src/app/ui/ApplicationContext.{h,cpp}`
+- Modify: `src/app/ui/editor/SourceEditor.qml`、`EditorPane.qml`
+- Test: `src/tools/ui/QmlDocumentProjectionSpec.cpp`
 
 - [ ] **Step 1: 先为 QML 文档快照补失败测试。**
 
@@ -126,10 +126,10 @@ lifecycle: working
 
 **Files:**
 
-- Modify: `src/app/qml_ui/QmlUiBootstrap.{h,cpp}`
+- Modify: `src/app/ui/Bootstrap.{h,cpp}`
 - Reuse: `src/app/ui/ChartDropOverlay.{h,cpp}`
 - Reuse: `src/app/mainwindow/sections/window/MainWindow.WindowInteraction.cpp`
-- Test: 新建最小 QML bootstrap/drag-route spec，或将无窗口可测部分提为纯 helper 后写入 `src/tools/qml_ui/`
+- Test: 新建最小 QML bootstrap/drag-route spec，或将无窗口可测部分提为纯 helper 后写入 `src/tools/ui/`
 
 - [ ] **Step 1: 为 root 生命周期定义可测的失败用例。**
 
@@ -155,7 +155,7 @@ lifecycle: working
 
 **Files:**
 
-- Modify: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`
+- Modify: `docs/specs/ui/UI_TODO_ZH.md`
 - Modify if contracts changed: `.agents/skills/miacode-dev-guide/references/{feature-index,cross-chain-linkage}.md`
 
 - [ ] **Step 1: 用一次端到端用例验证五类 mutation。**
@@ -180,10 +180,10 @@ lifecycle: working
 
 **Files:**
 
-- Modify: `src/app/qml_ui/timeline/BottomPanel.qml`、`BottomTabBar.qml`
-- Modify: `src/app/qml_ui/layout/MainSplitView.qml`、`src/app/qml_ui/ViewState.qml`、`QmlUiSettings.{h,cpp}`
+- Modify: `src/app/ui/timeline/BottomPanel.qml`、`BottomTabBar.qml`
+- Modify: `src/app/ui/layout/MainSplitView.qml`、`src/app/ui/ViewState.qml`、`QmlUiSettings.{h,cpp}`
 - Reuse: `src/app/quick_shell/qml/TimelineTabSurface.qml`、`QuickShellController.{h,cpp}`、`TimelineQuickItem`
-- Test: `src/tools/timeline/TimelineModelSpec.cpp`；补一个 QML 控制映射 spec（纯 helper 时放 `src/tools/qml_ui/`）
+- Test: `src/tools/timeline/TimelineModelSpec.cpp`；补一个 QML 控制映射 spec（纯 helper 时放 `src/tools/ui/`）
 
 - [ ] **Step 1: 建立失败用例，检查 v2 操作不会创建平行状态。**
 
@@ -215,10 +215,10 @@ lifecycle: working
 
 **Files:**
 
-- Create: `src/app/qml_ui/QmlAnalysisModel.{h,cpp}`
+- Create: `src/app/ui/document/AnalysisModel.{h,cpp}`
 - Modify: `src/app/mainwindow/MainWindow.h`、`sections/validation/MainWindow.ValidationRuntime.cpp`、`sections/validation/MainWindow.ValidationRender.cpp`
-- Modify: `src/app/qml_ui/QmlApplicationContext.{h,cpp}`、`timeline/BottomPanel.qml`、`BottomTabBar.qml`、`CMakeLists.txt`
-- Test: 新建 `src/tools/qml_ui/QmlAnalysisModelSpec.cpp`；复用 `src/tools/muri/MuriSpec.cpp`
+- Modify: `src/app/ui/ApplicationContext.{h,cpp}`、`timeline/BottomPanel.qml`、`BottomTabBar.qml`、`CMakeLists.txt`
+- Test: 新建 `src/tools/ui/QmlAnalysisModelSpec.cpp`；复用 `src/tools/muri/MuriSpec.cpp`
 
 - [ ] **Step 1: 先写失败 spec，定义分析快照的对齐规则。**
 
@@ -253,7 +253,7 @@ lifecycle: working
 - Create: `src/editor/SimaiTextEditPolicy.{h,cpp}`
 - Modify: `src/editor/PlainCodeEditor.Input.cpp`、`PlainCodeEditor.BracketCompletion.cpp`
 - Modify: `src/tools/editor/PlainCodeEditorSpec.cpp`、`SimaiCompletionCatalogSpec.cpp`
-- Create: `src/tools/qml_ui/SimaiTextEditPolicySpec.cpp`
+- Create: `src/tools/ui/SimaiTextEditPolicySpec.cpp`
 - Modify: `CMakeLists.txt`
 
 - [ ] **Step 1: 从 v1 行为补齐参数化失败测试。**
@@ -276,10 +276,10 @@ lifecycle: working
 
 **Files:**
 
-- Create: `src/app/qml_ui/QmlEditorController.{h,cpp}`、`editor/CompletionPopup.qml`
-- Modify: `src/app/qml_ui/QmlApplicationContext.{h,cpp}`、`SourceEditor.qml`、`EditorPane.qml`
+- Create: `src/app/ui/editor/EditorController.{h,cpp}`、`editor/CompletionPopup.qml`
+- Modify: `src/app/ui/ApplicationContext.{h,cpp}`、`SourceEditor.qml`、`EditorPane.qml`
 - Modify: `CMakeLists.txt`
-- Test: `src/tools/qml_ui/QmlEditorControllerSpec.cpp`
+- Test: `src/tools/ui/QmlEditorControllerSpec.cpp`
 
 - [ ] **Step 1: 写 controller 的失败 spec。**
 
@@ -307,12 +307,12 @@ lifecycle: working
 
 **Files:**
 
-- Create: `src/app/qml_ui/editor/FindReplaceBar.qml`、必要时 `BookmarkList.qml`
-- Modify: `src/app/qml_ui/editor/{SourceEditor,EditorPane,LineNumberGutter}.qml`
+- Create: `src/app/ui/editor/FindReplaceBar.qml`、必要时 `BookmarkList.qml`
+- Modify: `src/app/ui/editor/{SourceEditor,EditorPane,LineNumberGutter}.qml`
 - Modify: `CMakeLists.txt`
 - Modify/Reuse: `src/editor/{BookmarkCommentSyntax,TouchPadAuthoringEdit,PlainCodeEditor.Bookmarks}.*`
 - Modify: `src/app/mainwindow/sections/{document,timeline}/` 的窄公开 command，仅在现有 API 不能表达 caret/selection 时新增
-- Test: `src/tools/qml_ui/QmlEditorControllerSpec.cpp`、`src/tools/editor/PlainCodeEditorSpec.cpp`、`src/tools/preview/TouchPadAuthoringStateSpec.cpp`
+- Test: `src/tools/ui/QmlEditorControllerSpec.cpp`、`src/tools/editor/PlainCodeEditorSpec.cpp`、`src/tools/preview/TouchPadAuthoringStateSpec.cpp`
 
 - [ ] **Step 1: 写失败 spec，先锁定数据协议。**
 
@@ -344,7 +344,7 @@ lifecycle: working
 
 **Files:**
 
-- Modify: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`
+- Modify: `docs/specs/ui/UI_TODO_ZH.md`
 - Modify if behavior changes: `.agents/skills/miacode-dev-guide/references/{feature-index,cross-chain-linkage}.md`
 
 - [ ] **Step 1: 完成 QML desktop UI 检查。**

@@ -3,6 +3,7 @@
 ## 构建与 Spec
 
 - 依赖和平台入口查 `README.md`、`scripts/README.md`；Windows/macOS 脚本位于 `scripts/build/`。
+- Linux 产品可执行文件生成到 `build/bin/MiaCode`；Qt 按模块 URI 管理构建期 QML 目录。
 - 日常构建使用 Release；复用已配置的构建目录，先检查 CMakeCache，不硬编码开发者机器路径。
 - 可执行规格由 `MIACODE_BUILD_DEV_TOOLS=ON` 启用；domain manifests 位于 `cmake/devtools/specs/`，注册规则查 `cmake/devtools/MiaCodeSpecRegistry.cmake`。
 - 新 Spec 仿照同域的 `miacode_add_spec`，声明保护的契约与 owner，复用源文件分组，保留最小链接依赖。手动诊断仍用 `miacode_add_dev_tool`。
@@ -23,6 +24,7 @@ ctest --test-dir <dev-build> -C Release -R '^<spec-target>$' --output-on-failure
 - 运行时诊断使用 `--debug`；日志入口是 `src/common/DebugLog.h`，flag 的维护索引是 `docs/ops/DEBUG_INDEX.md`。skill 不复制 flag 清单。
 - 行为参数先在所属模块及 `src/common/` 的 Config/Settings 头中查找。跨模块共享语义复用同一 helper；局部实现值留在局部。
 - 资源根、谱面素材解析复用 AssetPaths、ChartAssetPaths、ChartMediaService；资源声明在 `resources/`，打包入口在 `scripts/build/`。
+- 翻译源文件是 `translations/{en_US,zh_CN,ja_JP}.ts`，生成的 QM 嵌入 `/i18n` 资源前缀。
 - 新资源/命名规则检查 preview、export、工具和打包消费者；不提交本地产物、日志、第三方二进制。
 
 ## 文档与 skill

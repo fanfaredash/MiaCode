@@ -5,7 +5,7 @@
 
 ## 常用入口
 
-- [当前应用架构](specs/ui/CURRENT_ARCHITECTURE_ZH.md)、[QML/Session 边界](specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md)
+- [当前应用架构](specs/ui/CURRENT_ARCHITECTURE_ZH.md)、[QML/Session 边界](specs/ui/UI_BACKEND_SURFACE_ZH.md)
 - [当前预览与导出](specs/preview/CURRENT_RENDER_EXPORT_CONTRACT_ZH.md)
 - [Slide 与头材质](specs/chart/SLIDE_DELAY_AND_HEAD_MATERIAL_SPEC.md)、[无理检测](specs/muri/MURI_DETECTION_SPEC.md)
 - [Timeline 坐标与聚焦](specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md)

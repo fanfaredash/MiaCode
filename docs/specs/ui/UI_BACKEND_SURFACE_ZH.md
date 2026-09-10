@@ -1,15 +1,15 @@
 ---
 lifecycle: stable-current
-owner: src/app/qml_ui
+owner: src/app/ui
 canonical_id: ui.backend-surface
 last_verified: 2026-09-06
-code_anchors: ["src/app/qml_ui/QmlUiBootstrap.cpp", "src/app/runtime/Session.h", "src/tools/qml_ui/QmlUiBackendSurfaceSpec.cpp"]
+code_anchors: ["src/app/ui/Bootstrap.cpp", "src/app/runtime/Session.h", "src/tools/ui/QmlUiBackendSurfaceSpec.cpp"]
 ---
 
 # QML 到 Session 的直接访问边界
 
 产品前端通过 ApplicationServices 的服务/typed slots 访问领域能力。
-仅 QmlUiBootstrap 在创建、附着和激活根窗口时直接调用 Session。
+仅 Bootstrap 在创建、附着和激活根窗口时直接调用 Session。
 Session 是 QObject 装配对象；旧 MainWindow 产品窗口已经删除。
 
 `qml_ui_backend_surface_spec` 扫描 QML C++ 源码与 Session 头文件，对本文清单做集合相等比较。
@@ -24,7 +24,7 @@ QML 类型没有 Session 的 friend 授权；领域行为应经已有端口调�
 
 ## 清单
 
-`src/app/qml_ui/QmlUiBootstrap.cpp` 的根窗口生命周期调用：
+`src/app/ui/Bootstrap.cpp` 的根窗口生命周期调用：
 
 - `attachRootWindow`
 - `noteRootWindowReady`
@@ -32,7 +32,7 @@ QML 类型没有 Session 的 friend 授权；领域行为应经已有端口调�
 - `setRootWindowFrameGeometry`
 
 列表按去重方法名计数，不按调用次数计数。文档、播放、预览、导出等业务调用不属于此清单，
-它们通过 v2 服务/端口进行，见 [当前架构](CURRENT_ARCHITECTURE_ZH.md)。
+它们通过应用服务与端口进行，见 [当前架构](CURRENT_ARCHITECTURE_ZH.md)。
 
 ## 更新规则
 

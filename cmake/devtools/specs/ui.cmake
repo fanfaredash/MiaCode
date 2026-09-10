@@ -337,7 +337,7 @@ miacode_add_spec(qml_editor_controller_spec
 target_compile_definitions(qml_editor_controller_spec PRIVATE
     "MIACODE_QML_SPEC_IMPORT_ROOT=\"${MIACODE_QML_SPEC_IMPORT_ROOT}\"")
 
-# Ratchet for docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md (stage 3.5, item 2).
+# Ratchet for docs/specs/ui/UI_BACKEND_SURFACE_ZH.md (stage 3.5, item 2).
 # Set-equality between the MainWindow surface src/app/ui actually reaches
 # and the inventory the doc lists, plus the friend grants and the recorded
 # counts. New coupling fails; a migration that forgets the doc fails too,

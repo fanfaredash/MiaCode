@@ -39,8 +39,8 @@
 #error "MIACODE_SOURCE_ROOT must be defined (repo root absolute path)"
 #endif
 
-#ifndef MIACODE_EN_QM_PATH
-#error "MIACODE_EN_QM_PATH must be defined (generated English catalog path)"
+#ifndef MIACODE_EN_US_QM_PATH
+#error "MIACODE_EN_US_QM_PATH must be defined (generated English catalog path)"
 #endif
 
 namespace {
@@ -117,9 +117,9 @@ int main(int argc, char* argv[])
     // Install the English catalog generated from the same TS input that the
     // application embeds, so invariant 4 also guards the release pipeline.
     QTranslator translator;
-    const QString enQmPath = QStringLiteral(MIACODE_EN_QM_PATH);
-    if (!translator.load(enQmPath)) {
-        err << "ui_text_locale_spec: could not load " << enQmPath << Qt::endl;
+    const QString enUsQmPath = QStringLiteral(MIACODE_EN_US_QM_PATH);
+    if (!translator.load(enUsQmPath)) {
+        err << "ui_text_locale_spec: could not load " << enUsQmPath << Qt::endl;
         return 1;
     }
     if (!QCoreApplication::installTranslator(&translator)) {
@@ -130,9 +130,9 @@ int main(int argc, char* argv[])
     // --- Invariant 1: id sets in all three .ts files are identical. ----------
     const QString tsDir = root + QStringLiteral("/translations");
     const struct { const char* name; const char* file; } tsFiles[] = {
-        {"en",    "miacode_en.ts"},
-        {"zh_CN", "miacode_zh_CN.ts"},
-        {"ja_JP", "miacode_ja_JP.ts"},
+        {"en_US", "en_US.ts"},
+        {"zh_CN", "zh_CN.ts"},
+        {"ja_JP", "ja_JP.ts"},
     };
 
     QHash<QByteArray, QSet<QString>> tsIds;
@@ -145,11 +145,11 @@ int main(int argc, char* argv[])
         tsIds.insert(QByteArray(ts.name), ids);
     }
 
-    const QSet<QString>& enIds = tsIds.value("en");
+    const QSet<QString>& enIds = tsIds.value("en_US");
 
     for (const auto& ts : tsFiles) {
         const QByteArray name(ts.name);
-        if (QByteArray(ts.name) == QByteArray("en")) {
+        if (QByteArray(ts.name) == QByteArray("en_US")) {
             continue;
         }
         const QSet<QString>& other = tsIds.value(name);

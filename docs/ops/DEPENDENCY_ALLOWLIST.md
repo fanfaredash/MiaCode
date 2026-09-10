@@ -1,6 +1,6 @@
 # MiaCode 依赖 allowlist
 
-> 归属：[QML_UI_V2_PHASE1_TODO_ZH.md](../specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md) 阶段 3.5 第 4 项。
+> 归属：[UI_TODO_ZH.md](../specs/ui/UI_TODO_ZH.md) 阶段 3.5 第 4 项。
 >
 > 本文登记 **`MiaCode` 主程序 target 链接的每一个库**：属于哪一层、在什么平台条件下存在、
 > 代码里的直接使用点在哪、什么时候加载、怎么验证。目标不是把部署包里的 DLL 数量压到最低，

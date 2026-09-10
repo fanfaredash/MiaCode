@@ -33,7 +33,7 @@
 | 对话框与提示 | AppDialog、DialogFooter、ChoiceDialog；请求接 UiRequestService / UiRequestHost |
 | 进度、浮层与公共视觉 | JobProgressService / JobProgressOverlay、FloatingCard、HoverChrome、AppDropdownPanel |
 | 颜色、间距、字体与背景 | `src/app/ui/theme/Theme.qml`；C++ 主题在同目录 `UiTheme` |
-| 用户可见文案 | `qsTrId` / `qtTrId`；目录在 `translations/`，运行期 `LocaleService` |
+| 用户可见文案 | `qsTrId` / `qtTrId`；目录是 `translations/{en_US,zh_CN,ja_JP}.ts`，运行期由 `LocaleService` 加载 |
 | 语言、主题与 preferences.json | `src/app/ui/preferences/PreferenceDocument.h` |
 
 例如增加设置选择器：从 `src/app/ui/preferences/PreferencesDialog.qml` 的

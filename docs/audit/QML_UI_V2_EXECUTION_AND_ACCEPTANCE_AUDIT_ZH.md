@@ -212,7 +212,7 @@ grep -E "editor/document_replaced|editor/document_shown" <chart>/.miacode/logs/m
 ## 与原计划的关系
 
 - 原计划的 Task 1–10 实施提交保持不重写，以便追溯每项边界和规格的引入时间。
-- `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md` 是当前手工验收摘要；本文件提供提交级历史和失败项。
+- `docs/specs/ui/UI_TODO_ZH.md` 是当前手工验收摘要；本文件提供提交级历史和失败项。
 - 当前分支在三个后续修复提交之后，又加入了本文“根因修复轮”一节的六个修复提交与一个诊断提交。
   五项验收门槛的成因均已定位、修复，并于 2026-08-24 通过 macOS 原生桌面复验。
   阶段 2 仍未整体验收：另有三项功能缺口待处理，Windows 侧未验证。

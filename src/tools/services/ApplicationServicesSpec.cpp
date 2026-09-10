@@ -1,6 +1,6 @@
 // Contract regression for the non-Widget application service assembly.
 //
-// Stage 3.5 items 1-2 of docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md: the
+// Stage 3.5 items 1-2 of docs/specs/ui/UI_TODO_ZH.md: the
 // document, analysis, editor-sync, chart-drop, UI-request, job-progress and
 // preview-appearance services must have an owner that is not a QWidget and does
 // not need one to exist. Before ApplicationServices they were split between

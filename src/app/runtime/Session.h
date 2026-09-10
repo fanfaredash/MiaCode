@@ -473,7 +473,7 @@ public:
     // unbounded: it lets any later edit reach any member, forever. Publishing
     // exactly what those pages call replaced three blanket grants with this
     // list, at no cost to the recorded surface (docs/specs/ui/
-    // QML_UI_V2_BACKEND_SURFACE_ZH.md already counted every name here).
+    // UI_BACKEND_SURFACE_ZH.md already counted every name here).
     //
     // The skin/outline entries are catalog queries — path resolution and
     // directory listing, no state of their own. The two setters already took a

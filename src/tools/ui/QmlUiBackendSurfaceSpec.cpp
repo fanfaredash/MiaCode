@@ -1,6 +1,6 @@
-// Ratchet for docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md.
+// Ratchet for docs/specs/ui/UI_BACKEND_SURFACE_ZH.md.
 //
-// Stage 3.5 item 2 of docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md wants
+// Stage 3.5 item 2 of docs/specs/ui/UI_TODO_ZH.md wants
 // ApplicationContext to stop holding a MainWindow&. That is not one edit —
 // it is roughly 120 method calls plus 17 direct reads of MainWindow's private
 // members, spread across the Qml*Model façades. A goal that size regresses
@@ -233,10 +233,10 @@ bool verifyRecordedCounts(const QString& doc, const BackendSurface& surface, int
 
 int main()
 {
-    const QString doc = readFile(QStringLiteral("docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md"));
+    const QString doc = readFile(QStringLiteral("docs/specs/ui/UI_BACKEND_SURFACE_ZH.md"));
     const QString mainWindowHeader = readFile(QStringLiteral("src/app/runtime/Session.h"));
     bool ok = require(!doc.isEmpty(),
-                      QStringLiteral("docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md is readable"));
+                      QStringLiteral("docs/specs/ui/UI_BACKEND_SURFACE_ZH.md is readable"));
     ok &= require(!mainWindowHeader.isEmpty(),
                   QStringLiteral("src/app/runtime/Session.h is readable"));
     if (!ok) {

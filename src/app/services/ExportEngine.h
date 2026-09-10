@@ -88,7 +88,7 @@ public:
     // pick a default. These read the same copy the export snapshot is built
     // from, which is why they belong here rather than on ChartWorkspace — see
     // the deferred-sync hazard recorded in
-    // docs/specs/ui/QML_UI_V2_BACKEND_SURFACE_ZH.md.
+    // docs/specs/ui/UI_BACKEND_SURFACE_ZH.md.
     virtual QList<int> difficultyIds() const = 0;
     virtual QString difficultyChartText(int difficultyId) const = 0;
     // Which difficulty this project was last opened on; seeds the badge.

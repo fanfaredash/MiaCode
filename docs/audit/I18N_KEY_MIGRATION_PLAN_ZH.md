@@ -1,6 +1,8 @@
 ---
-lifecycle: working
+lifecycle: archive-legacy
 ---
+
+> 历史资料：记录 Qt Linguist 接入前的第二阶段迁移方案。当前翻译目录为 `translations/{en_US,zh_CN,ja_JP}.ts`。
 
 # i18n 收敛第二阶段方案：统一到键值路径 + Muri 详情多语言（2026-07-07）
 

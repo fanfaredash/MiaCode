@@ -135,10 +135,10 @@ git cherry -v origin/feature/qml-ui origin/dev
 - `src/preview/quick_scene/PreviewQuickSceneRoot.cpp`
 - `src/preview/runtime/PreviewRuntime.{h,cpp}`
 - `src/app/runtime/SessionBootstrap.cpp`
-- `src/app/qml_ui/QmlEditorController.{h,cpp}`
+- `src/app/ui/editor/EditorController.{h,cpp}`
 - `src/core/chart/transform/ChartNormalization.{h,cpp}`
-- `src/app/qml_ui/QmlDocumentModel.cpp`
-- `src/app/qml_ui/editor/NormalizeOptionsDialog.qml`
+- `src/app/ui/document/DocumentModel.cpp`
+- `src/app/ui/editor/NormalizeOptionsDialog.qml`
 
 #### 操作步骤
 
@@ -168,13 +168,13 @@ git cherry -v origin/feature/qml-ui origin/dev
 
 #### v2 落点
 
-- `src/app/qml_ui/editor/SourceEditor.qml`
-- `src/app/qml_ui/ChartTransformCommands.h`
-- `src/app/qml_ui/QmlDocumentModel.{h,cpp}`
+- `src/app/ui/editor/SourceEditor.qml`
+- `src/app/ui/ChartTransformCommands.h`
+- `src/app/ui/document/DocumentModel.{h,cpp}`
 - `src/core/chart/transform/ChartBatchTransform.{h,Selection.cpp}`
 - 新建建议：`src/core/chart/selection/ChartSelectionBeatSummary.{h,cpp}`
-- `src/app/qml_ui/preferences/QmlPreferencesModel.*`
-- `src/app/qml_ui/QmlUiSettings.*`
+- `src/app/ui/preferences/QmlPreferencesModel.*`
+- `src/app/ui/layout/WorkbenchSettings.*`
 - `resources/shortcuts.json`
 
 #### 操作步骤
@@ -207,13 +207,13 @@ v1 的校验意图正确，但 Widgets 的 sidebar attention dot、`QTextEdit::E
 #### v2 落点
 
 - `src/core/chart/document/SimaiDocument.{h,cpp}`
-- `src/app/v2/ChartWorkspace.{h,cpp}`
-- `src/app/qml_ui/QmlDocumentModel.{h,cpp}`
-- `src/app/qml_ui/editor/EditorPane.qml`
-- `src/app/qml_ui/QmlDocumentProjection.*`
+- `src/app/services/ChartWorkspace.{h,cpp}`
+- `src/app/ui/document/DocumentModel.{h,cpp}`
+- `src/app/ui/editor/EditorPane.qml`
+- `src/app/ui/document/DocumentProjection.*`
 - `src/tools/chart_document/SimaiDocumentSpec.cpp`
-- `src/tools/v2/ChartWorkspaceSpec.cpp`
-- `src/tools/qml_ui/QmlDocumentProjectionSpec.cpp`
+- `src/tools/services/ChartWorkspaceSpec.cpp`
+- `src/tools/ui/QmlDocumentProjectionSpec.cpp`
 
 #### 操作步骤
 
@@ -247,10 +247,10 @@ v1 的校验意图正确，但 Widgets 的 sidebar attention dot、`QTextEdit::E
 
 - `src/core/scene/PreviewHudState.{h,cpp}`
 - `src/preview/quick_scene/PreviewQuickHudLayer.cpp`
-- `src/app/qml_ui/export/QmlExportSession.cpp`
-- `src/app/qml_ui/preview/QmlPreviewSettingsModel.cpp`
-- `src/app/qml_ui/export/ExportVideoPage.qml`
-- `src/app/qml_ui/preview/PreviewSettingsDialog.qml`
+- `src/app/ui/export/QmlExportSession.cpp`
+- `src/app/ui/preview/QmlPreviewSettingsModel.cpp`
+- `src/app/ui/export/ExportVideoPage.qml`
+- `src/app/ui/preview/PreviewSettingsDialog.qml`
 - `src/app/runtime/document/DocumentPages.cpp`
 - `src/app/runtime/export/ExportSnapshot.cpp`
 - `src/intro/qml/MaimaiBannerCard.qml`
@@ -284,11 +284,11 @@ v1 的校验意图正确，但 Widgets 的 sidebar attention dot、`QTextEdit::E
 
 #### v2 落点
 
-- 新建建议：`src/app/v2/ChartMediaService.{h,cpp}`
+- 新建建议：`src/app/services/ChartMediaService.{h,cpp}`
 - 可复用/重构：`src/common/ChartMediaImport.h` → 建议拆为 `.h/.cpp`
-- `src/app/qml_ui/QmlDocumentModel.*` 或独立 `QmlChartMediaModel.*`
-- `src/app/qml_ui/editor/EditorPane.qml`
-- `src/app/v2/UiRequestService.*`
+- `src/app/ui/document/DocumentModel.*` 或独立 `QmlChartMediaModel.*`
+- `src/app/ui/editor/EditorPane.qml`
+- `src/app/services/UiRequestService.*`
 - 预览媒体刷新经现有 `PreviewSurface`/document bridge，不得重新触达 Widgets UI。
 
 #### 操作步骤
@@ -348,7 +348,7 @@ P0。当前 v2 使用 `20 * 1024 * 1024`，且单 pass 估算允许输出刚好�
 - 新增 `src/tools/media/PvCompressionPolicy.{h,cpp}`
 - `src/app/runtime/media/MediaTools.cpp`
 - `src/tools/media/PvBatchCompressionWorker.cpp`
-- `src/app/qml_ui/media/QmlMediaToolsModel.cpp`
+- `src/app/ui/media/QmlMediaToolsModel.cpp`
 - `CMakeLists.txt`
 
 #### 操作步骤
@@ -427,11 +427,11 @@ P2，吸纳但重写。用户价值是让预览设置与导出设置共享一组
 
 #### v2 落点
 
-- 新建建议：`src/app/v2/PreviewVisualPresetStore.{h,cpp}`
-- `src/app/qml_ui/preview/QmlPreviewSettingsModel.*`
-- `src/app/qml_ui/export/QmlExportSession.*`
-- `src/app/qml_ui/preview/PreviewSettingsDialog.qml`
-- `src/app/qml_ui/export/ExportVideoPage.qml`
+- 新建建议：`src/app/services/PreviewVisualPresetStore.{h,cpp}`
+- `src/app/ui/preview/QmlPreviewSettingsModel.*`
+- `src/app/ui/export/QmlExportSession.*`
+- `src/app/ui/preview/PreviewSettingsDialog.qml`
+- `src/app/ui/export/ExportVideoPage.qml`
 
 #### 操作步骤
 
