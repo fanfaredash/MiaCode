@@ -6,19 +6,26 @@
 
 namespace miacode::preview_audio {
 
+enum class BassDeviceLeaseDomain : std::uint8_t {
+    Output,
+    NoSound,
+};
+
 struct BassDeviceLeaseApi {
     using DeviceId = std::uint32_t;
 
     static constexpr DeviceId kNoDevice = std::numeric_limits<DeviceId>::max();
 
-    std::function<DeviceId()> getDevice;
+    // Selects this domain's device for the calling thread and returns its ID.
+    std::function<DeviceId()> selectDevice;
     std::function<bool()> initialize;
     std::function<void()> free;
+    BassDeviceLeaseDomain domain = BassDeviceLeaseDomain::Output;
 };
 
-// Serializes only BASS process-wide device lifetime. A held lease keeps a
-// process-owned device alive but never holds the lifecycle mutex during decode
-// or stream/mixer work.
+// Serializes BASS device lifetime within an output or no-sound domain. A held
+// lease keeps its domain's process-owned device alive but never holds the
+// lifecycle mutex during decode or stream/mixer work.
 class PreviewBassDeviceLease final
 {
 public:
@@ -43,9 +50,10 @@ private:
         Borrowed,
     };
 
-    explicit PreviewBassDeviceLease(Kind kind) noexcept;
+    explicit PreviewBassDeviceLease(Kind kind, BassDeviceLeaseDomain domain) noexcept;
 
     Kind kind_ = Kind::None;
+    BassDeviceLeaseDomain domain_ = BassDeviceLeaseDomain::Output;
 };
 
 }  // namespace miacode::preview_audio

@@ -207,9 +207,17 @@ bool BassExportAudioBackend::initializeBass(QString* errorMessage)
         return true;
     }
     bassDeviceLease_ = miacode::preview_audio::PreviewBassDeviceLease::acquire({
-        [] { return static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(BASS_GetDevice()); },
+        [] {
+            return BASS_SetDevice(0)
+                ? static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(0)
+                : miacode::preview_audio::BassDeviceLeaseApi::kNoDevice;
+        },
         [] { return BASS_Init(0, kMixSampleRate, BASS_DEVICE_NOSPEAKER, nullptr, nullptr) != FALSE; },
-        [] { BASS_Free(); },
+        [] {
+            BASS_SetDevice(0);
+            BASS_Free();
+        },
+        miacode::preview_audio::BassDeviceLeaseDomain::NoSound,
     });
     if (!bassDeviceLease_.acquired()) {
         if (errorMessage != nullptr) {

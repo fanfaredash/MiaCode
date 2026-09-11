@@ -1,7 +1,5 @@
 #include "common/WaveformCache.h"
 
-#include <algorithm>
-#include <climits>
 #include <cmath>
 
 #include <QCryptographicHash>
@@ -17,18 +15,12 @@
 #include <QThreadPool>
 #include <QtMath>
 
+#include "audio/OfflineAudioDecoder.h"
+#include "audio/PreviewBassDeviceLease.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
-#include "common/MiniaudioFileAccess.h"
-#include "audio/PreviewBassDeviceLease.h"
-
-#include "../../third_party/miniaudio/miniaudio.h"
 
 #ifdef MIACODE_HAS_BASS_AUDIO
-#ifdef Q_OS_WIN
-#include <windows.h>
-#endif
-
 #include "bass.h"
 #endif
 
@@ -41,25 +33,58 @@ constexpr quint32 kWaveformCacheCurrentVersion = kWaveformCacheSchemaVersion;
 constexpr double kWaveformDiagThresholdLow = 0.02;
 constexpr double kWaveformDiagThresholdMid = 0.05;
 constexpr double kWaveformDiagThresholdHigh = 0.10;
+constexpr quint32 kMaximumWaveformCacheLevelCount = 64;
 
-enum class WaveformDecodeBackend {
-    None,
-    Bass,
-    Miniaudio,
-};
-
-QString waveformDecodeBackendLabel(WaveformDecodeBackend backend)
+#ifdef MIACODE_HAS_BASS_AUDIO
+QMutex& bassWaveformDecodeMutex()
 {
-    switch (backend) {
-    case WaveformDecodeBackend::Bass:
-        return QStringLiteral("bass");
-    case WaveformDecodeBackend::Miniaudio:
-        return QStringLiteral("miniaudio");
-    case WaveformDecodeBackend::None:
-    default:
-        return QStringLiteral("none");
-    }
+    static QMutex mutex;
+    return mutex;
 }
+
+class ScopedBassWaveformDecodeDevice
+{
+public:
+    ScopedBassWaveformDecodeDevice()
+        : previousDevice_(BASS_GetDevice())
+        , lease_(miacode::preview_audio::PreviewBassDeviceLease::acquire({
+              [] {
+                  return BASS_SetDevice(0)
+                      ? static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(0)
+                      : miacode::preview_audio::BassDeviceLeaseApi::kNoDevice;
+              },
+              [] {
+                  return BASS_Init(
+                             0,
+                             kWaveformDecodeSampleRate,
+                             BASS_DEVICE_NOSPEAKER,
+                             nullptr,
+                             nullptr) != FALSE;
+              },
+              [] {
+                  BASS_SetDevice(0);
+                  BASS_Free();
+              },
+              miacode::preview_audio::BassDeviceLeaseDomain::NoSound,
+          }))
+    {
+    }
+
+    ~ScopedBassWaveformDecodeDevice()
+    {
+        lease_.release();
+        if (previousDevice_ != static_cast<DWORD>(-1)) {
+            BASS_SetDevice(previousDevice_);
+        }
+    }
+
+    bool available() const { return lease_.acquired(); }
+
+private:
+    DWORD previousDevice_ = static_cast<DWORD>(-1);
+    miacode::preview_audio::PreviewBassDeviceLease lease_;
+};
+#endif
 
 void appendWaveformDebugLog(const QString& payload)
 {
@@ -134,34 +159,12 @@ double peakColumnSecond(const WaveformLevel& level, double* peakEnergy)
     return peakIndex >= 0 ? static_cast<double>(peakIndex) * level.secondsPerColumn : -1.0;
 }
 
-#ifdef MIACODE_HAS_BASS_AUDIO
-QMutex& bassWaveformDecodeMutex()
-{
-    static QMutex mutex;
-    return mutex;
-}
-
-class ScopedBassWaveformDevice
-{
-public:
-    ScopedBassWaveformDevice()
-        : lease_(miacode::preview_audio::PreviewBassDeviceLease::acquire({
-            [] { return static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(BASS_GetDevice()); },
-            [] { return BASS_Init(0, kWaveformDecodeSampleRate, BASS_DEVICE_NOSPEAKER, nullptr, nullptr) != FALSE; },
-            [] { BASS_Free(); },
-        }))
-    {
-    }
-
-    bool available() const { return lease_.acquired(); }
-
-private:
-    miacode::preview_audio::PreviewBassDeviceLease lease_;
-};
-#endif
-
 int nextPowerOfTwoAtLeast(int value)
 {
+    constexpr int maximumRepresentablePowerOfTwo = 1 << 30;
+    if (value > maximumRepresentablePowerOfTwo) {
+        return 0;
+    }
     int result = 1;
     while (result < value) {
         result <<= 1;
@@ -235,176 +238,24 @@ WaveformDataPtr buildWaveformData(
     return data;
 }
 
-QVector<float> decodeMonoSamplesWithMiniaudio(const QString& trackPath, double* durationSeconds)
+miacode::audio_decode::DecodedMonoAudio decodeMonoSamples(const QString& trackPath)
 {
-    QVector<float> samples;
-    if (durationSeconds != nullptr) {
-        *durationSeconds = 0.0;
-    }
-    if (trackPath.isEmpty() || !QFileInfo::exists(trackPath)) {
-        return samples;
-    }
-
-    ma_decoder_config config = ma_decoder_config_init(
-        ma_format_f32,
-        1,
-        static_cast<ma_uint32>(kWaveformDecodeSampleRate));
-    ma_decoder decoder;
-    if (miacode::audio_io::decoderInitFile(trackPath, &config, &decoder) != MA_SUCCESS) {
-        return samples;
-    }
-
-    ma_uint64 totalFrames = 0;
-    if (ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames) == MA_SUCCESS && totalFrames > 0) {
-        samples.reserve(static_cast<int>(qMin<ma_uint64>(totalFrames, static_cast<ma_uint64>(INT_MAX))));
-        if (durationSeconds != nullptr) {
-            *durationSeconds = static_cast<double>(totalFrames) / static_cast<double>(kWaveformDecodeSampleRate);
-        }
-    }
-
-    QVector<float> buffer(4096, 0.0f);
-    while (true) {
-        ma_uint64 framesRead = 0;
-        if (ma_decoder_read_pcm_frames(
-                &decoder,
-                buffer.data(),
-                static_cast<ma_uint64>(buffer.size()),
-                &framesRead) != MA_SUCCESS
-            || framesRead == 0) {
-            break;
-        }
-
-        const int oldSize = samples.size();
-        samples.resize(oldSize + static_cast<int>(framesRead));
-        std::copy_n(buffer.cbegin(), static_cast<int>(framesRead), samples.begin() + oldSize);
-    }
-
-    ma_decoder_uninit(&decoder);
-    if (durationSeconds != nullptr && *durationSeconds <= 0.0 && !samples.isEmpty()) {
-        *durationSeconds = static_cast<double>(samples.size()) / static_cast<double>(kWaveformDecodeSampleRate);
-    }
-    return samples;
-}
-
 #ifdef MIACODE_HAS_BASS_AUDIO
-QVector<float> decodeMonoSamplesWithBass(const QString& trackPath, double* durationSeconds)
-{
-    QVector<float> samples;
-    if (durationSeconds != nullptr) {
-        *durationSeconds = 0.0;
-    }
-    if (trackPath.isEmpty() || !QFileInfo::exists(trackPath)) {
-        return samples;
-    }
-
     QMutexLocker locker(&bassWaveformDecodeMutex());
-    ScopedBassWaveformDevice device;
+    ScopedBassWaveformDecodeDevice device;
     if (!device.available()) {
-        return samples;
+        return {};
     }
-
-    QFile file(trackPath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return samples;
-    }
-    QByteArray bytes = file.readAll();
-    file.close();
-    if (bytes.isEmpty()) {
-        return samples;
-    }
-
-    HSTREAM stream = BASS_StreamCreateFile(
-        TRUE,
-        bytes.constData(),
-        0,
-        static_cast<QWORD>(bytes.size()),
-        BASS_STREAM_DECODE | BASS_STREAM_PRESCAN | BASS_SAMPLE_FLOAT);
-    if (stream == 0) {
-        return samples;
-    }
-
-    BASS_CHANNELINFO info{};
-    if (!BASS_ChannelGetInfo(stream, &info) || info.chans == 0) {
-        BASS_StreamFree(stream);
-        return samples;
-    }
-    const int channels = qBound(1, static_cast<int>(info.chans), 8);
-    const int sampleRate = qMax(1, static_cast<int>(info.freq));
-
-    const QWORD lengthBytes = BASS_ChannelGetLength(stream, BASS_POS_BYTE);
-    if (lengthBytes != static_cast<QWORD>(-1) && lengthBytes > 0) {
-        const double seconds = BASS_ChannelBytes2Seconds(stream, lengthBytes);
-        if (qIsFinite(seconds) && seconds > 0.0) {
-            if (durationSeconds != nullptr) {
-                *durationSeconds = seconds;
-            }
-            samples.reserve(static_cast<int>(qMin<double>(
-                static_cast<double>(INT_MAX),
-                std::ceil(seconds * static_cast<double>(sampleRate)))));
-        }
-    }
-
-    constexpr int kBassDecodeFramesPerChunk = 4096;
-    QVector<float> interleaved(kBassDecodeFramesPerChunk * channels, 0.0f);
-    while (true) {
-        const DWORD requestedBytes = static_cast<DWORD>(interleaved.size() * static_cast<int>(sizeof(float)));
-        const DWORD bytesRead = BASS_ChannelGetData(
-            stream,
-            interleaved.data(),
-            requestedBytes | BASS_DATA_FLOAT);
-        if (bytesRead == static_cast<DWORD>(-1) || bytesRead == 0) {
-            break;
-        }
-
-        const int floatsRead = static_cast<int>(bytesRead / sizeof(float));
-        const int framesRead = floatsRead / channels;
-        if (framesRead <= 0) {
-            break;
-        }
-
-        const int oldSize = samples.size();
-        samples.resize(oldSize + framesRead);
-        for (int frame = 0; frame < framesRead; ++frame) {
-            double mixed = 0.0;
-            const int base = frame * channels;
-            for (int channel = 0; channel < channels; ++channel) {
-                mixed += static_cast<double>(interleaved.at(base + channel));
-            }
-            samples[oldSize + frame] = static_cast<float>(mixed / static_cast<double>(channels));
-        }
-    }
-
-    BASS_StreamFree(stream);
-    if (durationSeconds != nullptr && *durationSeconds <= 0.0 && !samples.isEmpty()) {
-        *durationSeconds =
-            static_cast<double>(samples.size()) / static_cast<double>(sampleRate);
-    }
-    return samples;
-}
+    return miacode::audio_decode::decodeFileToMono(
+        trackPath,
+        kWaveformDecodeSampleRate,
+        miacode::audio_decode::BackendPreference::Bass);
+#else
+    return miacode::audio_decode::decodeFileToMono(
+        trackPath,
+        kWaveformDecodeSampleRate,
+        miacode::audio_decode::BackendPreference::Miniaudio);
 #endif
-
-QVector<float> decodeMonoSamples(
-    const QString& trackPath,
-    double* durationSeconds,
-    WaveformDecodeBackend* backend)
-{
-    if (backend != nullptr) {
-        *backend = WaveformDecodeBackend::None;
-    }
-#ifdef MIACODE_HAS_BASS_AUDIO
-    const QVector<float> bassSamples = decodeMonoSamplesWithBass(trackPath, durationSeconds);
-    if (!bassSamples.isEmpty()) {
-        if (backend != nullptr) {
-            *backend = WaveformDecodeBackend::Bass;
-        }
-        return bassSamples;
-    }
-#endif
-    const QVector<float> miniaudioSamples = decodeMonoSamplesWithMiniaudio(trackPath, durationSeconds);
-    if (!miniaudioSamples.isEmpty() && backend != nullptr) {
-        *backend = WaveformDecodeBackend::Miniaudio;
-    }
-    return miniaudioSamples;
 }
 
 }  // namespace
@@ -505,10 +356,15 @@ QString waveformDataDebugSummary(const WaveformData& data)
 
 int recommendedTopLevelColumnCount(double durationSeconds)
 {
+    constexpr double maximumRepresentablePowerOfTwo = static_cast<double>(1 << 30);
     const int minimumTarget = qMax(1, kWaveformMinTopLevelColumns);
-    const int scaledTarget = qMax(
-        minimumTarget,
-        static_cast<int>(std::ceil(qMax(0.0, durationSeconds) * kWaveformTopLevelColumnsPerSecond)));
+    const double scaledTargetExact = std::ceil(
+        qMax(0.0, durationSeconds) * kWaveformTopLevelColumnsPerSecond);
+    if (!qIsFinite(scaledTargetExact)
+        || scaledTargetExact > maximumRepresentablePowerOfTwo) {
+        return 0;
+    }
+    const int scaledTarget = qMax(minimumTarget, static_cast<int>(scaledTargetExact));
     return nextPowerOfTwoAtLeast(scaledTarget);
 }
 
@@ -544,19 +400,17 @@ WaveformDataPtr buildWaveformDataFromFile(
 {
     QElapsedTimer timer;
     timer.start();
-    double durationSeconds = 0.0;
-    WaveformDecodeBackend backend = WaveformDecodeBackend::None;
-    const QVector<float> samples = decodeMonoSamples(trackPath, &durationSeconds, &backend);
+    const miacode::audio_decode::DecodedMonoAudio decoded = decodeMonoSamples(trackPath);
     WaveformDataPtr data = buildWaveformData(
         normalizeTrackPath(trackPath),
         fileSize,
         lastModifiedMs,
-        samples,
-        durationSeconds);
+        decoded.samples,
+        decoded.durationSeconds);
     appendWaveformDebugLog(
         QStringLiteral("event=build decoder=%1 samples=%2 elapsed_ms=%3 %4")
-            .arg(waveformDecodeBackendLabel(backend))
-            .arg(samples.size())
+            .arg(miacode::audio_decode::backendLabel(decoded.backend))
+            .arg(decoded.samples.size())
             .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
             .arg(data ? waveformDataDebugSummary(*data) : QStringLiteral("data=0")));
     return data;
@@ -588,7 +442,10 @@ WaveformDataPtr readWaveformDataCache(
         || magic != kWaveformCacheMagic
         || version != kWaveformCacheCurrentVersion
         || storedFileSize != expectedFileSize
-        || storedLastModifiedMs != expectedLastModifiedMs) {
+        || storedLastModifiedMs != expectedLastModifiedMs
+        || !qIsFinite(durationSeconds)
+        || levelCount == 0
+        || levelCount > kMaximumWaveformCacheLevelCount) {
         return {};
     }
 
@@ -603,8 +460,12 @@ WaveformDataPtr readWaveformDataCache(
         qint32 columnCount = 0;
         double secondsPerColumn = 0.0;
         stream >> columnCount >> secondsPerColumn;
+        const qint64 maximumColumnCountFromRemainingBytes =
+            file.bytesAvailable() / static_cast<qint64>(sizeof(float) * 2);
         if (stream.status() != QDataStream::Ok
             || columnCount <= 0
+            || static_cast<qint64>(columnCount) > maximumColumnCountFromRemainingBytes
+            || !qIsFinite(secondsPerColumn)
             || secondsPerColumn <= 0.0) {
             return {};
         }
@@ -628,6 +489,11 @@ WaveformDataPtr readWaveformDataCache(
     }
 
     if (data->levels.isEmpty()) {
+        return {};
+    }
+    const int recommendedColumnCount = recommendedTopLevelColumnCount(data->durationSeconds);
+    if (recommendedColumnCount <= 0
+        || data->levels.constFirst().columns.size() < recommendedColumnCount) {
         return {};
     }
     return data;
