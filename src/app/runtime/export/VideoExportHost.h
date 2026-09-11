@@ -2,23 +2,23 @@
 
 #include "runtime/Session.h"
 
-#include "app/v2/ExportEngine.h"
+#include "app/services/ExportEngine.h"
 
 // Implements the export page's engine contract. The QML page names
-// miacode::v2::ExportEngine, never this class — which is what lets the
+// miacode::ExportEngine, never this class — which is what lets the
 // implementation move out of Session in stage 4 without the page noticing.
 namespace miacode::runtime {
 
-class VideoExportHost final : public miacode::v2::ExportEngine {
+class VideoExportHost final : public miacode::ExportEngine {
 public:
     // The batch types are the interface's; these aliases keep the ~20 existing
     // widget-side call sites spelled as they were.
-    using BatchExportResult = miacode::v2::ExportEngine::BatchResult;
-    using BatchExportCallbacks = miacode::v2::ExportEngine::BatchCallbacks;
+    using BatchExportResult = miacode::ExportEngine::BatchResult;
+    using BatchExportCallbacks = miacode::ExportEngine::BatchCallbacks;
 
     VideoExportHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 
-    // ---- miacode::v2::ExportEngine ----
+    // ---- miacode::ExportEngine ----
     VideoExportTask buildSeedTask(int difficultyId) override;
     void applySharedTaskSettings(const VideoExportTask& task) override;
     bool startAudition(int difficultyId, const VideoExportTask& visualTask) override;

@@ -5,7 +5,7 @@
 #include "runtime/export/VideoExportHost.h"
 #include "runtime/playback/PlaybackCoordinator.h"
 
-#include "app/ui/ShortcutRegistry.h"
+#include "app/ui/chrome/ShortcutRegistry.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -29,7 +29,7 @@ struct PauseDisplayHoldKey {
 
 PauseDisplayHoldKey pauseDisplayHoldKey()
 {
-    const QKeySequence sequence = ShortcutRegistry::instance().sequence(
+    const QKeySequence sequence = miacode::ui::ShortcutRegistry::instance().sequence(
         QStringLiteral("preview.pause_display_hold"), QKeySequence(Qt::Key_Alt));
     const QKeyCombination combination = sequence[0];
     PauseDisplayHoldKey hold;

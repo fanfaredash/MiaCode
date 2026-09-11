@@ -1,4 +1,4 @@
-#include "app/ui/AppBackgroundSettings.h"
+#include "app/ui/preferences/AppBackgroundSettings.h"
 
 #include <QCoreApplication>
 #include <QJsonObject>

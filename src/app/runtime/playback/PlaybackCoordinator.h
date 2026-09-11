@@ -2,14 +2,14 @@
 
 #include "runtime/RuntimeContext.h"
 
-#include "app/v2/AudioClockSource.h"
-#include "app/v2/PlaybackControl.h"
-#include "app/v2/PlaybackDocumentPort.h"
-#include "app/v2/PlaybackPreferencesPort.h"
-#include "app/v2/PlaybackPreviewPort.h"
-#include "app/v2/PlaybackStateAuthority.h"
-#include "app/v2/PlaybackValidationPort.h"
-#include "app/v2/PreviewPlaybackPort.h"
+#include "app/services/AudioClockSource.h"
+#include "app/services/PlaybackControl.h"
+#include "app/services/PlaybackDocumentPort.h"
+#include "app/services/PlaybackPreferencesPort.h"
+#include "app/services/PlaybackPreviewPort.h"
+#include "app/services/PlaybackStateAuthority.h"
+#include "app/services/PlaybackValidationPort.h"
+#include "app/services/PreviewPlaybackPort.h"
 #include "audio/PreviewAudioDeviceChangePolicy.h"
 #include "audio/PreviewAudioDeviceCutoff.h"
 #include "runtime/playback/PlaybackIdentityGate.h"
@@ -20,7 +20,7 @@ namespace miacode::preview_audio {
 struct PreviewAudioCompletion;
 }
 
-namespace miacode::v2 {
+namespace miacode {
 class ApplicationServices;
 }
 
@@ -31,26 +31,26 @@ namespace miacode::runtime {
 // it never calls into any Session API. Production wiring passes the owning
 // Session (Session IS-A QObject); ValidationPortSpec-style specs may pass any
 // QObject, since nothing here ever casts owner_ back to a concrete type.
-class PlaybackCoordinator final : public miacode::v2::PlaybackControl,
-                                  public miacode::v2::PlaybackStateAuthority,
-                                  public miacode::v2::PreviewPlaybackPort,
-                                  public miacode::v2::AudioClockSource {
+class PlaybackCoordinator final : public miacode::PlaybackControl,
+                                  public miacode::PlaybackStateAuthority,
+                                  public miacode::PreviewPlaybackPort,
+                                  public miacode::AudioClockSource {
 public:
-    PlaybackCoordinator(QObject& owner, miacode::v2::ApplicationServices& services,
+    PlaybackCoordinator(QObject& owner, miacode::ApplicationServices& services,
                         RuntimeContext::Ui& ui, RuntimeContext::State& state,
                         RuntimeContext::PlaybackState& playbackState,
-                        miacode::v2::PlaybackPreferencesPort& preferences,
-                        miacode::v2::PlaybackValidationPort& validation,
-                        miacode::v2::PlaybackDocumentPort& documents,
-                        miacode::v2::PlaybackPreviewPort& preview,
+                        miacode::PlaybackPreferencesPort& preferences,
+                        miacode::PlaybackValidationPort& validation,
+                        miacode::PlaybackDocumentPort& documents,
+                        miacode::PlaybackPreviewPort& preview,
                         quint64 sessionGeneration = 0);
 
     void setDocumentRevision(quint64 revision);
     void invalidateSession();
 
-    miacode::v2::PlaybackSnapshot playbackSnapshot() const override;
+    miacode::PlaybackSnapshot playbackSnapshot() const override;
     bool acceptsPlaybackCallback(
-        const miacode::v2::PlaybackCallbackStamp& stamp) const override;
+        const miacode::PlaybackCallbackStamp& stamp) const override;
     double currentAudioClockSecond() const override;
 
     void resetPreviewTrackTimelineOffsets();
@@ -257,7 +257,7 @@ public:
     void jumpToNearestTimelineNote(double second, int lane);
 
     bool playing() const;
-    miacode::v2::PlaybackTransportState playbackTransportState() const;
+    miacode::PlaybackTransportState playbackTransportState() const;
     double positionSeconds() const;
     double durationSeconds() const;
     double lowerBoundSeconds() const;
@@ -272,7 +272,7 @@ public:
     void setPlaybackRate(double rate) override;
     void nudgePlaybackRate(int direction) override;
 
-    // ---- miacode::v2::PlaybackStateAuthority ----
+    // ---- miacode::PlaybackStateAuthority ----
     // See PlaybackStateAuthority.h: non-command state writes, as opposed to
     // the user-transport-command overrides above.
     void restorePlaybackRate(double rate) override;
@@ -406,17 +406,17 @@ private:
     // Timer/connection parent and QPointer-tracked liveness anchor only — see
     // the class comment above. Production passes the owning Session.
     QObject& owner_;
-    miacode::v2::ApplicationServices& services_;
+    miacode::ApplicationServices& services_;
     RuntimeContext::Ui& ui_;
     RuntimeContext::State& state_;
     // Canonical playback-authority storage (see RuntimeContext.h). The
     // coordinator is the only holder of a mutable reference to it; state_
     // above only exposes a const& view for cross-domain readers.
     RuntimeContext::PlaybackState& playbackState_;
-    miacode::v2::PlaybackPreferencesPort& preferences_;
-    miacode::v2::PlaybackValidationPort& validation_;
-    miacode::v2::PlaybackDocumentPort& documents_;
-    miacode::v2::PlaybackPreviewPort& preview_;
+    miacode::PlaybackPreferencesPort& preferences_;
+    miacode::PlaybackValidationPort& validation_;
+    miacode::PlaybackDocumentPort& documents_;
+    miacode::PlaybackPreviewPort& preview_;
     PlaybackIdentityGate identity_;
 
     bool beginPlaybackCommand();

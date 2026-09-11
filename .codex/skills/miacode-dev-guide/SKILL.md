@@ -17,8 +17,8 @@ MiaCode 是 Qt 6 / C++ / QML 的 simai 谱面编辑、预览和导出工具。
 
 ## 长期边界
 
-- `src/app/qml_ui/` 是产品前端；`src/app/v2/ChartWorkspace.h` 定义文档、revision 和保存点的所有权。
-- `src/app/v2/ApplicationServices.h` 持有共享服务与 typed slots；`src/app/runtime/` 的 Session 装配运行时宿主，前端通过服务/端口调用。
+- `src/app/ui/` 是产品前端；`src/app/services/ChartWorkspace.h` 定义文档、revision 和保存点的所有权。
+- `src/app/services/ApplicationServices.h` 持有共享服务与 typed slots；`src/app/runtime/` 的 Session 装配运行时宿主，前端通过服务/端口调用。
 - 谱面数据与场景数学分别归 `src/core/chart/`、`src/core/scene/`；不要把 UI 或 GPU 依赖引入这些层。
 - 预览与导出复用进程内 Qt Quick/QSG 场景；音频设备、QML engine、异步任务的生命周期由各自 owner 管理。
 - 先复用已有控件、主题、文案、路径解析和领域 helper，再考虑新增抽象。

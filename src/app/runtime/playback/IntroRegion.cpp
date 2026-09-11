@@ -1,11 +1,10 @@
 #include "runtime/playback/PlaybackCoordinator.h"
 #include "runtime/Shared.h"
 
-#include "app/qml_ui/export/QmlExportSession.h"
+#include "app/ui/export/ExportSession.h"
 #include "BracketScopeHighlighter.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -143,7 +142,7 @@ void miacode::runtime::PlaybackCoordinator::enterExportIntroRegion(double positi
         setupExportIntroOverlayData();
     }
     state_.exportIntroRegionActive_ = true;
-    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+    playbackState_.previewTransportState_ = miacode::PlaybackTransportState::Paused;
     state_.exportIntroPlayheadSeconds_ =
         qBound(-miacode::intro::kDurationSeconds, positionSeconds, 0.0);
     renderExportIntroFrame(state_.exportIntroPlayheadSeconds_);
@@ -167,8 +166,8 @@ void miacode::runtime::PlaybackCoordinator::exitExportIntroRegion()
     if (wasActive) {
         updatePauseButtonAppearance();
     }
-    if (state_.previewTransportState_ == miacode::v2::PlaybackTransportState::Playing) {
-        playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+    if (state_.previewTransportState_ == miacode::PlaybackTransportState::Playing) {
+        playbackState_.previewTransportState_ = miacode::PlaybackTransportState::Paused;
     }
 }
 
@@ -193,7 +192,7 @@ void miacode::runtime::PlaybackCoordinator::pauseExportIntroAdvance()
         state_.exportIntroLeadInTimer_->stop();
     }
     // Keep the region + static frame so the paused intro stays on screen.
-    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+    playbackState_.previewTransportState_ = miacode::PlaybackTransportState::Paused;
     updatePauseButtonAppearance();
 }
 
@@ -225,7 +224,7 @@ void miacode::runtime::PlaybackCoordinator::startExportIntroAdvance(double fromP
         });
     }
     state_.exportIntroLeadInActive_ = true;
-    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Playing;
+    playbackState_.previewTransportState_ = miacode::PlaybackTransportState::Playing;
     state_.exportIntroLeadInElapsed_.restart();
     state_.exportIntroLeadInTimer_->start();
     updatePauseButtonAppearance();

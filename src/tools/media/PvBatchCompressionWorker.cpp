@@ -1,6 +1,5 @@
 #include "PvBatchCompressionWorker.h"
 
-#include "UiText.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -93,7 +92,7 @@ bool probeDuration(
     const QRegularExpressionMatch match = pattern.match(output);
     if (!match.hasMatch()) {
         if (error != nullptr) {
-            *error = UiText::text(QStringLiteral("media_tools.batch_pv_duration_failed"));
+            *error = qtTrId("media_tools.batch_pv_duration_failed");
         }
         return false;
     }
@@ -102,7 +101,7 @@ bool probeDuration(
         + match.captured(3).toDouble();
     if (!(total > 0.0)) {
         if (error != nullptr) {
-            *error = UiText::text(QStringLiteral("media_tools.batch_pv_duration_failed"));
+            *error = qtTrId("media_tools.batch_pv_duration_failed");
         }
         return false;
     }
@@ -137,11 +136,11 @@ bool compressJob(
     const QFileInfo videoInfo(job.videoPath);
     const qint64 originalBytes = videoInfo.size();
     if (originalBytes <= 0) {
-        *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_invalid_file"));
+        *resultStatus = qtTrId("media_tools.batch_pv_invalid_file");
         return false;
     }
     if (originalBytes < kPvCompressionHardLimitBytes) {
-        *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_already_small"));
+        *resultStatus = qtTrId("media_tools.batch_pv_already_small");
         return true;
     }
 
@@ -150,11 +149,11 @@ bool compressJob(
     const QString tempPath = videoInfo.dir().filePath(QStringLiteral(".miacode_video_batch_compress_tmp.mp4"));
     QFile::remove(tempPath);
     if (QFileInfo::exists(backupPath) && !QFile::remove(backupPath)) {
-        *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_backup_failed"));
+        *resultStatus = qtTrId("media_tools.batch_pv_backup_failed");
         return false;
     }
     if (!QFile::copy(job.videoPath, backupPath)) {
-        *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_backup_failed"));
+        *resultStatus = qtTrId("media_tools.batch_pv_backup_failed");
         return false;
     }
 
@@ -167,7 +166,7 @@ bool compressJob(
 
     QTemporaryDir passLogDirectory;
     if (!passLogDirectory.isValid()) {
-        *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_ffmpeg_failed_1"))
+        *resultStatus = qtTrId("media_tools.batch_pv_ffmpeg_failed_1")
             .arg(QStringLiteral("Could not create the two-pass log directory."));
         return false;
     }
@@ -190,7 +189,7 @@ bool compressJob(
         if (!firstPassOk || !secondPassOk) {
             QFile::remove(tempPath);
             if (cancelRequested == nullptr || !cancelRequested->load()) {
-                *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_ffmpeg_failed_1"))
+                *resultStatus = qtTrId("media_tools.batch_pv_ffmpeg_failed_1")
                     .arg(error);
             }
             return false;
@@ -210,13 +209,13 @@ bool compressJob(
 
     if (!encoded) {
         QFile::remove(tempPath);
-        *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_output_invalid"));
+        *resultStatus = qtTrId("media_tools.batch_pv_output_invalid");
         return false;
     }
 
     QString unused;
     if (replaceWithTemp(job.videoPath, tempPath, &unused)) {
-        *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_done_1"))
+        *resultStatus = qtTrId("media_tools.batch_pv_done_1")
             .arg(QLocale().formattedDataSize(compressedBytes));
         return true;
     }
@@ -225,10 +224,10 @@ bool compressJob(
         QStringLiteral("%1_compressed.%2").arg(videoInfo.completeBaseName(), videoInfo.suffix()));
     QFile::remove(preservedPath);
     if (QFile::rename(tempPath, preservedPath)) {
-        *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_replace_failed_1"))
+        *resultStatus = qtTrId("media_tools.batch_pv_replace_failed_1")
             .arg(QDir::toNativeSeparators(preservedPath));
     } else {
-        *resultStatus = UiText::text(QStringLiteral("media_tools.batch_pv_replace_failed_1"))
+        *resultStatus = qtTrId("media_tools.batch_pv_replace_failed_1")
             .arg(QDir::toNativeSeparators(tempPath));
     }
     return false;
@@ -261,6 +260,8 @@ QString resolvePvCompressionFfmpegExecutable()
         appDir.filePath(QStringLiteral("../../../third_party/ffmpeg/windows/%1").arg(ffmpegName)),
         appDir.filePath(QStringLiteral("../../../third_party/ffmpeg/macos/%1").arg(ffmpegName)),
         appDir.filePath(QStringLiteral("../../../third_party/ffmpeg/linux/%1").arg(ffmpegName)),
+        QStringLiteral("/opt/homebrew/bin/%1").arg(ffmpegName),
+        QStringLiteral("/usr/local/bin/%1").arg(ffmpegName),
     };
     for (const QString& candidate : candidates) {
         if (isExecutableFile(candidate)) {
@@ -292,18 +293,18 @@ void PvBatchCompressionWorker::run()
     });
     const QString ffmpegPath = needsFfmpeg ? resolvePvCompressionFfmpegExecutable() : QString();
     if (needsFfmpeg && ffmpegPath.isEmpty()) {
-        const QString missingMessage = UiText::text(QStringLiteral("media_tools.batch_pv_ffmpeg_missing"));
+        const QString missingMessage = qtTrId("media_tools.batch_pv_ffmpeg_missing");
         int failed = 0;
         for (int row = 0; row < jobs_.size(); ++row) {
             const PvCompressionJob& job = jobs_.at(row);
             if (job.videoPath.isEmpty()) {
-                emit rowStatus(row, UiText::text(QStringLiteral("media_tools.batch_pv_no_video")));
+                emit rowStatus(row, qtTrId("media_tools.batch_pv_no_video"));
             } else if (job.originalBytes < kPvCompressionHardLimitBytes) {
-                emit rowStatus(row, UiText::text(QStringLiteral("media_tools.batch_pv_already_small")));
+                emit rowStatus(row, qtTrId("media_tools.batch_pv_already_small"));
             } else {
                 emit rowStatus(
                     row,
-                    UiText::text(QStringLiteral("media_tools.batch_pv_failed_1")).arg(missingMessage));
+                    qtTrId("media_tools.batch_pv_failed_1").arg(missingMessage));
                 ++failed;
             }
             emit progress(row + 1);
@@ -317,23 +318,23 @@ void PvBatchCompressionWorker::run()
     for (int row = 0; row < jobs_.size() && !isCanceled(); ++row) {
         const PvCompressionJob& job = jobs_.at(row);
         if (job.videoPath.isEmpty()) {
-            emit rowStatus(row, UiText::text(QStringLiteral("media_tools.batch_pv_no_video")));
+            emit rowStatus(row, qtTrId("media_tools.batch_pv_no_video"));
             emit progress(row + 1);
             continue;
         }
         if (job.originalBytes < kPvCompressionHardLimitBytes) {
-            emit rowStatus(row, UiText::text(QStringLiteral("media_tools.batch_pv_already_small")));
+            emit rowStatus(row, qtTrId("media_tools.batch_pv_already_small"));
             emit progress(row + 1);
             continue;
         }
-        emit rowStatus(row, UiText::text(QStringLiteral("media_tools.batch_pv_compressing")));
-        emit summary(UiText::text(QStringLiteral("media_tools.batch_pv_compressing_1")).arg(job.displayName));
+        emit rowStatus(row, qtTrId("media_tools.batch_pv_compressing"));
+        emit summary(qtTrId("media_tools.batch_pv_compressing_1").arg(job.displayName));
         QString status;
         if (compressJob(ffmpegPath, job, cancelRequested_, &status)) {
             ++succeeded;
         } else if (!isCanceled()) {
             ++failed;
-            status = UiText::text(QStringLiteral("media_tools.batch_pv_failed_1")).arg(status);
+            status = qtTrId("media_tools.batch_pv_failed_1").arg(status);
         }
         if (!status.isEmpty()) {
             emit rowStatus(row, status);

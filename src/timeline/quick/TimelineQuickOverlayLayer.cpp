@@ -22,6 +22,7 @@ struct TimelineQuickOverlayRootNode : public QSGNode {
     quint64 dynamicRevision = 0;
     quint64 layoutRevision = 0;
     quint64 appearanceRevision = 0;
+    double horizontalScrollValue = 0.0;
 };
 
 void clearChildren(QSGNode* node)
@@ -50,7 +51,8 @@ QSGNode* childAt(QSGNode* parent, int index)
 void updateVerticalLineSlot(
     QSGSimpleRectNode* node,
     bool visible,
-    const miacode::timeline::TimelineSceneLine& line)
+    const miacode::timeline::TimelineSceneLine& line,
+    qreal horizontalScrollValue)
 {
     if (node == nullptr) {
         return;
@@ -61,8 +63,10 @@ void updateVerticalLineSlot(
     }
     const qreal width = qMax<qreal>(1.0, line.width);
     const qreal top = qMin(line.start.y(), line.end.y());
+    // Resolve the viewport position before QSG converts geometry to floats.
+    // A centered playhead then keeps one position as its world coordinate grows.
     node->setRect(QRectF(
-        line.start.x() - (width * 0.5),
+        line.start.x() - horizontalScrollValue - (width * 0.5),
         top,
         width,
         qAbs(line.end.y() - line.start.y())));
@@ -82,16 +86,14 @@ void rebuildOverlaySlots(TimelineQuickOverlayRootNode* root)
     transformedClipRoot->setIsRectangular(true);
     auto* transformRoot = new QSGTransformNode();
     transformRoot->appendChildNode(new QSGNode());
-    auto* transformedDynamicRoot = new QSGNode();
-    transformedDynamicRoot->appendChildNode(new QSGSimpleRectNode());
-    transformedDynamicRoot->appendChildNode(new QSGSimpleRectNode());
-    transformRoot->appendChildNode(transformedDynamicRoot);
     transformedClipRoot->appendChildNode(transformRoot);
     root->appendChildNode(transformedClipRoot);
 
     auto* viewportClipRoot = new QSGClipNode();
     viewportClipRoot->setIsRectangular(true);
     auto* viewportRoot = new QSGNode();
+    viewportRoot->appendChildNode(new QSGSimpleRectNode());
+    viewportRoot->appendChildNode(new QSGSimpleRectNode());
     viewportRoot->appendChildNode(new QSGSimpleRectNode());
     viewportClipRoot->appendChildNode(viewportRoot);
     root->appendChildNode(viewportClipRoot);
@@ -121,11 +123,10 @@ bool overlaySlotsValid(TimelineQuickOverlayRootNode* root)
     auto* headerTransformRoot = dynamic_cast<QSGTransformNode*>(headerClipRoot->firstChild());
     return transformRoot != nullptr
         && transformRoot->firstChild() != nullptr
-        && transformRoot->firstChild()->nextSibling() != nullptr
-        && dynamic_cast<QSGSimpleRectNode*>(childAt(transformRoot->firstChild()->nextSibling(), 0)) != nullptr
-        && dynamic_cast<QSGSimpleRectNode*>(childAt(transformRoot->firstChild()->nextSibling(), 1)) != nullptr
         && viewportClipRoot->firstChild() != nullptr
         && dynamic_cast<QSGSimpleRectNode*>(childAt(viewportClipRoot->firstChild(), 0)) != nullptr
+        && dynamic_cast<QSGSimpleRectNode*>(childAt(viewportClipRoot->firstChild(), 1)) != nullptr
+        && dynamic_cast<QSGSimpleRectNode*>(childAt(viewportClipRoot->firstChild(), 2)) != nullptr
         && headerTransformRoot != nullptr
         && headerTransformRoot->firstChild() != nullptr;
 }
@@ -154,7 +155,6 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
         ? dynamic_cast<QSGTransformNode*>(transformedClipRoot->firstChild())
         : nullptr;
     QSGNode* transformedStaticRoot = transformRoot != nullptr ? childAt(transformRoot, 0) : nullptr;
-    QSGNode* transformedDynamicRoot = transformRoot != nullptr ? childAt(transformRoot, 1) : nullptr;
     auto* viewportClipRoot = dynamic_cast<QSGClipNode*>(childAt(root, 2));
     QSGNode* viewportRoot = viewportClipRoot != nullptr ? viewportClipRoot->firstChild() : nullptr;
     auto* headerClipRoot = dynamic_cast<QSGClipNode*>(childAt(root, 3));
@@ -235,20 +235,25 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
     if (slotsRebuilt
         || appearanceChanged
         || layoutChanged
+        || root->horizontalScrollValue != state.horizontalScrollValue
         || root->dynamicRevision != state.overlayDynamicRevision) {
         updateVerticalLineSlot(
-            dynamic_cast<QSGSimpleRectNode*>(childAt(transformedDynamicRoot, 0)),
-            state.hasPlayheadLine,
-            state.playheadLine);
-        updateVerticalLineSlot(
-            dynamic_cast<QSGSimpleRectNode*>(childAt(transformedDynamicRoot, 1)),
-            state.hasCursorLine,
-            state.cursorLine);
-        updateVerticalLineSlot(
             dynamic_cast<QSGSimpleRectNode*>(childAt(viewportRoot, 0)),
+            state.hasPlayheadLine,
+            state.playheadLine,
+            state.horizontalScrollValue);
+        updateVerticalLineSlot(
+            dynamic_cast<QSGSimpleRectNode*>(childAt(viewportRoot, 1)),
+            state.hasCursorLine,
+            state.cursorLine,
+            state.horizontalScrollValue);
+        updateVerticalLineSlot(
+            dynamic_cast<QSGSimpleRectNode*>(childAt(viewportRoot, 2)),
             state.hasDragCenterLine,
-            state.dragCenterLine);
+            state.dragCenterLine,
+            0.0);
         root->dynamicRevision = state.overlayDynamicRevision;
+        root->horizontalScrollValue = state.horizontalScrollValue;
     }
 
     if (slotsRebuilt

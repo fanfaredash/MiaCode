@@ -1,5 +1,5 @@
 #include "app/quick_shell/QuickShellPopupPosition.h"
-#include "app/ui/UiNativeWindowThemePolicy.h"
+#include "app/ui/chrome/NativeWindowThemePolicy.h"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -17,8 +17,8 @@ bool expectPoint(const char* name, const QPoint& actual, const QPoint& expected)
 
 bool expectAppearance(
     const char* name,
-    UiNativeWindowThemePolicy::Appearance actual,
-    UiNativeWindowThemePolicy::Appearance expected)
+    NativeWindowThemePolicy::Appearance actual,
+    NativeWindowThemePolicy::Appearance expected)
 {
     if (actual == expected) {
         return true;
@@ -63,18 +63,18 @@ int main(int argc, char* argv[])
             QRect(-20, -10, 30, 20), QSize(1600, 1000), available),
         QPoint(0, 0));
 
-    using Appearance = UiNativeWindowThemePolicy::Appearance;
+    using Appearance = NativeWindowThemePolicy::Appearance;
     ok &= expectAppearance(
         "system appearance",
-        UiNativeWindowThemePolicy::appearanceFor(UiText::ThemePreference::System),
+        NativeWindowThemePolicy::appearanceFor(PreferenceDocument::ThemePreference::System),
         Appearance::System);
     ok &= expectAppearance(
         "light appearance",
-        UiNativeWindowThemePolicy::appearanceFor(UiText::ThemePreference::Light),
+        NativeWindowThemePolicy::appearanceFor(PreferenceDocument::ThemePreference::Light),
         Appearance::Light);
     ok &= expectAppearance(
         "dark appearance",
-        UiNativeWindowThemePolicy::appearanceFor(UiText::ThemePreference::Dark),
+        NativeWindowThemePolicy::appearanceFor(PreferenceDocument::ThemePreference::Dark),
         Appearance::Dark);
 
     return ok ? 0 : 1;

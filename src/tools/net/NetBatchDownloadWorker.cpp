@@ -1,6 +1,5 @@
 #include "NetBatchDownloadWorker.h"
 
-#include "UiText.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -9,6 +8,7 @@
 
 #include <limits>
 #include <utility>
+#include <QCoreApplication>
 
 namespace miacode::net {
 namespace {
@@ -65,22 +65,22 @@ void NetBatchDownloadWorker::run()
     qint64 totalBytes = 0;
     qint64 totalNetworkMs = 0;
 
-    emit log(UiText::text(QStringLiteral("net.background_download_thread_started")));
+    emit log(qtTrId("net.background_download_thread_started"));
     for (int row = 0; row < request_.jobs.size() && !isCanceled() && !paused; ++row) {
         NetDownloadJob job = request_.jobs.at(row);
         if (!job.selected) {
-            emit rowStatus(row, UiText::text(QStringLiteral("net.not_selected")));
+            emit rowStatus(row, qtTrId("net.not_selected"));
             continue;
         }
 
-        emit rowStatus(row, UiText::text(QStringLiteral("net.downloading")));
-        emit summary(UiText::text(QStringLiteral("net.downloading_1")).arg(job.chart.title));
-        emit log(UiText::text(QStringLiteral("net.start_chart_1_2")).arg(job.chart.title, job.chart.id));
+        emit rowStatus(row, qtTrId("net.downloading"));
+        emit summary(qtTrId("net.downloading_1").arg(job.chart.title));
+        emit log(qtTrId("net.start_chart_1_2").arg(job.chart.title, job.chart.id));
 
         QString error;
         job.outputDirectoryPath = chartDirectoryPathForTitle(request_.outputDirectory, job.chart.title, job.chart.id);
         if (!QDir().mkpath(job.outputDirectoryPath)) {
-            error = UiText::text(QStringLiteral("net.could_not_create_chart_folder"));
+            error = qtTrId("net.could_not_create_chart_folder");
         }
 
         bool resourcesOk = error.isEmpty();
@@ -89,13 +89,13 @@ void NetBatchDownloadWorker::run()
             if (!resourcesOk || paused || isCanceled()) {
                 break;
             }
-            emit rowStatus(row, UiText::text(QStringLiteral("net.downloading_1_2")).arg(resource.label));
+            emit rowStatus(row, qtTrId("net.downloading_1_2").arg(resource.label));
             const QString outputPath = QDir(job.outputDirectoryPath).filePath(resource.fileName);
             resourcesOk = downloadResourceToFile(client, row, job.chart.id, resource, outputPath, &error, &paused, &resourceStats);
         }
 
         if (paused) {
-            emit rowStatus(row, UiText::text(QStringLiteral("net.paused")));
+            emit rowStatus(row, qtTrId("net.paused"));
             break;
         }
         if (isCanceled()) {
@@ -103,31 +103,31 @@ void NetBatchDownloadWorker::run()
         }
         if (!resourcesOk) {
             ++failed;
-            job.errorMessage = error.isEmpty() ? UiText::text(QStringLiteral("net.resource_download_failed")) : error;
-            emit rowStatus(row, UiText::text(QStringLiteral("net.failed_1")).arg(job.errorMessage));
+            job.errorMessage = error.isEmpty() ? qtTrId("net.resource_download_failed") : error;
+            emit rowStatus(row, qtTrId("net.failed_1").arg(job.errorMessage));
         } else {
             bool chartDone = true;
             if (request_.createZip) {
-                emit rowStatus(row, UiText::text(QStringLiteral("net.packaging_zip")));
+                emit rowStatus(row, qtTrId("net.packaging_zip"));
                 job.outputZipPath = uniqueZipPathForTitle(request_.outputDirectory, job.chart.title);
                 QStringList entries;
                 QElapsedTimer zipElapsed;
                 zipElapsed.start();
                 chartDone = packNetChartFolderZip(job.outputDirectoryPath, job.outputZipPath, &entries, &error);
-                emit log(UiText::text(QStringLiteral("net.zip_package_1_2_3"))
+                emit log(qtTrId("net.zip_package_1_2_3")
                              .arg(job.outputDirectoryPath, job.outputZipPath)
                              .arg(zipElapsed.elapsed()));
             }
             if (chartDone) {
                 ++succeeded;
                 emit rowStatus(row,
-                    request_.createZip ? UiText::text(QStringLiteral("net.done_folder_zip"))
-                                       : UiText::text(QStringLiteral("net.done_folder")));
-                emit log(UiText::text(QStringLiteral("net.chart_complete_1_2")).arg(job.chart.title, job.outputDirectoryPath));
+                    request_.createZip ? qtTrId("net.done_folder_zip")
+                                       : qtTrId("net.done_folder"));
+                emit log(qtTrId("net.chart_complete_1_2").arg(job.chart.title, job.outputDirectoryPath));
             } else {
                 ++failed;
                 job.errorMessage = error;
-                emit rowStatus(row, UiText::text(QStringLiteral("net.package_failed_1")).arg(error));
+                emit rowStatus(row, qtTrId("net.package_failed_1").arg(error));
             }
         }
 
@@ -142,11 +142,11 @@ void NetBatchDownloadWorker::run()
     }
 
     if (paused) {
-        emit log(UiText::text(QStringLiteral("net.queue_paused_net_cloudflare_blocked_2")));
+        emit log(qtTrId("net.queue_paused_net_cloudflare_blocked_2"));
     } else if (isCanceled()) {
-        emit log(UiText::text(QStringLiteral("net.queue_canceled_1_succeeded_2")).arg(succeeded).arg(failed));
+        emit log(qtTrId("net.queue_canceled_1_succeeded_2").arg(succeeded).arg(failed));
     } else {
-        emit log(UiText::text(QStringLiteral("net.queue_complete_1_succeeded_2"))
+        emit log(qtTrId("net.queue_complete_1_succeeded_2")
                      .arg(succeeded)
                      .arg(failed)
                      .arg(totalBytes)
@@ -171,7 +171,7 @@ bool NetBatchDownloadWorker::downloadResourceToFile(
     QList<NetBatchResourceStats>* resourceStats)
 {
     for (int attempt = 0; attempt < 3 && !isCanceled(); ++attempt) {
-        emit log(UiText::text(QStringLiteral("net.download_resource_chart_1_resource"))
+        emit log(qtTrId("net.download_resource_chart_1_resource")
                      .arg(chartId, resource.path)
                      .arg(attempt + 1));
         const NetDownloadResult result = client.downloadResourceToFile(
@@ -180,7 +180,7 @@ bool NetBatchDownloadWorker::downloadResourceToFile(
             return false;
         }
         const QString speed = formatSpeed(result.bytesWritten, result.elapsedMs);
-        emit log(UiText::text(QStringLiteral("net.resource_result_1_http_2"))
+        emit log(qtTrId("net.resource_result_1_http_2")
                      .arg(resource.path)
                      .arg(result.statusCode)
                      .arg(result.bytesWritten)
@@ -204,7 +204,7 @@ bool NetBatchDownloadWorker::downloadResourceToFile(
         if (errorMessage != nullptr) {
             *errorMessage = result.errorMessage;
         }
-        emit rowStatus(row, UiText::text(QStringLiteral("net.retrying_1")).arg(resource.label));
+        emit rowStatus(row, qtTrId("net.retrying_1").arg(resource.label));
         if (!waitUnlessCanceled(cancelRequested_, 800)) {
             return false;
         }
@@ -230,7 +230,7 @@ void NetBatchDownloadWorker::emitChartBottleneck(
             slowest = stats;
         }
     }
-    emit log(UiText::text(QStringLiteral("net.chart_speed_summary_1_total"))
+    emit log(qtTrId("net.chart_speed_summary_1_total")
                  .arg(title)
                  .arg(totalBytes)
                  .arg(totalMs)

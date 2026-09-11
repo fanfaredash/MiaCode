@@ -1,6 +1,6 @@
 #include "runtime/playback/PlaybackCoordinator.h"
-#include "app/v2/ApplicationServices.h"
-#include "app/v2/EditorSyncController.h"
+#include "app/services/ApplicationServices.h"
+#include "app/services/EditorSyncController.h"
 #include "runtime/Shared.h"
 
 #include "BracketScopeHighlighter.h"
@@ -664,7 +664,7 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
 void miacode::runtime::PlaybackCoordinator::finishQtPreviewPlaybackAndReturnToEntry()
 {
     stopQtPreviewPlayback(true);
-    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Stopped;
+    playbackState_.previewTransportState_ = miacode::PlaybackTransportState::Stopped;
 }
 
 void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosition)

@@ -1,6 +1,6 @@
 // Drift guard for docs/ops/DEPENDENCY_ALLOWLIST.md (QML UI v2 stage 3.5, item 4).
 //
-// Stage 3.5 of docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md requires the MiaCode
+// Stage 3.5 of docs/specs/ui/UI_TODO_ZH.md requires the MiaCode
 // process to have a written, layered dependency allowlist instead of an
 // accumulated link line. This spec is the machine half of that requirement:
 //

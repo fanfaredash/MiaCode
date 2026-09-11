@@ -767,17 +767,17 @@ int main(int argc, char** argv)
     {
         expect(QDir(QStringLiteral(MIACODE_SOURCE_ROOT)).exists(),
                QStringLiteral("timeline source-contract root is injected by CMake and exists"));
-        const QString panel = qmlSource(QStringLiteral("src/app/qml_ui/timeline/BottomPanel.qml"));
-        const QString tabBar = qmlSource(QStringLiteral("src/app/qml_ui/timeline/BottomTabBar.qml"));
-        const QString splitView = qmlSource(QStringLiteral("src/app/qml_ui/layout/MainSplitView.qml"));
-        const QString viewState = qmlSource(QStringLiteral("src/app/qml_ui/ViewState.qml"));
-        const QString timelineSession = qmlSource(QStringLiteral("src/app/qml_ui/QmlTimelineModel.h"));
+        const QString panel = qmlSource(QStringLiteral("src/app/ui/timeline/BottomPanel.qml"));
+        const QString tabBar = qmlSource(QStringLiteral("src/app/ui/timeline/BottomTabBar.qml"));
+        const QString splitView = qmlSource(QStringLiteral("src/app/ui/layout/MainSplitView.qml"));
+        const QString viewState = qmlSource(QStringLiteral("src/app/ui/ViewState.qml"));
+        const QString timelineSession = qmlSource(QStringLiteral("src/app/ui/timeline/TimelineModel.h"));
         const QString timelineTick = qmlSource(
             QStringLiteral("src/app/runtime/playback/Tick.cpp"));
         const QString editorDisplay = qmlSource(
             QStringLiteral("src/app/runtime/editor/EditorDisplay.cpp"));
-        const QString zoomMenu = qmlSource(QStringLiteral("src/app/qml_ui/timeline/TimelineZoomMenu.qml"));
-        const QString brightnessMenu = qmlSource(QStringLiteral("src/app/qml_ui/timeline/TimelineBrightnessMenu.qml"));
+        const QString zoomMenu = qmlSource(QStringLiteral("src/app/ui/timeline/TimelineZoomMenu.qml"));
+        const QString brightnessMenu = qmlSource(QStringLiteral("src/app/ui/timeline/TimelineBrightnessMenu.qml"));
         expect(!panel.isEmpty() && !tabBar.isEmpty() && !splitView.isEmpty()
                    && !viewState.isEmpty() && !timelineSession.isEmpty() && !timelineTick.isEmpty()
                    && !editorDisplay.isEmpty() && !zoomMenu.isEmpty() && !brightnessMenu.isEmpty(),

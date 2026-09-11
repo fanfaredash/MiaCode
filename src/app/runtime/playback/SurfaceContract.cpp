@@ -33,11 +33,11 @@ bool miacode::runtime::PlaybackCoordinator::playing() const
     return identity_.active() && (state_.playing_ || exportIntroLeadInPlaying());
 }
 
-miacode::v2::PlaybackTransportState miacode::runtime::PlaybackCoordinator::playbackTransportState() const
+miacode::PlaybackTransportState miacode::runtime::PlaybackCoordinator::playbackTransportState() const
 {
     return identity_.active()
         ? state_.previewTransportState_
-        : miacode::v2::PlaybackTransportState::Stopped;
+        : miacode::PlaybackTransportState::Stopped;
 }
 
 double miacode::runtime::PlaybackCoordinator::positionSeconds() const
@@ -84,7 +84,7 @@ void miacode::runtime::PlaybackCoordinator::seek(double second)
     }
     seekPreviewToSecond(second, true);
     if (!state_.playing_ && !exportIntroLeadInPlaying()) {
-        playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+        playbackState_.previewTransportState_ = miacode::PlaybackTransportState::Paused;
     }
 }
 
@@ -100,7 +100,7 @@ void miacode::runtime::PlaybackCoordinator::beginScrub()
     if (state_.playing_) {
         pauseQtPreviewPlaybackExact();
     }
-    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Scrubbing;
+    playbackState_.previewTransportState_ = miacode::PlaybackTransportState::Scrubbing;
 }
 
 void miacode::runtime::PlaybackCoordinator::updateScrub(double second, bool centerView)
@@ -167,7 +167,7 @@ void miacode::runtime::PlaybackCoordinator::endScrub(double second, bool centerV
         ui_.previewSeekDebounceTimer_->stop();
     }
     seekPreviewToSecond(clampedSecond, centerView);
-    playbackState_.previewTransportState_ = miacode::v2::PlaybackTransportState::Paused;
+    playbackState_.previewTransportState_ = miacode::PlaybackTransportState::Paused;
     const double appliedSecond = state_.pauseSecond_;
     const double misalignDelta = clampedSecond - appliedSecond;
     if (qAbs(misalignDelta) > kScrubMisalignWarnSeconds) {

@@ -92,7 +92,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Multimedia Quick Qml QuickControls2 ShaderTools)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui LinguistTools Multimedia Quick Qml QuickControls2 ShaderTools)
 
 qt_policy(SET QTP0001 NEW)
 
@@ -108,61 +108,61 @@ endif()
 
 # MultimediaQuickPrivate exposes the private QtMultimedia headers
 # (qhwvideobuffer_p.h / qvideotexturehelper_p.h) that QtAVPlayer's
-# QAVVideoFrame -> QVideoFrame bridge needs. The Windows and macOS
+# QAVVideoFrame -> QVideoFrame bridge needs. The Windows, macOS, and Linux
 # QtAVPlayer preview backends use it (see the QtAVPlayer block below).
-if (WIN32 OR APPLE)
+if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_package(Qt6 6.8 REQUIRED COMPONENTS MultimediaQuickPrivate)
 endif()
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
-    src/app/v2/ApplicationServices.cpp
-    src/app/v2/ApplicationServices.h
-    src/app/v2/DocumentBridge.h
-    src/app/v2/EditorPageRouter.h
-    src/app/v2/ExportEngine.h
-    src/app/v2/LatencyEngine.h
-    src/app/v2/MediaToolsEngine.h
-    src/app/v2/PreferencesStore.h
-    src/app/v2/PreviewSurface.h
-    src/app/v2/PlaybackControl.h
-    src/app/v2/PlaybackStateAuthority.h
-    src/app/v2/SessionGeneration.h
-    src/app/v2/AudioClockSource.h
-    src/app/v2/PreviewPlaybackPort.h
-    src/app/v2/ShellNotifications.cpp
-    src/app/v2/ShellNotifications.h
-    src/app/v2/TimelineSurface.h
-    src/app/v2/PreviewAppearanceState.cpp
-    src/app/v2/PreviewAppearanceState.h
-    src/app/v2/ChartWorkspace.cpp
-    src/app/v2/ChartWorkspace.h
-    src/app/v2/ChartMediaService.cpp
-    src/app/v2/ChartMediaService.h
+    src/app/services/ApplicationServices.cpp
+    src/app/services/ApplicationServices.h
+    src/app/services/DocumentBridge.h
+    src/app/services/EditorPageRouter.h
+    src/app/services/ExportEngine.h
+    src/app/services/LatencyEngine.h
+    src/app/services/MediaToolsEngine.h
+    src/app/services/PreferencesStore.h
+    src/app/services/PreviewSurface.h
+    src/app/services/PlaybackControl.h
+    src/app/services/PlaybackStateAuthority.h
+    src/app/services/SessionGeneration.h
+    src/app/services/AudioClockSource.h
+    src/app/services/PreviewPlaybackPort.h
+    src/app/services/ShellNotifications.cpp
+    src/app/services/ShellNotifications.h
+    src/app/services/TimelineSurface.h
+    src/app/services/PreviewAppearanceState.cpp
+    src/app/services/PreviewAppearanceState.h
+    src/app/services/ChartWorkspace.cpp
+    src/app/services/ChartWorkspace.h
+    src/app/services/ChartMediaService.cpp
+    src/app/services/ChartMediaService.h
     src/common/ChartMediaImport.cpp
     src/common/ChartMediaImport.h
-    src/app/v2/ChartWorkspaceFileService.cpp
-    src/app/v2/ChartWorkspaceFileService.h
-    src/app/v2/AnalysisService.cpp
-    src/app/v2/AnalysisService.h
-    src/app/v2/EditorSyncController.cpp
-    src/app/v2/EditorSyncController.h
-    src/app/v2/UiRequestService.cpp
-    src/app/v2/UiRequestService.h
-    src/app/v2/JobProgressService.cpp
-    src/app/v2/JobProgressService.h
-    src/app/qml_ui/media/QmlMediaToolsModel.cpp
-    src/app/qml_ui/media/QmlMediaToolsModel.h
-    src/app/qml_ui/preview/QmlAudioSettingsModel.cpp
-    src/app/qml_ui/preview/QmlAudioSettingsModel.h
-    src/app/qml_ui/preview/QmlPreviewSettingsModel.cpp
-    src/app/qml_ui/preview/QmlPreviewSettingsModel.h
-    src/app/qml_ui/preferences/QmlPreferencesModel.cpp
-    src/app/qml_ui/preferences/QmlPreferencesModel.h
-    src/app/qml_ui/preferences/QmlAppBackgroundModel.cpp
-    src/app/qml_ui/preferences/QmlAppBackgroundModel.h
-    src/app/qml_ui/latency/QmlLatencyModel.cpp
-    src/app/qml_ui/latency/QmlLatencyModel.h
+    src/app/services/ChartWorkspaceFileService.cpp
+    src/app/services/ChartWorkspaceFileService.h
+    src/app/services/AnalysisService.cpp
+    src/app/services/AnalysisService.h
+    src/app/services/EditorSyncController.cpp
+    src/app/services/EditorSyncController.h
+    src/app/services/UiRequestService.cpp
+    src/app/services/UiRequestService.h
+    src/app/services/JobProgressService.cpp
+    src/app/services/JobProgressService.h
+    src/app/ui/media/MediaToolsModel.cpp
+    src/app/ui/media/MediaToolsModel.h
+    src/app/ui/preview/AudioSettingsModel.cpp
+    src/app/ui/preview/AudioSettingsModel.h
+    src/app/ui/preview/PreviewSettingsModel.cpp
+    src/app/ui/preview/PreviewSettingsModel.h
+    src/app/ui/preferences/PreferencesModel.cpp
+    src/app/ui/preferences/PreferencesModel.h
+    src/app/ui/preferences/AppBackgroundModel.cpp
+    src/app/ui/preferences/AppBackgroundModel.h
+    src/app/ui/latency/LatencyModel.cpp
+    src/app/ui/latency/LatencyModel.h
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
@@ -170,6 +170,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/WindowVisibilityDiagnostics.cpp
     src/app/gpu_adapter_probe.cpp
     src/app/gpu_device_provider.cpp
+    src/preview/quick_scene/PreviewQuickGraphicsInfo.h
+    src/preview/quick_scene/PreviewQuickGraphicsInfo.cpp
     src/app/gpu_high_performance_hint.cpp
     src/app/cli_shared.cpp
     src/app/cli_video_export.cpp
@@ -243,21 +245,23 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/runtime/playback/SurfaceContract.cpp
     src/app/runtime/playback/SessionForwarding.SurfaceContract.cpp
     src/app/runtime/shell/ShellHost.cpp
-    src/app/ui/UiText.h
-    src/app/ui/UiText.cpp
-    src/app/ui/AppBackgroundSettings.h
-    src/app/ui/AppBackgroundSettings.cpp
-    src/app/ui/ThemeVariantResolver.h
-    src/app/ui/ThemeVariantResolver.cpp
-    src/app/ui/ShortcutRegistry.h
-    src/app/ui/ShortcutRegistry.cpp
-    src/app/ui/UiTheme.h
-    src/app/ui/UiTheme.cpp
-    src/app/ui/UiNativeWindowTheme.h
-    src/app/ui/UiNativeWindowTheme.cpp
-    src/app/ui/UiNativeWindowThemePolicy.h
-    src/app/ui/WindowParityMetrics.h
-    src/app/ui/WindowParityMetrics.cpp
+    src/app/ui/preferences/PreferenceDocument.h
+    src/app/ui/preferences/PreferenceDocument.cpp
+    src/app/ui/preferences/LocaleService.h
+    src/app/ui/preferences/LocaleService.cpp
+    src/app/ui/preferences/AppBackgroundSettings.h
+    src/app/ui/preferences/AppBackgroundSettings.cpp
+    src/app/ui/theme/ThemeVariantResolver.h
+    src/app/ui/theme/ThemeVariantResolver.cpp
+    src/app/ui/chrome/ShortcutRegistry.h
+    src/app/ui/chrome/ShortcutRegistry.cpp
+    src/app/ui/theme/UiTheme.h
+    src/app/ui/theme/UiTheme.cpp
+    src/app/ui/chrome/NativeWindowTheme.h
+    src/app/ui/chrome/NativeWindowTheme.cpp
+    src/app/ui/chrome/NativeWindowThemePolicy.h
+    src/app/ui/chrome/WindowParityMetrics.h
+    src/app/ui/chrome/WindowParityMetrics.cpp
     src/common/MuriTypes.h
     src/common/MuriTypes.cpp
     src/common/MuriRenderOptions.h
@@ -573,10 +577,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickNotesLayer.cpp
     src/timeline/quick/TimelineQuickOverlayLayer.h
     src/timeline/quick/TimelineQuickOverlayLayer.cpp
-    src/app/qml_ui/drop/QmlChartDropBridge.h
-    src/app/qml_ui/drop/QmlChartDropBridge.cpp
-    src/app/v2/ChartDropImportService.h
-    src/app/v2/ChartDropImportService.cpp
+    src/app/ui/drop/ChartDropBridge.h
+    src/app/ui/drop/ChartDropBridge.cpp
+    src/app/services/ChartDropImportService.h
+    src/app/services/ChartDropImportService.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/slide_data.qrc
@@ -603,12 +607,18 @@ qt_add_shaders(MiaCode "intro_shaders"
 qt_add_shaders(MiaCode "ui_shaders"
     PREFIX "/"
     FILES
-        src/app/qml_ui/shaders/corner_mask.frag
+        src/app/ui/shaders/corner_mask.frag
 )
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.fanfaredash.MiaCode"
 )
+
+if(UNIX AND NOT APPLE)
+    set_target_properties(MiaCode PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin"
+    )
+endif()
 
 if (WIN32 AND EXISTS "${MIACODE_APP_ICON}")
     file(TO_CMAKE_PATH "${MIACODE_APP_ICON}" MIACODE_APP_ICON_RC_PATH)
@@ -630,134 +640,137 @@ endif()
 # Default UI (v2).
 # QTP0001 NEW embeds this module at :/qt/qml/MiaCode/UI/.
 set(MIACODE_UI_QML_FILES
-    src/app/qml_ui/Main.qml
-    src/app/qml_ui/UiText.qml
-    src/app/qml_ui/ViewState.qml
-    src/app/qml_ui/theme/Theme.qml
-    src/app/qml_ui/components/IconButton.qml
-    src/app/qml_ui/components/AppCheckBox.qml
-    src/app/qml_ui/components/AppDropDownButton.qml
-    src/app/qml_ui/components/AppTab.qml
-    src/app/qml_ui/components/DifficultySwatch.qml
-    src/app/qml_ui/components/PanelHeader.qml
-    src/app/qml_ui/components/SplitHandle.qml
-    src/app/qml_ui/components/CornerMask.qml
-    src/app/qml_ui/components/Tooltip.qml
-    src/app/qml_ui/components/HoverChrome.qml
-    src/app/qml_ui/components/ChromeRow.qml
-    src/app/qml_ui/components/NavRow.qml
-    src/app/qml_ui/components/AppTextField.qml
-    src/app/qml_ui/components/AppTextArea.qml
-    src/app/qml_ui/components/AppButton.qml
-    src/app/qml_ui/components/AppSwitch.qml
-    src/app/qml_ui/components/AppComboBox.qml
-    src/app/qml_ui/components/AppSlider.qml
-    src/app/qml_ui/components/AppScrollBar.qml
-    src/app/qml_ui/components/AppMenu.qml
-    src/app/qml_ui/components/AppMenuAction.qml
-    src/app/qml_ui/components/FloatingCard.qml
-    src/app/qml_ui/components/BackdropBlur.qml
-    src/app/qml_ui/components/FadeTransition.qml
-    src/app/qml_ui/components/AppDialog.qml
-    src/app/qml_ui/components/AppStickyPopup.qml
-    src/app/qml_ui/components/AppDropdownPanel.qml
-    src/app/qml_ui/components/AppMenuItem.qml
-    src/app/qml_ui/components/AppMenuSeparator.qml
-    src/app/qml_ui/components/UiRequestHost.qml
-    src/app/qml_ui/components/DialogFooter.qml
-    src/app/qml_ui/components/ChoiceDialog.qml
-    src/app/qml_ui/components/EditableValue.qml
-    src/app/qml_ui/components/LabeledCombo.qml
-    src/app/qml_ui/components/LabeledSlider.qml
-    src/app/qml_ui/components/SettingsSection.qml
-    src/app/qml_ui/components/AboutDialog.qml
-    src/app/qml_ui/components/JobProgressOverlay.qml
-    src/app/qml_ui/chrome/WindowGestureArea.qml
-    src/app/qml_ui/chrome/WindowTitleBar.qml
-    src/app/qml_ui/chrome/WindowCaptionButtons.qml
-    src/app/qml_ui/chrome/MainMenu.qml
-    src/app/qml_ui/chrome/ShortcutBindings.qml
-    src/app/qml_ui/chrome/MainMenuCommands.qml
-    src/app/qml_ui/chrome/MainToolBar.qml
-    src/app/qml_ui/chrome/StatusBar.qml
-    src/app/qml_ui/layout/MainView.qml
-    src/app/qml_ui/layout/MainSplitView.qml
-    src/app/qml_ui/layout/CompactPanelLayer.qml
-    src/app/qml_ui/sidebar/Sidebar.qml
-    src/app/qml_ui/sidebar/ActivityBar.qml
-    src/app/qml_ui/sidebar/ChartFieldSidebar.qml
-    src/app/qml_ui/sidebar/DifficultyList.qml
-    src/app/qml_ui/sidebar/ExportSidebarPage.qml
-    src/app/qml_ui/export/ExportRangeSelector.qml
-    src/app/qml_ui/export/ExportVideoPage.qml
-    src/app/qml_ui/export/CoverExportPage.qml
-    src/app/qml_ui/export/CoverExportWindow.qml
-    src/app/qml_ui/editor/EditorPane.qml
-    src/app/qml_ui/editor/EditorTabBar.qml
-    src/app/qml_ui/editor/SourceEditor.qml
-    src/app/qml_ui/editor/EditorPointerArea.qml
-    src/app/qml_ui/editor/CompletionPopup.qml
-    src/app/qml_ui/editor/NormalizeOptionsDialog.qml
-    src/app/qml_ui/editor/DesignerSlotsDialog.qml
-    src/app/qml_ui/media/MediaToolsDialog.qml
-    src/app/qml_ui/media/PvBatchCompressionDialog.qml
-    src/app/qml_ui/media/PrependBlankDialog.qml
-    src/app/qml_ui/preferences/PreferencesDialog.qml
-    src/app/qml_ui/latency/LatencyPage.qml
-    src/app/qml_ui/editor/FindReplaceBar.qml
-    src/app/qml_ui/editor/BookmarkList.qml
-    src/app/qml_ui/editor/LineNumberGutter.qml
-    src/app/qml_ui/timeline/BottomPanel.qml
-    src/app/qml_ui/timeline/BottomTabBar.qml
-    src/app/qml_ui/timeline/TimelineZoomMenu.qml
-    src/app/qml_ui/timeline/TimelineBrightnessMenu.qml
-    src/app/qml_ui/preview/PreviewPane.qml
-    src/app/qml_ui/preview/PreviewRenderModeMenu.qml
-    src/app/qml_ui/preview/PreviewRateMenu.qml
-    src/app/qml_ui/preview/PreviewRateToast.qml
-    src/app/qml_ui/preview/PreviewCanvasMenu.qml
-    src/app/qml_ui/preview/PreviewTransport.qml
-    src/app/qml_ui/preview/NoteStatistics.qml
-    src/app/qml_ui/preview/AudioSettingsDialog.qml
-    src/app/qml_ui/preview/PreviewSettingsDialog.qml
+    src/app/ui/Main.qml
+    src/app/ui/ViewState.qml
+    src/app/ui/theme/Theme.qml
+    src/app/ui/components/IconButton.qml
+    src/app/ui/components/AppCheckBox.qml
+    src/app/ui/components/AppDropDownButton.qml
+    src/app/ui/components/AppTab.qml
+    src/app/ui/components/DifficultySwatch.qml
+    src/app/ui/components/PanelHeader.qml
+    src/app/ui/components/SplitHandle.qml
+    src/app/ui/components/CornerMask.qml
+    src/app/ui/components/Tooltip.qml
+    src/app/ui/components/HoverChrome.qml
+    src/app/ui/components/ChromeRow.qml
+    src/app/ui/components/NavRow.qml
+    src/app/ui/components/AppTextField.qml
+    src/app/ui/components/AppTextArea.qml
+    src/app/ui/components/AppButton.qml
+    src/app/ui/components/AppSwitch.qml
+    src/app/ui/components/AppComboBox.qml
+    src/app/ui/components/AppSlider.qml
+    src/app/ui/components/AppScrollBar.qml
+    src/app/ui/components/AppMenu.qml
+    src/app/ui/components/AppMenuAction.qml
+    src/app/ui/components/FloatingCard.qml
+    src/app/ui/components/BackdropBlur.qml
+    src/app/ui/components/FadeTransition.qml
+    src/app/ui/components/AppDialog.qml
+    src/app/ui/components/AppStickyPopup.qml
+    src/app/ui/components/AppDropdownPanel.qml
+    src/app/ui/components/AppMenuItem.qml
+    src/app/ui/components/AppMenuSeparator.qml
+    src/app/ui/components/UiRequestHost.qml
+    src/app/ui/components/DialogFooter.qml
+    src/app/ui/components/ChoiceDialog.qml
+    src/app/ui/components/EditableValue.qml
+    src/app/ui/components/LabeledCombo.qml
+    src/app/ui/components/LabeledSlider.qml
+    src/app/ui/components/SettingsSection.qml
+    src/app/ui/components/AboutDialog.qml
+    src/app/ui/components/JobProgressOverlay.qml
+    src/app/ui/chrome/WindowGestureArea.qml
+    src/app/ui/chrome/WindowTitleBar.qml
+    src/app/ui/chrome/WindowCaptionButtons.qml
+    src/app/ui/chrome/WindowResizeBorder.qml
+    src/app/ui/chrome/MainMenu.qml
+    src/app/ui/chrome/ShortcutBindings.qml
+    src/app/ui/chrome/MainMenuCommands.qml
+    src/app/ui/chrome/MainToolBar.qml
+    src/app/ui/chrome/StatusBar.qml
+    src/app/ui/layout/MainView.qml
+    src/app/ui/layout/MainSplitView.qml
+    src/app/ui/layout/CompactPanelLayer.qml
+    src/app/ui/sidebar/Sidebar.qml
+    src/app/ui/sidebar/ActivityBar.qml
+    src/app/ui/sidebar/ChartFieldSidebar.qml
+    src/app/ui/sidebar/DifficultyList.qml
+    src/app/ui/sidebar/ExportSidebarPage.qml
+    src/app/ui/export/ExportRangeSelector.qml
+    src/app/ui/export/ExportVideoPage.qml
+    src/app/ui/export/CoverExportPage.qml
+    src/app/ui/export/CoverExportWindow.qml
+    src/app/ui/editor/EditorPane.qml
+    src/app/ui/editor/EditorTabBar.qml
+    src/app/ui/editor/SourceEditor.qml
+    src/app/ui/editor/EditorPointerArea.qml
+    src/app/ui/editor/CompletionPopup.qml
+    src/app/ui/editor/NormalizeOptionsDialog.qml
+    src/app/ui/editor/DesignerSlotsDialog.qml
+    src/app/ui/media/MediaToolsDialog.qml
+    src/app/ui/media/PvBatchCompressionDialog.qml
+    src/app/ui/media/PrependBlankDialog.qml
+    src/app/ui/preferences/PreferencesDialog.qml
+    src/app/ui/latency/LatencyPage.qml
+    src/app/ui/editor/FindReplaceBar.qml
+    src/app/ui/editor/BookmarkList.qml
+    src/app/ui/editor/LineNumberGutter.qml
+    src/app/ui/timeline/BottomPanel.qml
+    src/app/ui/timeline/BottomTabBar.qml
+    src/app/ui/timeline/TimelineZoomMenu.qml
+    src/app/ui/timeline/TimelineBrightnessMenu.qml
+    src/app/ui/preview/PreviewPane.qml
+    src/app/ui/preview/PreviewRenderModeMenu.qml
+    src/app/ui/preview/PreviewRateMenu.qml
+    src/app/ui/preview/PreviewRateToast.qml
+    src/app/ui/preview/PreviewCanvasMenu.qml
+    src/app/ui/preview/PreviewTransport.qml
+    src/app/ui/preview/NoteStatistics.qml
+    src/app/ui/preview/AudioSettingsDialog.qml
+    src/app/ui/preview/PreviewSettingsDialog.qml
 )
 foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
     get_filename_component(qml_name "${qml_file}" NAME)
     set_source_files_properties("${qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${qml_name}")
 endforeach()
 set_source_files_properties(
-    src/app/qml_ui/theme/Theme.qml
-    src/app/qml_ui/UiText.qml
+    src/app/ui/theme/Theme.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
 
 set(MIACODE_UI_ICON_FILES
-    src/app/qml_ui/resources/icons/folder-open.svg
-    src/app/qml_ui/resources/icons/save.svg
-    src/app/qml_ui/resources/icons/undo.svg
-    src/app/qml_ui/resources/icons/redo.svg
-    src/app/qml_ui/resources/icons/play.svg
-    src/app/qml_ui/resources/icons/pause.svg
-    src/app/qml_ui/resources/icons/stop.svg
-    src/app/qml_ui/resources/icons/fullscreen.svg
-    src/app/qml_ui/resources/icons/panel-left.svg
-    src/app/qml_ui/resources/icons/panel-bottom.svg
-    src/app/qml_ui/resources/icons/panel-right.svg
-    src/app/qml_ui/resources/icons/settings.svg
-    src/app/qml_ui/resources/icons/chart.svg
-    src/app/qml_ui/resources/icons/export.svg
-    src/app/qml_ui/resources/icons/tools.svg
-    src/app/qml_ui/resources/icons/audio-settings.svg
-    src/app/qml_ui/resources/icons/preview-settings.svg
-    src/app/qml_ui/resources/icons/close.svg
-    src/app/qml_ui/resources/icons/more.svg
-    src/app/qml_ui/resources/icons/metadata.svg
-    src/app/qml_ui/resources/icons/app-icon.svg
-    src/app/qml_ui/resources/icons/app-titlebar.png
-    src/app/qml_ui/resources/icons/app-titlebar@2x.png
-    src/app/qml_ui/resources/icons/chevron-down.svg
-    src/app/qml_ui/resources/icons/add.svg
-    src/app/qml_ui/resources/icons/remove.svg
+    src/app/ui/resources/icons/folder-open.svg
+    src/app/ui/resources/icons/save.svg
+    src/app/ui/resources/icons/undo.svg
+    src/app/ui/resources/icons/redo.svg
+    src/app/ui/resources/icons/play.svg
+    src/app/ui/resources/icons/pause.svg
+    src/app/ui/resources/icons/stop.svg
+    src/app/ui/resources/icons/fullscreen.svg
+    src/app/ui/resources/icons/panel-left.svg
+    src/app/ui/resources/icons/panel-bottom.svg
+    src/app/ui/resources/icons/panel-right.svg
+    src/app/ui/resources/icons/settings.svg
+    src/app/ui/resources/icons/chart.svg
+    src/app/ui/resources/icons/export.svg
+    src/app/ui/resources/icons/tools.svg
+    src/app/ui/resources/icons/audio-settings.svg
+    src/app/ui/resources/icons/preview-settings.svg
+    src/app/ui/resources/icons/file.svg
+    src/app/ui/resources/icons/sliders-horizontal.svg
+    src/app/ui/resources/icons/volume-2.svg
+    src/app/ui/resources/icons/volume-x.svg
+    src/app/ui/resources/icons/close.svg
+    src/app/ui/resources/icons/more.svg
+    src/app/ui/resources/icons/metadata.svg
+    src/app/ui/resources/icons/app-icon.svg
+    src/app/ui/resources/icons/app-titlebar.png
+    src/app/ui/resources/icons/app-titlebar@2x.png
+    src/app/ui/resources/icons/chevron-down.svg
+    src/app/ui/resources/icons/add.svg
+    src/app/ui/resources/icons/remove.svg
     # Canonical MiaCode brand PNG (same asset as resources/app_icons.qrc).
     resources/icons/app.png
 )
@@ -770,62 +783,80 @@ qt_add_qml_module(MiaCode
     URI MiaCode.UI
     VERSION 1.0
     SOURCES
-        src/app/qml_ui/SimaiSyntaxHighlighter.cpp
-        src/app/qml_ui/SimaiSyntaxHighlighter.h
-        src/app/qml_ui/EditorTextStyle.cpp
-        src/app/qml_ui/EditorTextStyle.h
-        src/app/qml_ui/QmlApplicationContext.cpp
-        src/app/qml_ui/QmlApplicationContext.h
-        src/app/qml_ui/QmlCommandService.cpp
-        src/app/qml_ui/QmlCommandService.h
-        src/app/qml_ui/QmlShortcutCommands.h
-        src/app/qml_ui/QmlDocumentModel.cpp
-        src/app/qml_ui/QmlDocumentModel.h
+        src/app/ui/editor/SimaiSyntaxHighlighter.cpp
+        src/app/ui/editor/SimaiSyntaxHighlighter.h
+        src/app/ui/editor/EditorTextStyle.cpp
+        src/app/ui/editor/EditorTextStyle.h
+        src/app/ui/ApplicationContext.cpp
+        src/app/ui/ApplicationContext.h
+        src/app/ui/document/CommandService.cpp
+        src/app/ui/document/CommandService.h
+        src/app/ui/chrome/ShortcutCommands.h
+        src/app/ui/document/DocumentModel.cpp
+        src/app/ui/document/DocumentModel.h
         src/core/chart/selection/ChartSelectionBeatSummary.h
         src/core/chart/selection/ChartSelectionBeatSummary.cpp
-        src/app/qml_ui/QmlDocumentProjection.cpp
-        src/app/qml_ui/QmlDocumentProjection.h
-        src/app/qml_ui/QmlAnalysisProjection.cpp
-        src/app/qml_ui/QmlAnalysisProjection.h
-        src/app/qml_ui/QmlAnalysisModel.cpp
-        src/app/qml_ui/QmlAnalysisModel.h
-        src/app/qml_ui/QmlPreviewModel.cpp
-        src/app/qml_ui/QmlPreviewModel.h
-        src/app/qml_ui/QmlTimelineModel.cpp
-        src/app/qml_ui/QmlTimelineModel.h
-        src/app/qml_ui/QmlShellLifecycle.cpp
-        src/app/qml_ui/QmlShellLifecycle.h
-        src/app/qml_ui/QmlNoteImageProvider.cpp
-        src/app/qml_ui/QmlNoteImageProvider.h
-        src/app/qml_ui/QmlUiSettings.cpp
-        src/app/qml_ui/QmlUiSettings.h
-        src/app/qml_ui/QmlUiPlatformChrome.h
-        src/app/qml_ui/QmlEditorPageHost.cpp
-        src/app/qml_ui/QmlEditorPageHost.h
-        src/app/qml_ui/QmlEditorController.cpp
-        src/app/qml_ui/QmlEditorController.h
-        src/app/qml_ui/QmlShortcutModel.cpp
-        src/app/qml_ui/QmlShortcutModel.h
-        src/app/qml_ui/QmlEditorInputBridge.cpp
-        src/app/qml_ui/QmlEditorInputBridge.h
-        src/app/qml_ui/export/QmlExportSession.cpp
-        src/app/qml_ui/export/QmlExportSession.h
-        src/app/qml_ui/export/QmlCoverExportSession.cpp
-        src/app/qml_ui/export/QmlCoverExportSession.h
-        src/app/qml_ui/export/QmlCoverExportWindow.cpp
-        src/app/qml_ui/export/QmlCoverExportWindow.h
-        src/app/qml_ui/QmlUiWindowChrome.cpp
-        src/app/qml_ui/QmlUiWindowChrome.h
-        src/app/qml_ui/QmlUiBootstrap.cpp
-        src/app/qml_ui/QmlUiBootstrap.h
-        src/app/qml_ui/QmlUiRootLifecycle.h
-        src/app/qml_ui/TimelineThemeBridge.cpp
-        src/app/qml_ui/TimelineThemeBridge.h
+        src/app/ui/document/DocumentProjection.cpp
+        src/app/ui/document/DocumentProjection.h
+        src/app/ui/document/AnalysisProjection.cpp
+        src/app/ui/document/AnalysisProjection.h
+        src/app/ui/document/AnalysisModel.cpp
+        src/app/ui/document/AnalysisModel.h
+        src/app/ui/preview/PreviewModel.cpp
+        src/app/ui/preview/PreviewModel.h
+        src/app/ui/timeline/TimelineModel.cpp
+        src/app/ui/timeline/TimelineModel.h
+        src/app/ui/shell/ShellLifecycle.cpp
+        src/app/ui/shell/ShellLifecycle.h
+        src/app/ui/preview/NoteImageProvider.cpp
+        src/app/ui/preview/NoteImageProvider.h
+        src/app/ui/layout/WorkbenchSettings.cpp
+        src/app/ui/layout/WorkbenchSettings.h
+        src/app/ui/chrome/PlatformChrome.h
+        src/app/ui/layout/PageHost.cpp
+        src/app/ui/layout/PageHost.h
+        src/app/ui/editor/EditorController.cpp
+        src/app/ui/editor/EditorController.h
+        src/app/ui/chrome/ShortcutModel.cpp
+        src/app/ui/chrome/ShortcutModel.h
+        src/app/ui/editor/EditorInputBridge.cpp
+        src/app/ui/editor/EditorInputBridge.h
+        src/app/ui/export/ExportSession.cpp
+        src/app/ui/export/ExportSession.h
+        src/app/ui/export/CoverExportSession.cpp
+        src/app/ui/export/CoverExportSession.h
+        src/app/ui/export/CoverExportWindow.cpp
+        src/app/ui/export/CoverExportWindow.h
+        src/app/ui/chrome/WindowChrome.cpp
+        src/app/ui/chrome/WindowChrome.h
+        src/app/ui/Bootstrap.cpp
+        src/app/ui/Bootstrap.h
+        src/app/ui/shell/RootLifecycle.h
+        src/app/ui/timeline/TimelineThemeBridge.cpp
+        src/app/ui/timeline/TimelineThemeBridge.h
     QML_FILES
         ${MIACODE_UI_QML_FILES}
     RESOURCES
         ${MIACODE_UI_ICON_FILES}
 )
+
+set(MIACODE_TRANSLATION_TS_FILES
+    translations/en_US.ts
+    translations/zh_CN.ts
+    translations/ja_JP.ts
+)
+qt_add_lrelease(
+    LRELEASE_TARGET miacode_lrelease
+    TS_FILES ${MIACODE_TRANSLATION_TS_FILES}
+    QM_FILES_OUTPUT_VARIABLE MIACODE_TRANSLATION_QM_FILES
+    OPTIONS -idbased
+)
+qt_add_resources(MiaCode "miacode_i18n"
+    PREFIX "/i18n"
+    BASE "${CMAKE_CURRENT_BINARY_DIR}"
+    FILES ${MIACODE_TRANSLATION_QM_FILES}
+)
+add_dependencies(MiaCode miacode_lrelease)
 
 add_library(soundtouch STATIC
     third_party/soundtouch/source/SoundTouch/AAFilter.cpp
@@ -879,9 +910,10 @@ target_include_directories(MiaCode PRIVATE
     third_party/bass/include
     src
     src/app
-    src/app/qml_ui
     src/app/quick_shell
     src/app/ui
+    src/app/ui/editor
+    src/app/ui/timeline
     src/core/video
     src/editor
     src/preview
@@ -912,7 +944,7 @@ target_sources(MiaCode PRIVATE
     src/tools/video_export/LegacyExportAudioBackend.cpp
 )
 
-if (WIN32 OR APPLE)
+if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(MiaCode PRIVATE
         src/audio/BassPreviewAudioBackend.h
         src/audio/BassPreviewAudioBackend.cpp
@@ -944,7 +976,7 @@ if (WIN32)
         rstrtmgr     # Restart Manager process lookup for media tools (MinGW)
         opengl32     # QtAVPlayer D3D11/OpenGL texture interop (MinGW)
         d3dcompiler  # QtAVPlayer D3DCompile (MinGW; MSVC uses pragma comment)
-        dwmapi       # v2 QmlUiWindowChrome DwmExtendFrameIntoClientArea
+        dwmapi       # v2 WindowChrome DwmExtendFrameIntoClientArea
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -985,6 +1017,42 @@ elseif (APPLE)
             "$<TARGET_FILE_DIR:MiaCode>/../Frameworks"
         COMMENT "Deploying macOS BASS runtime libraries"
     )
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+        set(MIACODE_BASS_LINUX_ARCH "x86_64")
+    elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+        set(MIACODE_BASS_LINUX_ARCH "aarch64")
+    else()
+        message(FATAL_ERROR "MiaCode's bundled Linux BASS runtime currently supports x86_64 and aarch64 only")
+    endif()
+
+    set(MIACODE_BASS_LINUX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/linux/${MIACODE_BASS_LINUX_ARCH}")
+    set(MIACODE_BASS_LINUX_LIBRARIES
+        "${MIACODE_BASS_LINUX_DIR}/libbass.so"
+        "${MIACODE_BASS_LINUX_DIR}/libbassmix.so"
+        "${MIACODE_BASS_LINUX_DIR}/libbass_fx.so"
+    )
+    foreach(MIACODE_BASS_LIBRARY IN LISTS MIACODE_BASS_LINUX_LIBRARIES)
+        if (NOT EXISTS "${MIACODE_BASS_LIBRARY}")
+            message(FATAL_ERROR "Missing required Linux BASS runtime: ${MIACODE_BASS_LIBRARY}")
+        endif()
+    endforeach()
+
+    target_link_libraries(MiaCode PRIVATE
+        "${MIACODE_BASS_LINUX_DIR}/libbass.so"
+        "${MIACODE_BASS_LINUX_DIR}/libbassmix.so"
+        ${CMAKE_DL_LIBS}
+    )
+    set_target_properties(MiaCode PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+    )
+    add_custom_command(TARGET MiaCode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${MIACODE_BASS_LINUX_LIBRARIES}
+            $<TARGET_FILE_DIR:MiaCode>
+        COMMENT "Deploying Linux BASS runtime libraries"
+    )
 endif()
 
 # Extension packages are archive/offline inputs only. Remove any stale
@@ -999,9 +1067,9 @@ add_custom_command(TARGET MiaCode POST_BUILD
 
 if (APPLE)
     target_sources(MiaCode PRIVATE
-        src/app/ui/UiNativeWindowThemeMac.h
-        src/app/ui/UiNativeWindowThemeMac.mm
-        src/app/qml_ui/QmlUiWindowChrome.mm
+        src/app/ui/chrome/NativeWindowThemeMac.h
+        src/app/ui/chrome/NativeWindowThemeMac.mm
+        src/app/ui/chrome/WindowChrome.mm
     )
     target_link_libraries(MiaCode PRIVATE "-framework AppKit")
 endif()
@@ -1014,47 +1082,65 @@ target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 # Replaces QMediaPlayer for PV/BG decoding inside PreviewStageMediaHost; see
 # docs/ops/DEBUG_INDEX.md. QtAVPlayer is the
 # MIT-licensed source vendored under third_party/QtAVPlayer, compiled straight
-# into MiaCode. It links external FFmpeg shared libraries whose dev SDK
-# (headers + libraries) is supplied through MIACODE_FFMPEG_DEV_DIR. Windows
-# uses the provisioned n7.1 LGPL SDK; macOS uses the project-provisioned 6.1.2
-# SDK (`scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`).
+# into MiaCode. Windows and macOS use the project-selected FFmpeg SDK through
+# MIACODE_FFMPEG_DEV_DIR. Linux resolves FFmpeg and VA-API from the host
+# toolchain through pkg-config.
 #
-# Windows and macOS use QtAVPlayer. Windows selects D3D11VA where available;
-# macOS selects the vendored VideoToolbox/Metal hwdevice. Other platforms keep
-# the QMediaPlayer path — MIACODE_USE_QTAVPLAYER stays undefined there.
+# All desktop platforms use QtAVPlayer. Windows selects D3D11VA, macOS selects
+# VideoToolbox/Metal, and Linux selects VA-API through DRM/EGL.
 # ---------------------------------------------------------------------------
-if (WIN32 OR APPLE)
+if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     if (WIN32)
         set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/dev")
-    else()
+    elseif (APPLE)
         set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/macos/dev")
     endif()
-    set(MIACODE_FFMPEG_DEV_DIR "${MIACODE_FFMPEG_DEV_DIR_DEFAULT}"
-        CACHE PATH "FFmpeg shared dev SDK root (include/ + lib/) for the QtAVPlayer preview backend")
-    if (NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/include" OR NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/lib")
-        if (APPLE)
-            set(MIACODE_FFMPEG_PROVISION_COMMAND
-                "bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh")
-        else()
-            set(MIACODE_FFMPEG_PROVISION_COMMAND
-                "scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1")
+    if (WIN32 OR APPLE)
+        set(MIACODE_FFMPEG_DEV_DIR "${MIACODE_FFMPEG_DEV_DIR_DEFAULT}"
+            CACHE PATH "FFmpeg shared dev SDK root (include/ + lib/) for the QtAVPlayer preview backend")
+        if (NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/include" OR NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/lib")
+            if (APPLE)
+                set(MIACODE_FFMPEG_PROVISION_COMMAND
+                    "bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh")
+            else()
+                set(MIACODE_FFMPEG_PROVISION_COMMAND
+                    "scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1")
+            endif()
+            message(FATAL_ERROR
+                "FFmpeg dev SDK not found at '${MIACODE_FFMPEG_DEV_DIR}'. "
+                "Run '${MIACODE_FFMPEG_PROVISION_COMMAND}', or pass "
+                "-DMIACODE_FFMPEG_DEV_DIR=<root containing include/ lib/>.")
         endif()
-        message(FATAL_ERROR
-            "FFmpeg dev SDK not found at '${MIACODE_FFMPEG_DEV_DIR}'. "
-            "Run '${MIACODE_FFMPEG_PROVISION_COMMAND}', or pass "
-            "-DMIACODE_FFMPEG_DEV_DIR=<root containing include/ lib/>.")
-    endif()
-    if (APPLE AND MIACODE_FFMPEG_DEV_DIR MATCHES "^/(opt/homebrew|usr/local)/")
-        message(FATAL_ERROR
-            "macOS release builds must use the project-provisioned FFmpeg SDK, not Homebrew: "
-            "${MIACODE_FFMPEG_DEV_DIR}. Run bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh.")
-    endif()
+        if (APPLE AND MIACODE_FFMPEG_DEV_DIR MATCHES "^/(opt/homebrew|usr/local)/")
+            message(FATAL_ERROR
+                "macOS release builds must use the project-provisioned FFmpeg SDK, not Homebrew: "
+                "${MIACODE_FFMPEG_DEV_DIR}. Run bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh.")
+        endif()
 
-    # find_library() in QtAVPlayer.cmake resolves the FFmpeg import libs from
-    # <prefix>/lib; prepending the dev root makes our SDK win over any system one.
-    list(PREPEND CMAKE_PREFIX_PATH "${MIACODE_FFMPEG_DEV_DIR}")
+        # find_library() in QtAVPlayer.cmake resolves the FFmpeg import libs from
+        # <prefix>/lib; prepending the dev root makes our SDK win over any system one.
+        list(PREPEND CMAKE_PREFIX_PATH "${MIACODE_FFMPEG_DEV_DIR}")
+    else()
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(MIACODE_FFMPEG REQUIRED IMPORTED_TARGET
+            libavfilter libavcodec libavformat libavutil libswresample libswscale)
+        pkg_check_modules(MIACODE_VAAPI REQUIRED IMPORTED_TARGET libva libva-drm libdrm)
+        find_library(AVFILTER_LIBRARY NAMES avfilter
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        find_library(AVCODEC_LIBRARY NAMES avcodec
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        find_library(AVFORMAT_LIBRARY NAMES avformat
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        find_library(AVUTIL_LIBRARY NAMES avutil
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        find_library(SWRESAMPLE_LIBRARY NAMES swresample
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        find_library(SWSCALE_LIBRARY NAMES swscale
+            HINTS ${MIACODE_FFMPEG_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED NO_CACHE)
+        set(QT_AVPLAYER_VA_DRM ON CACHE BOOL "" FORCE)
+    endif()
 
     set(QTAVPLAYER_SRC "${CMAKE_CURRENT_SOURCE_DIR}/third_party/QtAVPlayer/src")
     set(QT_AVPLAYER_DIR "${QTAVPLAYER_SRC}/QtAVPlayer")
@@ -1081,8 +1167,11 @@ if (WIN32 OR APPLE)
     target_sources(MiaCode PRIVATE ${QtAVPlayer_SOURCES})
     target_include_directories(MiaCode PRIVATE
         "${QTAVPLAYER_SRC}"                  # makes <QtAVPlayer/...> resolve
-        "${MIACODE_FFMPEG_DEV_DIR}/include"  # makes <libavcodec/...> resolve
     )
+    if (WIN32 OR APPLE)
+        target_include_directories(MiaCode PRIVATE
+            "${MIACODE_FFMPEG_DEV_DIR}/include")
+    endif()
     # QT_AVPLAYER_MULTIMEDIA : build the QAVVideoFrame -> QVideoFrame bridge.
     # QT_BUILD_QTAVPLAYER_LIB: export QtAVPlayer symbols (sources live in the exe).
     # MIACODE_USE_QTAVPLAYER  : switch PreviewStageMediaHost onto the new backend.
@@ -1098,6 +1187,11 @@ if (WIN32 OR APPLE)
         Qt6::MultimediaQuickPrivate
         ${QtAVPlayer_LIBS}
     )
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_libraries(MiaCode PRIVATE
+            PkgConfig::MIACODE_FFMPEG
+            PkgConfig::MIACODE_VAAPI)
+    endif()
 
     if (WIN32)
         # Runtime: the preview backend loads these next to MiaCode.exe. The
@@ -1113,7 +1207,7 @@ if (WIN32 OR APPLE)
                 $<TARGET_FILE_DIR:MiaCode>
             VERBATIM
         )
-    else()
+    elseif (APPLE)
         # The project-local macOS SDK has @rpath install names. Make the local
         # app bundle runnable too, then let the release packager stage the
         # same six dylibs in its final Frameworks directory.
@@ -1217,7 +1311,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
     foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
         get_filename_component(_qml_name "${qml_file}" NAME)
         get_filename_component(_qml_type "${qml_file}" NAME_WE)
-        if (_qml_name STREQUAL "Theme.qml" OR _qml_name STREQUAL "UiText.qml")
+        if (_qml_name STREQUAL "Theme.qml")
             string(APPEND _miacode_qml_spec_qmldir "singleton ${_qml_type} 1.0 ${_qml_name}\n")
         else()
             string(APPEND _miacode_qml_spec_qmldir "${_qml_type} 1.0 ${_qml_name}\n")

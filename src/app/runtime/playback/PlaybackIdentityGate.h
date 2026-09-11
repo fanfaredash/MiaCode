@@ -1,6 +1,6 @@
 #pragma once
 
-#include "app/v2/PlaybackControl.h"
+#include "app/services/PlaybackControl.h"
 
 namespace miacode::runtime {
 
@@ -21,8 +21,8 @@ public:
     quint64 advanceSequence();
     void invalidate();
 
-    miacode::v2::PlaybackCallbackStamp currentStamp() const;
-    bool accepts(const miacode::v2::PlaybackCallbackStamp& stamp) const;
+    miacode::PlaybackCallbackStamp currentStamp() const;
+    bool accepts(const miacode::PlaybackCallbackStamp& stamp) const;
 
 private:
     quint64 sessionGeneration_ = 0;

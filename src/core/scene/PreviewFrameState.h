@@ -193,6 +193,7 @@ struct PreviewMediaFrameState {
     double externalVideoFrameIntervalMaxMs = 0.0;
     qint64 externalVideoFrameStallCount = 0;
     bool externalVideoFrameStalled = false;
+    QString externalVideoDecodeDesc;
 };
 
 struct PreviewAssetState {

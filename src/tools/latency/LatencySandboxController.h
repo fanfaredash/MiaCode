@@ -7,7 +7,7 @@
 #include <QVector>
 
 #include "PreviewAudioSettings.h"
-#include "app/v2/LatencyEngine.h"
+#include "app/services/LatencyEngine.h"
 #include "timeline/TimelineData.h"
 #include "timeline/TimelineRenderData.h"
 
@@ -40,7 +40,7 @@ namespace miacode::latency {
 //
 // Lives as a member of Session (a friend), so it can reuse Session's
 // preview/timeline/transport helpers directly.
-class LatencySandboxController : public QObject, public miacode::v2::LatencyEngine
+class LatencySandboxController : public QObject, public miacode::LatencyEngine
 {
     Q_OBJECT
 

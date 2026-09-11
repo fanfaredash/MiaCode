@@ -2,7 +2,7 @@
 #include "runtime/Shared.h"
 #include "runtime/editor/EditorHost.h"
 
-#include "app/v2/PlaybackStateAuthority.h"
+#include "app/services/PlaybackStateAuthority.h"
 
 #include "BracketScopeHighlighter.h"
 #include "QtPreviewSfxRuntime.h"
@@ -18,7 +18,7 @@
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
-#include "app/qml_ui/export/QmlExportSession.h"
+#include "app/ui/export/ExportSession.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -362,8 +362,13 @@ bool miacode::runtime::DocumentSessionHost::switchToDifficultyField(int difficul
     }
     if (previousWaveformData) {
         session_.applyWaveformData(previousWaveformData);
-    } else if (previousPreviewTrackDurationSeconds > 0.0) {
-        state_.previewTrackDurationSeconds_ = previousPreviewTrackDurationSeconds;
+    } else {
+        // Clearing the final editor tab releases the bridge's waveform projection.
+        // Entering a difficulty creates a fresh projection from the current track.
+        if (previousPreviewTrackDurationSeconds > 0.0) {
+            state_.previewTrackDurationSeconds_ = previousPreviewTrackDurationSeconds;
+        }
+        session_.refreshWaveformCache();
     }
     if (!state_.currentFilePath_.isEmpty()) {
         session_.syncPreviewStageMediaRouteChartPath(
@@ -433,7 +438,7 @@ void miacode::runtime::DocumentSessionHost::loadDocument()
     clearDeletedDifficultyUndoState();
     // Stop the outgoing document before installing the new document state.
     session_.stopQtPreviewPlayback(true);
-    const miacode::v2::ChartWorkspaceSnapshot snapshot =
+    const miacode::ChartWorkspaceSnapshot snapshot =
         session_.applicationServices_.workspace().snapshot();
     resetAutosaveState(snapshot.sourceText);
     state_.documentDirty_ = snapshot.dirty;

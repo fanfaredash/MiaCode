@@ -2,7 +2,7 @@
 // second click on the same pad removes. Split out of the Widgets editor's spec
 // when that editor was deleted — the planner and the applier are plain text and
 // QTextDocument work with no widget in them, and the QML editor drives the same
-// pair through QmlEditorController::touchPadAuthoringForQml.
+// pair through EditorController::touchPadAuthoringForQml.
 
 #include "editor/TouchPadAuthoringEdit.h"
 

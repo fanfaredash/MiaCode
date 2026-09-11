@@ -1,11 +1,10 @@
 ﻿#include "runtime/document/DocumentSessionHost.h"
-#include "app/v2/UiRequestService.h"
+#include "app/services/UiRequestService.h"
 #include "runtime/Shared.h"
 
 #include "BracketScopeHighlighter.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -183,9 +182,9 @@ QString cleanDropFolderName(QString name)
 
 } // namespace
 
-miacode::v2::DocumentImportAdapter miacode::runtime::DocumentSessionHost::chartDropImportAdapter()
+miacode::DocumentImportAdapter miacode::runtime::DocumentSessionHost::chartDropImportAdapter()
 {
-    miacode::v2::DocumentImportAdapter adapter;
+    miacode::DocumentImportAdapter adapter;
     adapter.validate = [this](const QStringList& audioPaths, QString* error) {
         Q_UNUSED(error);
         const QStringList supported = miacode::chart_assets::supportedTrackFileExtensions();
@@ -227,7 +226,7 @@ miacode::v2::DocumentImportAdapter miacode::runtime::DocumentSessionHost::chartD
     };
     adapter.requestFirstConfirmation = [this](const QList<DroppedChartCandidate>& candidates,
                                                std::function<void(bool)> onDecided) {
-        miacode::v2::UiRequestService* const requests = session_.uiRequestService();
+        miacode::UiRequestService* const requests = session_.uiRequestService();
         if (requests == nullptr) {
             if (onDecided) {
                 onDecided(false);
@@ -239,10 +238,10 @@ miacode::v2::DocumentImportAdapter miacode::runtime::DocumentSessionHost::chartD
             preview << QDir::toNativeSeparators(candidate.targetDirectory);
         }
         requests->requestConfirmation(
-            UiText::text(QStringLiteral("drop_chart.preview.title")),
-            UiText::text(QStringLiteral("drop_chart.preview.message"))
+            qtTrId("drop_chart.preview.title"),
+            qtTrId("drop_chart.preview.message")
                 .arg(candidates.size()) + preview.join(QLatin1Char('\n')),
-            UiText::text(QStringLiteral("drop_chart.preview.create")).arg(candidates.size()),
+            qtTrId("drop_chart.preview.create").arg(candidates.size()),
             [onDecided = std::move(onDecided)](bool accepted) mutable {
                 if (onDecided) {
                     onDecided(accepted);
@@ -253,13 +252,13 @@ miacode::v2::DocumentImportAdapter miacode::runtime::DocumentSessionHost::chartD
         requestLeaveDocument(std::move(onDecided));
     };
     adapter.createCharts = [this](const QList<DroppedChartCandidate>& candidates,
-                                  std::function<void(const miacode::v2::ChartDropCreateResult&)> onFinished) {
+                                  std::function<void(const miacode::ChartDropCreateResult&)> onFinished) {
         QElapsedTimer timer;
         timer.start();
         finishChartsFromAudioDrop(candidates, timer, std::move(onFinished));
     };
     adapter.requestFinalSwitch = [this](const QString& target, std::function<void(bool)> onDecided) {
-        miacode::v2::UiRequestService* const requests = session_.uiRequestService();
+        miacode::UiRequestService* const requests = session_.uiRequestService();
         if (requests == nullptr) {
             if (onDecided) {
                 onDecided(false);
@@ -267,9 +266,9 @@ miacode::v2::DocumentImportAdapter miacode::runtime::DocumentSessionHost::chartD
             return;
         }
         requests->requestConfirmation(
-            UiText::text(QStringLiteral("drop_chart.created_title")),
-            UiText::text(QStringLiteral("drop_chart.confirm_switch")).arg(1),
-            UiText::text(QStringLiteral("action.open")),
+            qtTrId("drop_chart.created_title"),
+            qtTrId("drop_chart.confirm_switch").arg(1),
+            qtTrId("action.open"),
             [this, target, onDecided = std::move(onDecided)](bool accepted) mutable {
                 if (accepted) {
                     session_.openStartupTarget(target);
@@ -285,7 +284,7 @@ miacode::v2::DocumentImportAdapter miacode::runtime::DocumentSessionHost::chartD
 void miacode::runtime::DocumentSessionHost::finishChartsFromAudioDrop(
     const QList<DroppedChartCandidate>& candidates,
     QElapsedTimer dropTimer,
-    std::function<void(const miacode::v2::ChartDropCreateResult&)> onFinished)
+    std::function<void(const miacode::ChartDropCreateResult&)> onFinished)
 {
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/chart_drop"),
@@ -333,16 +332,16 @@ void miacode::runtime::DocumentSessionHost::finishChartsFromAudioDrop(
             QStringLiteral("chart_create_succeeded format=%1").arg(candidate.extension));
     }
 
-    miacode::v2::UiRequestService* const requests = session_.uiRequestService();
+    miacode::UiRequestService* const requests = session_.uiRequestService();
     if (requests != nullptr) {
         if (created == 0) {
-            requests->postNotice(miacode::v2::NoticeSeverity::Error,
-                UiText::text(QStringLiteral("drop_chart.error.title")),
-                UiText::text(QStringLiteral("drop_chart.create_failed")));
+            requests->postNotice(miacode::NoticeSeverity::Error,
+                qtTrId("drop_chart.error.title"),
+                qtTrId("drop_chart.create_failed"));
         } else if (failed > 0) {
-            requests->postNotice(miacode::v2::NoticeSeverity::Warning,
-                UiText::text(QStringLiteral("drop_chart.created_title")),
-                UiText::text(QStringLiteral("drop_chart.created_with_failures"))
+            requests->postNotice(miacode::NoticeSeverity::Warning,
+                qtTrId("drop_chart.created_title"),
+                qtTrId("drop_chart.created_with_failures")
                     .arg(created).arg(failed));
         }
     }
@@ -375,9 +374,9 @@ bool miacode::runtime::DocumentSessionHost::openFileAtPath(const QString& path, 
     const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(normalizedPath, true);
     if (!payload.success) {
         if (showErrors) {
-            if (miacode::v2::UiRequestService* const requests = session_.uiRequestService()) {
+            if (miacode::UiRequestService* const requests = session_.uiRequestService()) {
                 requests->postNotice(
-                    miacode::v2::NoticeSeverity::Error,
+                    miacode::NoticeSeverity::Error,
                     QStringLiteral("Open Failed"),
                     QStringLiteral("Cannot open file:\n") + normalizedPath
                 );
@@ -560,9 +559,9 @@ void miacode::runtime::DocumentSessionHost::applyOpenedDocumentState(
         }
     }
 
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::ChartWorkspace& workspace = session_.applicationServices_.workspace();
     const QString source = document.toText();
-    const miacode::v2::ChartWorkspaceSnapshot snapshot = workspace.snapshot();
+    const miacode::ChartWorkspaceSnapshot snapshot = workspace.snapshot();
     if (!snapshot.hasDocument
         || snapshot.filePath != normalizedPath
         || workspace.document().toText() != source) {
@@ -572,7 +571,7 @@ void miacode::runtime::DocumentSessionHost::applyOpenedDocumentState(
     // loaded. Never writes a document field: the chart stays byte for byte
     // what is on disk, so this open cannot arrive dirty.
     reconcileUnifiedDocumentDesigner(
-        miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason::DocumentOpened);
+        miacode::DocumentBridge::UnifiedDesignerReconcileReason::DocumentOpened);
     loadDocument();
     session_.refreshWaveformCache(knownTrackDurationSeconds);
     if (!state_.pendingAbnormalExitBackupRestorePath_.isEmpty()) {
@@ -582,7 +581,7 @@ void miacode::runtime::DocumentSessionHost::applyOpenedDocumentState(
 
 void miacode::runtime::DocumentSessionHost::syncRuntimeFromWorkspace()
 {
-    const miacode::v2::ChartWorkspaceSnapshot snapshot =
+    const miacode::ChartWorkspaceSnapshot snapshot =
         session_.applicationServices_.workspace().snapshot();
     if (snapshot.revision <= session_.appliedQmlWorkspaceRevision_) {
         return;

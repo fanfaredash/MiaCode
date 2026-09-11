@@ -2,7 +2,7 @@
 
 namespace miacode::runtime {
 
-TimelineHost::TimelineHost(miacode::v2::TimelineSurface& legacySurface,
+TimelineHost::TimelineHost(miacode::TimelineSurface& legacySurface,
                            quint64 sessionGeneration)
     : legacySurface_(&legacySurface)
     , commandGate_(sessionGeneration)

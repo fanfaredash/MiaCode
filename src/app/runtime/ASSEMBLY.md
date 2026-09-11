@@ -4,7 +4,7 @@
 
 ## 目标
 
-产品前端：`src/app/qml_ui/`（QML + `Qml*Model`）。
+产品前端：`src/app/ui/`（QML + `Qml*Model`）。
 
 文档后端：`ChartWorkspace`（`ApplicationServices` 持有）。
 
@@ -32,7 +32,7 @@
 | `VideoExportHost` | `ExportEngine` | `src/app/runtime/export/` |
 
 4.5 已建立独立的播放契约：`PlaybackControl` / `PlaybackStateFeed` / `PlaybackSnapshot` 位于
-`src/app/v2/PlaybackControl.h`。4.8 起 `PlaybackCoordinator` 直接实现播放控制、Preview transport
+`src/app/services/PlaybackControl.h`。4.8 起 `PlaybackCoordinator` 直接实现播放控制、Preview transport
 port 与 canonical audio clock；`PlaybackPreviewSurfaceAdapter` / `PlaybackTimelineSurfaceAdapter`
 只负责把旧 surface 槽位转接到协调器，不持有第二套状态。新的 Preview/Timeline 代码应依赖 playback
 contract，而不是继续扩展复合宿主。
@@ -62,7 +62,7 @@ contract，而不是继续扩展复合宿主。
 
 `ApplicationServices` 只装配，不实现上述接口。
 
-入口：`QmlUiBootstrap` / CLI 导出构造 `ApplicationServices` + `Session`。`Session` 拥有宿主并安装槽位。QML 根窗口由 QML 引擎创建，与 `Session` 无父子关系。
+入口：`Bootstrap` / CLI 导出构造 `ApplicationServices` + `Session`。`Session` 拥有宿主并安装槽位。QML 根窗口由 QML 引擎创建，与 `Session` 无父子关系。
 
 ## Preview / Timeline 二次拆分（计划）
 
@@ -261,7 +261,7 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          （它在注释里写出了两种形式），与 `DebugFlagIndexSpec` 排除自身同一惯例。
       4b-2a. ~~偏好端口~~ **已完成 2026-09-02**：`session_.` 计数 49 → **31**（18 处）。
          **本主线第一次新增抽象**——此前 204 → 49 全靠删冗余、搬函数体、注入已有对象。
-         新增 `src/app/v2/PlaybackPreferencesPort.h`（8 个纯虚方法），与其他窄契约同目录。
+         新增 `src/app/services/PlaybackPreferencesPort.h`（8 个纯虚方法），与其他窄契约同目录。
          **按能力切而非按宿主切**：这 8 个方法的最终归属散在三个宿主
          （`savePortableState` / `loadProjectRenderState` 归 `EditorHost`、`setLastOpenDirectory`
          归 `DocumentSessionHost`、渲染与音频偏好读写留在 `Session`），由 `Session` 实现——
@@ -271,7 +271,7 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          （连 `Gui` 都不需要），用 fake 实现该接口；谁往接口里塞进需要窗口或 Widgets 的类型，
          这个 target 就链接失败。这个 fake 也是「协调器能否脱离 `Session` 构造」的第一块拼图。
       4b-2b. ~~校验端口~~ **已完成 2026-09-02**：`session_.` 计数 31 → **25**（6 处）。
-         新增 `src/app/v2/PlaybackValidationPort.h`（5 个纯虚方法），由 `ValidationHost` 实现。
+         新增 `src/app/services/PlaybackValidationPort.h`（5 个纯虚方法），由 `ValidationHost` 实现。
          **与偏好端口是刻意的对照**：那个按能力切（8 个方法散在三个宿主，`Session` 实现），
          这个按宿主切（5 个方法今天就只有一个归属）。**不强行统一成一种**——归属散的按能力切、
          归属集中的按宿主切；强行统一会在其中一种情况下造出没必要的转发层。
@@ -282,7 +282,7 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          不存在借用引用悬空——这正是 4.9a 审计抓到过的方向。
          `validation_port_spec` 同样只链 `Qt6::Core` + `Qt6::Test`。
       4b-2c. ~~文档端口~~ **已完成 2026-09-02**：`session_.` 计数 25 → **19**（6 处）。
-         新增 `src/app/v2/PlaybackDocumentPort.h`（4 个纯虚方法），由 `DocumentSessionHost` 实现，
+         新增 `src/app/services/PlaybackDocumentPort.h`（4 个纯虚方法），由 `DocumentSessionHost` 实现，
          按宿主切（与校验端口同型）。`DocumentSessionHost::requestEditorNavigation` 现在同时
          override `DocumentBridge` 与本端口的同签名纯虚函数——一份实现服务两个契约，
          文档宿主本就同时面向 QML 桥接与播放端口。
@@ -300,7 +300,7 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
          执行体在此拒绝了一条捷径——留一行死代码引用来骗过文本扫描，那能同时满足两条矛盾指令
          且全量测试全绿，但属于造假满足 spec。**这个拒绝是对的。**
       4b-2d. ~~预览端口~~ **已完成 2026-09-02**：`session_.` 计数 19 → **3**（16 处）。
-         新增 `src/app/v2/PlaybackPreviewPort.h`（9 个纯虚方法），按能力切、由 `Session` 实现
+         新增 `src/app/services/PlaybackPreviewPort.h`（9 个纯虚方法），按能力切、由 `Session` 实现
          （8 个归 `StageMediaHost`、`preparePreviewForShutdown` 是 Session 自有编排），与偏好端口同型。
          6 个方法因接口可见性从 private 改 public；`Session` 侧未新增任何薄转发——9 个方法本就都在。
          **挂了三轮的「分支歧义」在此消解，且不是被解决的**：
@@ -416,7 +416,7 @@ chart time 的只读快照。Timeline 发出的命令经过 `TimelineCommandGate
 
 ### 2026-09-01 删走带转发并补时间线就绪
 
-QML 走带已走 `PreviewSurface` / `TimelineSurface`。Session 上对应的走带包装已删除。`QmlTimelineModel::surfaceReady()` 调用 `noteTimelineSurfaceReady()`，否则只会读取就绪标志、不会通知宿主。入口附着改名为 `setBackendActive` / `attachRootWindow` / `setRootWindowFrameGeometry` / `noteRootWindowReady`。推送信号改名为 `presentationChanged` / `previewPlayheadChanged`。
+QML 走带已走 `PreviewSurface` / `TimelineSurface`。Session 上对应的走带包装已删除。`TimelineModel::surfaceReady()` 调用 `noteTimelineSurfaceReady()`，否则只会读取就绪标志、不会通知宿主。入口附着改名为 `setBackendActive` / `attachRootWindow` / `setRootWindowFrameGeometry` / `noteRootWindowReady`。推送信号改名为 `presentationChanged` / `previewPlayheadChanged`。
 
 ### 2026-09-01 底栏语法页签丢失
 
@@ -424,9 +424,9 @@ QML 走带已走 `PreviewSurface` / `TimelineSurface`。Session 上对应的走�
 
 ### 2026-09-01 产品面自查
 
-QML 产品面：语法页 `validationRows` + 编辑器 `syntaxIssues`，无理页 `muriRows`，解析走 `AnalysisService`（`parseForTimeline` + `buildTimelineAnalysisRefreshResult`）。时间线音符走 `PlaybackCoordinator` 读 `ChartWorkspace`。预览走带走 `PreviewSurface`。导出走 `ExportEngine` / `QmlExportSession`。页签走 `EditorPageRouter`。
+QML 产品面：语法页 `validationRows` + 编辑器 `syntaxIssues`，无理页 `muriRows`，解析走 `AnalysisService`（`parseForTimeline` + `buildTimelineAnalysisRefreshResult`）。时间线音符走 `PlaybackCoordinator` 读 `ChartWorkspace`。预览走带走 `PreviewSurface`。导出走 `ExportEngine` / `ExportSession`。页签走 `EditorPageRouter`。
 
-已修：`QmlAnalysisModel` 曾用 `ignoreMuriIssuePrompts` 清空 `muriRows`。该偏好只表示分析完成时不打断（时间线圆点、自动切页），无理页仍应列出结果。
+已修：`AnalysisModel` 曾用 `ignoreMuriIssuePrompts` 清空 `muriRows`。该偏好只表示分析完成时不打断（时间线圆点、自动切页），无理页仍应列出结果。
 
 截至 2026-09-05，`ValidationHost` 已删除 `errorList_` / `muriList_` 投影及其底部
 `QTabWidget` 镜像；QML 直接消费 validation/Muri 快照和 validation decorations。
@@ -441,6 +441,6 @@ QML 产品面：语法页 `validationRows` + 编辑器 `syntaxIssues`，无理�
 ### 2026-09-02 远程合并后的当前边界
 
 `2aa9db83` 已将 `MainWindow` 宿主迁入 `src/app/runtime/` 并删除 `src/app/mainwindow/`；合并提交
-为 `4416596d`。`Session` 现在是 QObject 装配壳，`QmlApplicationContext` 只接收
+为 `4416596d`。`Session` 现在是 QObject 装配壳，`ApplicationContext` 只接收
 `ApplicationServices&`。下一步不再继续堆叠 `PlaybackCoordinator`，而是先立 playback contract，再按
 `PlaybackCoordinator` / `PreviewHost` / `TimelineHost` 三个职责拆分；GUI 验收不属于本阶段进度判断。

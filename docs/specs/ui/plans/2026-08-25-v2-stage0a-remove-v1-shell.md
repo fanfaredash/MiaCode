@@ -51,12 +51,12 @@ lifecycle: archive-legacy
 **修改**
 - `src/app/main.cpp` — 删除 `UiSkin`、`resolveUiSkin()`、v1 分支
 - `src/app/quick_shell/QuickShellController.{h,cpp}` — 删除 `surfaceHost` 构造参数与全部 `surfaceHost_` 分支
-- `src/app/qml_ui/QmlUiBootstrap.cpp` — 构造调用少一个参数
+- `src/app/ui/Bootstrap.cpp` — 构造调用少一个参数
 - `CMakeLists.txt` — 删除对应源文件与 qrc 条目
 - `docs/ops/DEBUG_INDEX.md`、`.claude/skills/miacode-dev-guide/references/*` — 同步
 
 **新建**
-- `src/tools/qml_ui/V1ShellRemovalSpec.cpp` — 结构契约回归
+- `src/tools/ui/V1ShellRemovalSpec.cpp` — 结构契约回归
 
 ---
 
@@ -65,12 +65,12 @@ lifecycle: archive-legacy
 删除类改动无法用行为测试驱动，但**结构契约**可以。仓库已有先例（`debug_flag_index_spec`、`ui_text_locale_spec` 都断言源码事实）。
 
 **Files:**
-- Create: `src/tools/qml_ui/V1ShellRemovalSpec.cpp`
+- Create: `src/tools/ui/V1ShellRemovalSpec.cpp`
 - Modify: `CMakeLists.txt`（dev-tools 块内，紧邻 `qml_shortcut_binding_spec`）
 
 - [ ] **Step 1: 写失败测试**
 
-创建 `src/tools/qml_ui/V1ShellRemovalSpec.cpp`：
+创建 `src/tools/ui/V1ShellRemovalSpec.cpp`：
 
 ```cpp
 #include <QCoreApplication>
@@ -184,7 +184,7 @@ int main(int argc, char** argv)
 ```cmake
     miacode_add_dev_tool(v1_shell_removal_spec TEST
         SOURCES
-            src/tools/qml_ui/V1ShellRemovalSpec.cpp
+            src/tools/ui/V1ShellRemovalSpec.cpp
         LIBS Qt6::Core
         INCLUDES src
     )
@@ -206,7 +206,7 @@ cmake -S . -B build-macos-spec && cmake --build build-macos-spec --target v1_she
 - [ ] **Step 3: 提交这个红测试**
 
 ```bash
-git add src/tools/qml_ui/V1ShellRemovalSpec.cpp CMakeLists.txt
+git add src/tools/ui/V1ShellRemovalSpec.cpp CMakeLists.txt
 git commit -m "test(v2): pin the v1 shell removal contract"
 ```
 
@@ -267,7 +267,7 @@ git commit -m "refactor(app): collapse startup to the single QML UI entry"
 
 **Files:**
 - Delete: `src/app/quick_shell/QuickShellBootstrap.{h,cpp}`、`QuickShellNativeSurfaceHost.{h,cpp}`、`QuickShellStyleBridge.{h,cpp}`、`QuickShellMacSurfaceSupport.{h,mm}`
-- Modify: `src/app/quick_shell/QuickShellController.{h,cpp}`、`src/app/qml_ui/QmlUiBootstrap.{h,cpp}`、`src/app/main.cpp`、`CMakeLists.txt`
+- Modify: `src/app/quick_shell/QuickShellController.{h,cpp}`、`src/app/ui/Bootstrap.{h,cpp}`、`src/app/main.cpp`、`CMakeLists.txt`
 
 - [ ] **Step 1: 删除文件**
 
@@ -308,7 +308,7 @@ grep -n "surfaceHost_" src/app/quick_shell/QuickShellController.cpp
 
 三种形态各举一例。
 
-**形态 A —— 提前返回型**（第 1128 行附近）。整个函数体在 v2 下就是空操作，因此函数**整体删除**，并从头文件删除其声明；再删除 QML 侧对它的调用（`grep -rn "syncTopChromeSurfaceSize" src/app/qml_ui/`，若无命中则只删 C++ 侧）：
+**形态 A —— 提前返回型**（第 1128 行附近）。整个函数体在 v2 下就是空操作，因此函数**整体删除**，并从头文件删除其声明；再删除 QML 侧对它的调用（`grep -rn "syncTopChromeSurfaceSize" src/app/ui/`，若无命中则只删 C++ 侧）：
 
 ```cpp
 void QuickShellController::syncTopChromeSurfaceSize(int width, int height)
@@ -336,14 +336,14 @@ return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().previewCompositeW
 
 - [ ] **Step 4: 更新 v2 的构造调用**
 
-在 `src/app/qml_ui/QmlUiBootstrap.cpp:87-91` 附近，把三参数构造改为两参数，并删除上方那条解释 `surfaceHost_` 空指针的注释（它描述的机制已不存在）。
+在 `src/app/ui/Bootstrap.cpp:87-91` 附近，把三参数构造改为两参数，并删除上方那条解释 `surfaceHost_` 空指针的注释（它描述的机制已不存在）。
 
 - [ ] **Step 5: 清理指向已删除类型的陈旧注释**
 
 删除引导与再宿主后，三处注释变成错的。它们都不含 `MIACODE_*` 环境变量，因此
 `debug_flag_index_spec` 抓不到；`--ui=v1` 那处由 `v1_shell_removal_spec` 覆盖，另外两处只能靠这一步。
 
-1. `src/app/qml_ui/QmlUiBootstrap.h:22` —— 注释仍写着 `QuickShell: --ui=v1.` 与
+1. `src/app/ui/Bootstrap.h:22` —— 注释仍写着 `QuickShell: --ui=v1.` 与
    `no NativeSurfaceHost / StyleBridge`。改成只描述 v2 自身：它是唯一 UI 入口，与隐藏的
    `MainWindow` 后端共享状态。**这一处有守卫**：改完 `v1_shell_removal_spec` 的
    "no source file still documents the removed --ui=v1 entry" 断言必须转绿。
@@ -370,7 +370,7 @@ Task 2 把 `if (uiSkin == UiSkin::QmlUiV2) {` 换成了裸 `{`。这个作用域
 
 `src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp` 把 `QuickShellBootstrap.cpp` 当作
 **文本**读取来做契约断言。文件删除后它读到空串并失败——而且这类耦合**编译期不可见**，只在运行
-spec 时暴露。把它改为读取存活的 GUI 引导 `src/app/qml_ui/QmlUiBootstrap.cpp`：四个 token 条件
+spec 时暴露。把它改为读取存活的 GUI 引导 `src/app/ui/Bootstrap.cpp`：四个 token 条件
 （含 `ui/ChartDropOverlay.h`、含 `syncChartDropOverlay`、不含 `PreviewDCompSurface`、
 不含 `createInProcessPreviewSurface`）在新文件上同样成立，守卫语义得以保留。
 
@@ -409,8 +409,8 @@ sources"的 token 清单里，而它归 Task 4 删除。因此这两条断言都
 **计划缺陷修正。** 原 Task 4 假设 `src/app/quick_shell/qml/` 整体不可达。这对其中 9 个文件成立
 （它们的非注释引用只剩自己的 qrc 条目），但 **`QuickShellPreviewSurface.qml` 有三个活消费者**：
 
-1. `src/app/qml_ui/preview/PreviewPane.qml:3,51` —— v2 的常规预览面板
-2. `src/app/qml_ui/layout/MainSplitView.qml:7,244` —— v2 的全屏预览覆盖层
+1. `src/app/ui/preview/PreviewPane.qml:3,51` —— v2 的常规预览面板
+2. `src/app/ui/layout/MainSplitView.qml:7,244` —— v2 的全屏预览覆盖层
 3. `src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp:75` —— `setSource()` 按 qrc 路径加载；
    该类在保留清单上，且由 `MainWindow::PreviewSection::ensureQuickShellPreviewCompositeSurfaceInitialized()`
    在 v2 活路径上构造
@@ -422,7 +422,7 @@ sources"的 token 清单里，而它归 Task 4 删除。因此这两条断言都
 - Move: `src/app/quick_shell/qml/QuickShellPreviewSurface.qml` → `src/preview/runtime/qml/PreviewSurface.qml`
 - Modify: `resources/preview_runtime_qml.qrc`、`resources/quick_shell_qml.qrc`、
   `src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp`、
-  `src/app/qml_ui/preview/PreviewPane.qml`、`src/app/qml_ui/layout/MainSplitView.qml`
+  `src/app/ui/preview/PreviewPane.qml`、`src/app/ui/layout/MainSplitView.qml`
 
 - [ ] **Step 1: 移动并改名**
 
@@ -495,7 +495,7 @@ git commit -m "refactor(shell): delete the v1 shell QML"
 `MIACODE_UI_SKIN` 不再被代码读取，而 `docs/ops/DEBUG_INDEX.md` 仍列着它——`debug_flag_index_spec` 会因此失败。这是设计好的闸门，不是意外。
 
 **Files:**
-- Modify: `docs/ops/DEBUG_INDEX.md`、`.claude/skills/miacode-dev-guide/references/debug-and-logging.md`、`.claude/skills/miacode-dev-guide/references/architecture-and-layout.md`、`docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`
+- Modify: `docs/ops/DEBUG_INDEX.md`、`.claude/skills/miacode-dev-guide/references/debug-and-logging.md`、`.claude/skills/miacode-dev-guide/references/architecture-and-layout.md`、`docs/specs/ui/UI_TODO_ZH.md`
 
 - [ ] **Step 1: 确认守卫已变红**
 
@@ -536,7 +536,7 @@ cmake --build build-macos-spec --target debug_flag_index_spec --parallel 4 && ./
    改为描述 `QmlUiBootstrap` 是唯一启动路径。
 2. `src/app/mainwindow/MainWindow.h:306` —— "Called from QuickShellBootstrap after the UI is ready"，
    实际调用方是 `QmlUiBootstrap`。
-3. `src/app/qml_ui/QmlEditorPageHost.cpp:60` —— "same early-bind pattern as
+3. `src/app/ui/layout/PageHost.cpp:60` —— "same early-bind pattern as
    QuickShellNativeSurfaceHost"，读者已无从查证该模式；改写为自述其绑定时机。
 4. `src/app/WindowsIdleEventDiagnostics.cpp:235` —— 注释称两个调用方之一是
    `QuickShellBootstrap::beginAcceptedRootWindowShutdown`。**注意**：详见下方"Windows 诊断已死"。
@@ -553,7 +553,7 @@ cmake --build build-macos-spec --target debug_flag_index_spec --parallel 4 && ./
 
 - [ ] **Step 5: 更新一阶段 TODO 的范围声明**
 
-在 `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md` 的「范围与契约」一节，删除这两条已不成立的条目：
+在 `docs/specs/ui/UI_TODO_ZH.md` 的「范围与契约」一节，删除这两条已不成立的条目：
 
 ```
 - v1 / v2 共存，保留 QuickShell 再宿主路径：`NativeSurfaceHost`、`StyleBridge`、`QuickShellMain.qml`。

@@ -6,7 +6,7 @@ lifecycle: archive-legacy
 
 # QML UI v2 已解决事项归档（2026-09-05）
 
-本文件承接 `QML_UI_V2_PHASE1_TODO_ZH.md` 中已经完成、无需继续排期的内容。
+本文件承接 `UI_TODO_ZH.md` 中已经完成、无需继续排期的内容。
 未完成事项只保留在 Todolist；GUI 验收不因工程项完成而自动勾选。
 
 ## 2026-09-05 新发现缺陷与修复

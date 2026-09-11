@@ -29,8 +29,8 @@ void logProcessStartupDiagnostics(const QString& phase);
 
 // ===== Actual GPU adapter / renderer probe (gpu_adapter_probe.cpp) =====
 // Schedules a one-shot render-thread probe of the window's live RHI device and
-// logs the bound DXGI adapter (D3D11) or GL_RENDERER string (OpenGL). Gated on
-// --debug. Safe to call before the scene graph is initialized.
+// logs the live device for D3D11, D3D12, Metal, Vulkan, OpenGL, and software
+// rendering. Gated on --debug. Safe to call before scene-graph initialization.
 void logQuickWindowGpuDevice(QQuickWindow* window, const QString& surfaceLabel);
 
 // ===== High-performance Quick graphics device provider (gpu_device_provider.cpp) =====

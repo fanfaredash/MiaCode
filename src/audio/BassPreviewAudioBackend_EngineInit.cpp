@@ -21,7 +21,8 @@
 #include <QtMath>
 
 #include <chrono>
-#include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
+#include <cstdio>
+#include <cstring>
 #include <mutex>
 
 #ifdef MIACODE_HAS_BASS_AUDIO
@@ -29,7 +30,7 @@
 #include <windows.h>
 #include <mmdeviceapi.h>
 #include <objbase.h>
-#elif defined(Q_OS_MACOS)
+#elif defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
 #include <dlfcn.h>
 #endif
 
@@ -128,6 +129,50 @@ DefaultBassEndpoint resolveDefaultBassEndpoint()
         CoUninitialize();
     }
     return result;
+}
+
+}  // namespace
+#endif
+
+#if defined(MIACODE_HAS_BASS_AUDIO) && defined(Q_OS_LINUX)
+namespace {
+
+int selectLinuxOutputDevice()
+{
+    for (int device = 1;; ++device) {
+        BASS_DEVICEINFO info {};
+        if (!BASS_GetDeviceInfo(static_cast<DWORD>(device), &info)) {
+            break;
+        }
+        if ((info.flags & BASS_DEVICE_ENABLED) == 0) {
+            continue;
+        }
+        if (info.driver != nullptr && std::strcmp(info.driver, "pipewire") == 0) {
+            return device;
+        }
+    }
+    return -1;
+}
+
+bool initLinuxOutputDevice(quint32 sampleRate, int* selectedDeviceOut)
+{
+    int device = selectLinuxOutputDevice();
+    if (selectedDeviceOut != nullptr) {
+        *selectedDeviceOut = device;
+    }
+    if (BASS_Init(device, static_cast<int>(sampleRate), 0, nullptr, nullptr)) {
+        return true;
+    }
+    if (device == -1) {
+        return false;
+    }
+    appendAudioDebugLog(
+        QStringLiteral("bass_init_pipewire_failed err=%1 falling_back_to_default")
+            .arg(static_cast<int>(BASS_ErrorGetCode())));
+    if (selectedDeviceOut != nullptr) {
+        *selectedDeviceOut = -1;
+    }
+    return BASS_Init(-1, static_cast<int>(sampleRate), 0, nullptr, nullptr) != FALSE;
 }
 
 }  // namespace
@@ -289,8 +334,13 @@ bool BassPreviewAudioBackend::ensureBassFxLoaded()
     bassFxModule_ = module;
     bassFxTempoCreate_ = reinterpret_cast<void*>(proc);
     return true;
-#elif defined(Q_OS_MACOS) && defined(MIACODE_HAS_BASS_AUDIO)
-    const QString libraryPath = runtimeFilePath(QStringLiteral("libbass_fx.dylib"));
+#elif (defined(Q_OS_MACOS) || defined(Q_OS_LINUX)) && defined(MIACODE_HAS_BASS_AUDIO)
+#ifdef Q_OS_MACOS
+    const QString libraryName = QStringLiteral("libbass_fx.dylib");
+#else
+    const QString libraryName = QStringLiteral("libbass_fx.so");
+#endif
+    const QString libraryPath = runtimeFilePath(libraryName);
     _mc_op_.note(QStringLiteral("path=%1").arg(libraryPath));
     const QByteArray encodedPath = QFile::encodeName(libraryPath);
     void* module = dlopen(encodedPath.constData(), RTLD_NOW | RTLD_LOCAL);
@@ -326,7 +376,7 @@ void BassPreviewAudioBackend::unloadBassFx()
     if (bassFxModule_ != nullptr) {
         FreeLibrary(static_cast<HMODULE>(bassFxModule_));
     }
-#elif defined(Q_OS_MACOS) && defined(MIACODE_HAS_BASS_AUDIO)
+#elif (defined(Q_OS_MACOS) || defined(Q_OS_LINUX)) && defined(MIACODE_HAS_BASS_AUDIO)
     if (bassFxModule_ != nullptr) {
         dlclose(bassFxModule_);
     }
@@ -459,6 +509,15 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
                            0,
                            nullptr,
                            nullptr) != FALSE;
+#elif defined(Q_OS_LINUX)
+                int selectedDevice = -1;
+                if (!initLinuxOutputDevice(deviceSampleRate_, &selectedDevice)) {
+                    return false;
+                }
+                bassOutputDeviceIndex_ = selectedDevice >= 0
+                    ? selectedDevice
+                    : static_cast<int>(BASS_GetDevice());
+                return true;
 #else
                 return BASS_Init(-1, static_cast<int>(deviceSampleRate_), 0, nullptr, nullptr) != FALSE;
 #endif
@@ -478,6 +537,22 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
             return false;
         }
     }
+#ifdef Q_OS_LINUX
+    {
+        BASS_DEVICEINFO selectedInfo {};
+        const DWORD activeDevice = static_cast<DWORD>(BASS_GetDevice());
+        const bool haveInfo = BASS_GetDeviceInfo(activeDevice, &selectedInfo) != FALSE;
+        appendAudioDebugLog(
+            QStringLiteral("bass_linux_device index=%1 driver=%2 name=%3")
+                .arg(static_cast<int>(activeDevice))
+                .arg(haveInfo && selectedInfo.driver != nullptr
+                         ? QString::fromLatin1(selectedInfo.driver)
+                         : QStringLiteral("(none)"))
+                .arg(haveInfo && selectedInfo.name != nullptr
+                         ? QString::fromLocal8Bit(selectedInfo.name)
+                         : QStringLiteral("(none)")));
+    }
+#endif
     loadOptionalPlugins();
     masterMixerOutputBufferSeconds_ = 0.0;
     masterMixer_ = BASS_Mixer_StreamCreate(

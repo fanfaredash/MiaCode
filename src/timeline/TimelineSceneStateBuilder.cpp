@@ -5,6 +5,7 @@
 #include <QtMath>
 
 #include <algorithm>
+#include <tuple>
 
 #include "common/PreviewSkinConfig.h"
 #include "common/TimelineThemeConfig.h"
@@ -28,7 +29,8 @@ constexpr int kPlayableLaneCount = 8;
 constexpr int kLaneCount = kPlayableLaneCount + 1;
 constexpr int kHeaderHeight = 26;
 constexpr int kLaneHeight = 20;
-constexpr double kMinimumContentScale = 0.5;
+constexpr double kMinimumContentScale = 0.25;
+constexpr double kMinimumTextScale = 0.5;
 constexpr int kTimelineLeftMargin = 32;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kTimelineHeaderLineLabelMinSpacingPx = 22;
@@ -45,6 +47,7 @@ constexpr int kNoteSize = 14;
 constexpr int kTimelineMaxRenderedSubdivisionBeats = 32;
 constexpr double kTimelineDisplayLeadInSeconds = 0.5;
 constexpr double kTimelineHeaderLineAnchorToleranceSeconds = 1e-6;
+constexpr double kTimelineGridLineMergeToleranceSeconds = 1e-6;
 // Bar lines + secondary-strong subdivision lines share this thickness so
 // they read as the same hierarchy tier (color sets them apart).
 constexpr qreal kTimelineBeatLineWidth = 1.5;
@@ -112,7 +115,7 @@ double normalizedContentScale(double scale)
 QFont timelineLaneLabelFont(const QFont& sourceFont, double contentScale)
 {
     QFont font(sourceFont);
-    font.setPointSizeF(10.0 * normalizedContentScale(contentScale));
+    font.setPointSizeF(10.0 * qMax(kMinimumTextScale, normalizedContentScale(contentScale)));
     return font;
 }
 
@@ -128,7 +131,7 @@ double gridContentScale(double scale)
 
 double headerContentScale(double scale)
 {
-    const double contentScale = normalizedContentScale(scale);
+    const double contentScale = qMax(kMinimumTextScale, normalizedContentScale(scale));
     return 0.5 + (contentScale * 0.5);
 }
 
@@ -439,7 +442,7 @@ namespace miacode::timeline {
 
 int TimelineSceneStateBuilder::minimumViewportHeight()
 {
-    // 外层分栏与文字、贴图共用缩放下限，九条轨道均保有完整的行高。
+    // 轨道支持紧凑高度，轨道编号按文字所需空间决定显示状态。
     return kHeaderHeight + qCeil(kLaneCount * kLaneHeight * kMinimumContentScale);
 }
 
@@ -526,6 +529,9 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     const TimelineThemeColors theme = timelineThemeColors();
     const QFont laneLabelFont = timelineLaneLabelFont(request.headerLineNumberFont, state.contentScale);
     const QFontMetricsF laneLabelMetrics(laneLabelFont);
+    const bool showLaneLabels = state.laneHeight >=
+        laneLabelMetrics.tightBoundingRect(QStringLiteral("12345678T")).height()
+            + 2.0 * kTimelineTextVerticalPadding;
     // Surface fills cover the full viewport below the header.
     // Content layers keep their own timeline clips.
     const qreal backgroundHeight = request.viewportSize.height() - state.timelineTop;
@@ -565,6 +571,9 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             QRectF(state.timelineLeft, y, request.viewportSize.width() - state.timelineLeft, state.laneHeight),
             (lane % 2 == 0) ? theme.laneEven : theme.laneOdd,
         });
+        if (!showLaneLabels) {
+            continue;
+        }
         TimelineSceneTextLabel label;
         label.text = laneLabelForIndex(lane);
         const QRectF inkRect = laneLabelMetrics.tightBoundingRect(label.text);
@@ -659,10 +668,9 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         gridCullMinX = scrollX + state.timelineLeft - padding - 2.0;
         gridCullMaxX = scrollX + state.viewportSize.width() + padding + 2.0;
     }
-    const auto addGridLine = [&](double absoluteSecond, const QColor& color, qreal width, bool exactPosition,
+    const auto addGridLine = [&](double absoluteSecond, const QColor& color, qreal width,
                                  qreal heightFraction) {
-        const qreal x = (exactPosition ? secondToXExact(state, absoluteSecond)
-                                       : static_cast<qreal>(secondToSceneX(state, absoluteSecond)));
+        const qreal x = secondToXExact(state, absoluteSecond);
         if (x < gridCullMinX || x > gridCullMaxX) {
             return;
         }
@@ -676,13 +684,16 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     };
     const QColor measureLineColor = adjustedTimelineMeasureLineColor(
         theme.gridMajor,
-        request.measureLineBrightness);
+        request.measureLineBrightness,
+        theme.base);
     const QColor commaLineColor = adjustedTimelineMeasureLineColor(
         theme.gridMinor,
-        request.measureLineBrightness);
+        request.measureLineBrightness,
+        theme.base);
     const QColor beatLineColor = adjustedTimelineMeasureLineColor(
         theme.gridSubdivision,
-        request.measureLineBrightness);
+        request.measureLineBrightness,
+        theme.base);
 
     TimelineVisibleLineRange beatRange;
     beatRange.begin = 0;
@@ -692,7 +703,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const TimelineRenderLine& line = request.snapshot.lines.at(lineIndex);
         for (const TimelineRenderBeat& marker : line.beats) {
             if (shouldPaintTimelineBeatMarker(marker)) {
-                addGridLine(timelineRenderAbsoluteSecond(line, marker.secondOffset), commaLineColor, 1.0, true,
+                addGridLine(timelineRenderAbsoluteSecond(line, marker.secondOffset), commaLineColor, 1.0,
                             timelineGridLineHeightFraction(kTimelineGridHeightFractionComma));
             }
         }
@@ -732,13 +743,13 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             if (!(beatSecond < endSecond - 1e-6)) {
                 break;
             }
-            addGridLine(beatSecond, beatLineColor, kTimelineSubdivisionLineWidth, false,
+            addGridLine(beatSecond, beatLineColor, kTimelineSubdivisionLineWidth,
                         timelineGridLineHeightFraction(kTimelineGridHeightFractionSubdivision));
         }
     };
     for (int measureIndex = 0; measureIndex < request.snapshot.measureLineSeconds.size(); ++measureIndex) {
         const double measureSecond = request.snapshot.measureLineSeconds.at(measureIndex);
-        addGridLine(measureSecond, measureLineColor, kTimelineBeatLineWidth, false,
+        addGridLine(measureSecond, measureLineColor, kTimelineBeatLineWidth,
                     timelineGridLineHeightFraction(kTimelineGridHeightFractionMeasure));
 
         double nextMeasureSecond = std::numeric_limits<double>::infinity();
@@ -778,7 +789,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const int trailingDenominator = qMax(1, request.snapshot.trailingMeasureLineMeterDenominator);
         for (; extensionSecond <= state.displayEndSeconds + 1.0 + 1e-6;
              extensionSecond += request.snapshot.trailingMeasureLineStepSeconds) {
-            addGridLine(extensionSecond, measureLineColor, kTimelineBeatLineWidth, false,
+            addGridLine(extensionSecond, measureLineColor, kTimelineBeatLineWidth,
                         timelineGridLineHeightFraction(kTimelineGridHeightFractionMeasure));
             emitSubdivisionsForSpan(
                 extensionSecond,
@@ -788,6 +799,37 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 request.snapshot.trailingMeasureLineStepSeconds / static_cast<double>(trailingNumerator));
         }
     }
+
+    // Coincident tiers share one stroke across its full height. Drawing a short
+    // tick over a longer line changes opacity and apparent width at the tick's end.
+    std::sort(state.gridLines.begin(), state.gridLines.end(), [](const auto& left, const auto& right) {
+        return left.start.x() < right.start.x();
+    });
+    const qreal gridLineMergeTolerance = state.pixelsPerSecond * kTimelineGridLineMergeToleranceSeconds;
+    const auto gridLineProminence = [](const TimelineSceneLine& line) {
+        return std::make_tuple(line.end.y(), line.width, line.color.alpha());
+    };
+    qsizetype gridLineCount = 0;
+    for (qsizetype index = 0; index < state.gridLines.size(); ++index) {
+        const TimelineSceneLine& line = state.gridLines.at(index);
+        if (gridLineCount > 0
+            && qAbs(line.start.x() - state.gridLines.at(gridLineCount - 1).start.x()) <= gridLineMergeTolerance) {
+            TimelineSceneLine& existing = state.gridLines[gridLineCount - 1];
+            if (gridLineProminence(line) > gridLineProminence(existing)) {
+                existing = line;
+            }
+        } else {
+            state.gridLines[gridLineCount++] = line;
+        }
+    }
+    state.gridLines.resize(gridLineCount);
+    // Keep equal colors together for the QSG grid layer's geometry batches.
+    std::sort(state.gridLines.begin(), state.gridLines.end(), [](const auto& left, const auto& right) {
+        if (left.color.rgba() != right.color.rgba()) {
+            return left.color.rgba() < right.color.rgba();
+        }
+        return left.start.x() < right.start.x();
+    });
 
     QVector<HeaderLineLabel> collapsedHeaderLabels;
     if (!request.snapshot.lines.isEmpty()) {
@@ -1028,7 +1070,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const qreal rowTop = state.timelineTop + (note.lane - 1) * state.laneHeight;
         const qreal rowCenterY = rowTop + (state.laneHeight / 2.0);
         const qreal baseIconScale =
-            request.zoomScale <= 0.25 ? 0.5 : static_cast<qreal>(state.contentScale);
+            request.zoomScale <= 0.25 ? qMin<qreal>(0.5, state.contentScale)
+                                      : static_cast<qreal>(state.contentScale);
         QString iconType;
         switch (note.kind) {
         case TimelineRenderNoteKind::Tap:
@@ -1134,12 +1177,13 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 baseTrackType = QStringLiteral("slide_track_each");
             }
             const qreal zoomTrackScale = qBound<qreal>(0.25, request.zoomScale, 1.0);
-            const qreal trackScale = request.zoomScale <= 0.25
+            const qreal zoomAdjustedTrackScale = request.zoomScale <= 0.25
                 ? 0.5
                 : qBound<qreal>(
                     0.5,
                     zoomTrackScale * static_cast<qreal>(state.contentScale),
                     1.0);
+            const qreal trackScale = qMin<qreal>(state.contentScale, zoomAdjustedTrackScale);
             const QSize trackTargetSize =
                 miacode::timeline::targetSizeForNoteType(noteAssets, baseTrackType, trackScale);
             if (!trackTargetSize.isValid()) {
@@ -1333,7 +1377,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         };
     }
     if (request.dragActive) {
-        const int dragCenterX = request.viewportSize.width() / 2;
+        const qreal dragCenterX = request.viewportSize.width() / 2.0;
         if (dragCenterX > state.timelineLeft) {
             state.hasDragCenterLine = true;
             state.dragCenterLine = TimelineSceneLine{
@@ -1351,6 +1395,11 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
 int TimelineSceneStateBuilder::secondToSceneX(const TimelineSceneState& state, double second)
 {
     return ::secondToX(state, second);
+}
+
+qreal TimelineSceneStateBuilder::secondToSceneXExact(const TimelineSceneState& state, double second)
+{
+    return ::secondToXExact(state, second);
 }
 
 double TimelineSceneStateBuilder::sceneXToSecond(const TimelineSceneState& state, qreal x)

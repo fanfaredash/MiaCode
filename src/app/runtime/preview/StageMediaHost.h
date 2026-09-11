@@ -101,7 +101,7 @@ private:
     RuntimeContext::State& state_;
     // The preview appearance settings are owned by the application assembly,
     // not by the window; this is the same single copy Session binds to.
-    miacode::v2::PreviewAppearanceState::Values& previewAppearanceValues_;
+    miacode::PreviewAppearanceState::Values& previewAppearanceValues_;
 };
 
 }  // namespace miacode::runtime

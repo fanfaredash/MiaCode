@@ -10,7 +10,7 @@
 #include "runtime/playback/PlaybackSurfaceAdapters.h"
 #include "runtime/timeline/TimelineHost.h"
 #include "runtime/preview/PreviewHost.h"
-#include "app/v2/SessionGeneration.h"
+#include "app/services/SessionGeneration.h"
 #include "runtime/validation/ValidationHost.h"
 #include "runtime/shell/ShellHost.h"
 
@@ -18,9 +18,8 @@
 #include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "ShortcutRegistry.h"
-#include "UiText.h"
-#include "WindowParityMetrics.h"
+#include "chrome/ShortcutRegistry.h"
+#include "chrome/WindowParityMetrics.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -33,9 +32,9 @@
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
-#include "app/qml_ui/export/QmlExportSession.h"
-#include "app/v2/JobProgressService.h"
-#include "app/v2/UiRequestService.h"
+#include "app/ui/export/ExportSession.h"
+#include "app/services/JobProgressService.h"
+#include "app/services/UiRequestService.h"
 #include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -69,7 +68,7 @@ void appendPreviewFramePacingDiagLog(const QString& action, const QString& paylo
 
 }  // namespace
 
-Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
+Session::Session(miacode::ApplicationServices& services, QObject* parent)
     : QObject(parent)
     , applicationServices_(services)
 {
@@ -78,23 +77,23 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     // them.
     editorSyncController_ = &applicationServices_.editorSync();
     chartDropImportService_ = &applicationServices_.chartDropImport();
-    connect(editorSyncController_, &miacode::v2::EditorSyncController::editorContextChanged,
+    connect(editorSyncController_, &miacode::EditorSyncController::editorContextChanged,
             this, &Session::refreshEditorAuthoringContext);
-    connect(editorSyncController_, &miacode::v2::EditorSyncController::caretLocationPublished,
+    connect(editorSyncController_, &miacode::EditorSyncController::caretLocationPublished,
             this, [this](int difficultyId, qulonglong, int line, int column) {
                 if (difficultyId == activeDifficultyId_) {
                     publishEditorCaret(difficultyId, line, column);
                 }
             });
-    connect(editorSyncController_, &miacode::v2::EditorSyncController::pointerInteractionStarted,
+    connect(editorSyncController_, &miacode::EditorSyncController::pointerInteractionStarted,
             this, &Session::handleEditorPointerInteraction);
-    connect(editorSyncController_, &miacode::v2::EditorSyncController::touchPadControlHoldChanged,
+    connect(editorSyncController_, &miacode::EditorSyncController::touchPadControlHoldChanged,
             this, &Session::setTouchPadAuthoringCtrlHold);
-    connect(editorSyncController_, &miacode::v2::EditorSyncController::touchPadPreviewAnchorPublished,
+    connect(editorSyncController_, &miacode::EditorSyncController::touchPadPreviewAnchorPublished,
             this, &Session::applyTouchPadAuthoringPreviewAnchor);
-    connect(editorSyncController_, &miacode::v2::EditorSyncController::previewSeekPublished,
+    connect(editorSyncController_, &miacode::EditorSyncController::previewSeekPublished,
             this, &Session::seekPreviewToEditorLocation);
-    connect(editorSyncController_, &miacode::v2::EditorSyncController::selectionRangeExportRequested,
+    connect(editorSyncController_, &miacode::EditorSyncController::selectionRangeExportRequested,
             this, &Session::requestSelectionRangeExport);
 
     // The preview appearance values live in the application assembly; this
@@ -102,21 +101,21 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     // when one of them moves. Restore paths write through
     // PreviewAppearanceState::values() instead, which stays silent — reloading
     // a document must not look like a user edit and must not rewrite settings.
-    miacode::v2::PreviewAppearanceState& previewAppearance =
+    miacode::PreviewAppearanceState& previewAppearance =
         applicationServices_.previewAppearance();
-    connect(&previewAppearance, &miacode::v2::PreviewAppearanceState::skinChanged,
+    connect(&previewAppearance, &miacode::PreviewAppearanceState::skinChanged,
             this, [this] {
                 applyPreviewSkinDirectoryToSurfaces();
                 savePortableState();
             });
-    connect(&previewAppearance, &miacode::v2::PreviewAppearanceState::judgeEffectStyleChanged,
+    connect(&previewAppearance, &miacode::PreviewAppearanceState::judgeEffectStyleChanged,
             this, [this, &previewAppearance] {
                 if (scene_ != nullptr) {
                     scene_->setJudgeEffectStyle(previewAppearance.judgeEffectStyle());
                 }
                 savePortableState();
             });
-    connect(&previewAppearance, &miacode::v2::PreviewAppearanceState::introSoundChanged,
+    connect(&previewAppearance, &miacode::PreviewAppearanceState::introSoundChanged,
             this, [this] {
                 applyPreviewSfxLevels(/*reloadAssets=*/true);
                 savePortableState();
@@ -152,37 +151,37 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     // here, so a relay changes nothing about the contract — unlike the handler
     // hooks on DocumentBridge, which need an answer back.
     {
-        miacode::v2::ShellNotifications& notify = applicationServices_.shellNotifications();
+        miacode::ShellNotifications& notify = applicationServices_.shellNotifications();
         connect(this, &Session::presentationChanged,
-                &notify, &miacode::v2::ShellNotifications::presentationChanged);
+                &notify, &miacode::ShellNotifications::presentationChanged);
         connect(this, &Session::previewPlayheadChanged,
-                &notify, &miacode::v2::ShellNotifications::previewPlayheadChanged);
+                &notify, &miacode::ShellNotifications::previewPlayheadChanged);
         connect(this, &Session::previewSkinDirectoryChanged,
-                &notify, &miacode::v2::ShellNotifications::previewSkinDirectoryChanged);
+                &notify, &miacode::ShellNotifications::previewSkinDirectoryChanged);
         connect(this, &Session::documentReplaced,
-                &notify, &miacode::v2::ShellNotifications::documentReplaced);
+                &notify, &miacode::ShellNotifications::documentReplaced);
         connect(this, &Session::editorPreferencesChanged,
-                &notify, &miacode::v2::ShellNotifications::editorPreferencesChanged);
+                &notify, &miacode::ShellNotifications::editorPreferencesChanged);
         connect(this, &Session::muriPromptPreferenceChanged,
-                &notify, &miacode::v2::ShellNotifications::muriPromptPreferenceChanged);
+                &notify, &miacode::ShellNotifications::muriPromptPreferenceChanged);
         connect(this, &Session::videoExportWorkerRunningChanged,
-                &notify, &miacode::v2::ShellNotifications::videoExportWorkerRunningChanged);
+                &notify, &miacode::ShellNotifications::videoExportWorkerRunningChanged);
         connect(this, &Session::normalizeWholeChartRequested,
-                &notify, &miacode::v2::ShellNotifications::normalizeWholeChartRequested);
+                &notify, &miacode::ShellNotifications::normalizeWholeChartRequested);
         connect(this, &Session::mediaToolsRequested,
-                &notify, &miacode::v2::ShellNotifications::mediaToolsRequested);
+                &notify, &miacode::ShellNotifications::mediaToolsRequested);
         connect(this, &Session::preferencesRequested,
-                &notify, &miacode::v2::ShellNotifications::preferencesRequested);
+                &notify, &miacode::ShellNotifications::preferencesRequested);
         connect(this, &Session::coverExportRequested,
-                &notify, &miacode::v2::ShellNotifications::coverExportRequested);
+                &notify, &miacode::ShellNotifications::coverExportRequested);
         connect(this, &Session::selectionRangeExportPageRequested,
-                &notify, &miacode::v2::ShellNotifications::selectionRangeExportPageRequested);
+                &notify, &miacode::ShellNotifications::selectionRangeExportPageRequested);
     }
     settings_ = std::make_unique<miacode::runtime::SettingsHost>(*this, ui_, state_);
     stageMedia_ = std::make_unique<miacode::runtime::StageMediaHost>(*this, ui_, state_);
     validation_ = std::make_unique<miacode::runtime::ValidationHost>(*this, ui_, state_);
     shell_ = std::make_unique<miacode::runtime::ShellHost>(*this);
-    const quint64 sessionGeneration = miacode::v2::nextSessionGeneration();
+    const quint64 sessionGeneration = miacode::nextSessionGeneration();
     playback_ = std::make_unique<miacode::runtime::PlaybackCoordinator>(
         *this, applicationServices_, ui_, state_, runtimeContext_.playback, *this, *validation_,
         *documents_, *this, sessionGeneration);
@@ -199,7 +198,7 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     timelineHost_->setDocumentRevision(initialWorkspaceRevision);
     applicationServices_.setPlaybackControl(playback_.get());
     applicationServices_.setPlaybackStateAuthority(playback_.get());
-    connect(&applicationServices_.workspace(), &miacode::v2::ChartWorkspace::changed,
+    connect(&applicationServices_.workspace(), &miacode::ChartWorkspace::changed,
             this, [this](quint64 revision) {
                 documents_->syncRuntimeFromWorkspace();
                 playback_->setDocumentRevision(revision);
@@ -237,14 +236,14 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
 
     ui_.uiRequests_ = &applicationServices_.uiRequests();
     ui_.jobProgress_ = &applicationServices_.jobProgress();
-    connect(ui_.jobProgress_, &miacode::v2::JobProgressService::cancellationRequested,
+    connect(ui_.jobProgress_, &miacode::JobProgressService::cancellationRequested,
             this, [this](quint64 token) {
                 if (videoExport_ != nullptr && token == videoExportJobToken_
                     && videoExportJobToken_ != 0) {
                     videoExport_->cancelVideoExportWorker();
                 }
             });
-    ui_.qmlExportSession_ = new QmlExportSession(
+    ui_.qmlExportSession_ = new miacode::ui::ExportSession(
         applicationServices_.shellNotifications(), applicationServices_.uiRequests(),
         applicationServices_.jobProgress(), applicationServices_.previewAppearance(),
         applicationServices_.exportEngineSlot(), applicationServices_.previewSurfaceSlot(),
@@ -431,10 +430,10 @@ Session::Session(miacode::v2::ApplicationServices& services, QObject* parent)
     timelineQuickStateBridge_->setFollowProgressEnabled(previewProgressFollowEnabled_);
     timelineQuickStateBridge_->setTimelineSyncEnabled(timelineSyncEnabled_);
     timelineQuickStateBridge_->setZoomWheelShortcuts(
-        ShortcutRegistry::instance().shortcutTexts(
+        miacode::ui::ShortcutRegistry::instance().shortcutTexts(
             QStringLiteral("timeline.zoom_in"),
             {QStringLiteral("Ctrl+WheelUp")}),
-        ShortcutRegistry::instance().shortcutTexts(
+        miacode::ui::ShortcutRegistry::instance().shortcutTexts(
             QStringLiteral("timeline.zoom_out"),
             {QStringLiteral("Ctrl+WheelDown")}));
     playback_->refreshTimelineWaveformPhaseCompensation();

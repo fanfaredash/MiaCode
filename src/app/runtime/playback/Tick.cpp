@@ -4,7 +4,6 @@
 #include "BracketScopeHighlighter.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
 #include "audio/PreviewAudioPlaybackFlowPolicy.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"

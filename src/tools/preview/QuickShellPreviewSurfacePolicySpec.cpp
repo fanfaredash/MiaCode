@@ -50,9 +50,9 @@ bool verifyPolicy(QTextStream& err)
 bool verifyChartDropUsesQsgOnly(QTextStream& err)
 {
     // The v1 shell is gone; the surviving GUI bootstrap is the v2 QML entry below.
-    const QString bootstrap = readSource(QStringLiteral("src/app/qml_ui/QmlUiBootstrap.cpp"));
+    const QString bootstrap = readSource(QStringLiteral("src/app/ui/Bootstrap.cpp"));
     return require(
-               bootstrap.contains(QStringLiteral("drop/QmlChartDropBridge.h")),
+               bootstrap.contains(QStringLiteral("drop/ChartDropBridge.h")),
                QStringLiteral("audio drop must use the QML bridge"),
                err)
         && require(

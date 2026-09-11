@@ -1,17 +1,17 @@
 #pragma once
 
 #include "app/runtime/timeline/TimelineCommandGate.h"
-#include "app/v2/TimelineSurface.h"
+#include "app/services/TimelineSurface.h"
 
 namespace miacode::runtime {
 
 // Transitional Timeline projection host. It owns the command gate and the
 // TimelineSurface boundary while the implementation still lives in the
 // composite PlaybackCoordinator. It owns no playhead, timer, QSG scene or document.
-class TimelineHost final : public miacode::v2::TimelineSurface
+class TimelineHost final : public miacode::TimelineSurface
 {
 public:
-    explicit TimelineHost(miacode::v2::TimelineSurface& legacySurface,
+    explicit TimelineHost(miacode::TimelineSurface& legacySurface,
                           quint64 sessionGeneration = 1);
 
     void setDocumentRevision(quint64 revision);
@@ -49,7 +49,7 @@ public:
 private:
     bool acceptCommand(const TimelineCommandStamp& stamp);
 
-    miacode::v2::TimelineSurface* legacySurface_ = nullptr;
+    miacode::TimelineSurface* legacySurface_ = nullptr;
     TimelineCommandGate commandGate_;
 };
 

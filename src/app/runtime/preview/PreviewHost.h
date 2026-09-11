@@ -1,8 +1,8 @@
 #pragma once
 
-#include "app/v2/AudioClockSource.h"
-#include "app/v2/PreviewPlaybackPort.h"
-#include "app/v2/PreviewSurface.h"
+#include "app/services/AudioClockSource.h"
+#include "app/services/PreviewPlaybackPort.h"
+#include "app/services/PreviewSurface.h"
 
 namespace miacode::runtime {
 
@@ -10,19 +10,19 @@ namespace miacode::runtime {
 // forwarded to the legacy composite implementation, while transport and
 // canonical time are read and written only through PreviewPlaybackPort and
 // AudioClockSource. It owns no playback engine or second playhead.
-class PreviewHost final : public miacode::v2::PreviewSurface
+class PreviewHost final : public miacode::PreviewSurface
 {
 public:
-    PreviewHost(miacode::v2::PreviewSurface& legacySurface,
-                miacode::v2::PreviewPlaybackPort& playbackPort,
-                miacode::v2::AudioClockSource& audioClockSource);
+    PreviewHost(miacode::PreviewSurface& legacySurface,
+                miacode::PreviewPlaybackPort& playbackPort,
+                miacode::AudioClockSource& audioClockSource);
 
     void invalidateSession();
-    miacode::v2::PlaybackSnapshot playbackSnapshot() const;
+    miacode::PlaybackSnapshot playbackSnapshot() const;
     double currentAudioClockSecond() const;
 
     bool playing() const override;
-    miacode::v2::PlaybackTransportState playbackTransportState() const override;
+    miacode::PlaybackTransportState playbackTransportState() const override;
     double positionSeconds() const override;
     double durationSeconds() const override;
     double lowerBoundSeconds() const override;
@@ -59,9 +59,9 @@ public:
     void restoreAudioSettingsFromSoftwareDefault() override;
 
 private:
-    miacode::v2::PreviewSurface* legacySurface_ = nullptr;
-    miacode::v2::PreviewPlaybackPort* playbackPort_ = nullptr;
-    miacode::v2::AudioClockSource* audioClockSource_ = nullptr;
+    miacode::PreviewSurface* legacySurface_ = nullptr;
+    miacode::PreviewPlaybackPort* playbackPort_ = nullptr;
+    miacode::AudioClockSource* audioClockSource_ = nullptr;
 };
 
 }  // namespace miacode::runtime

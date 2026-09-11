@@ -114,7 +114,8 @@ public:
         double videoFrameRate,
         double videoFrameIntervalAvgMs,
         double videoFrameIntervalMaxMs,
-        qint64 videoFrameStallCount);
+        qint64 videoFrameStallCount,
+        const QString& videoDecodeDesc = QString());
     void setFramePacingDebugState(
         bool usesDisplayRefreshPacing,
         double targetFps,

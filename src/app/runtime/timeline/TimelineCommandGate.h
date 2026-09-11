@@ -1,11 +1,11 @@
 #pragma once
 
-#include "app/v2/SessionGeneration.h"
-#include "app/v2/TimelineSurface.h"
+#include "app/services/SessionGeneration.h"
+#include "app/services/TimelineSurface.h"
 
 namespace miacode::runtime {
 
-using TimelineCommandStamp = miacode::v2::TimelineCommandStamp;
+using TimelineCommandStamp = miacode::TimelineCommandStamp;
 
 // Serializes Timeline-originated writes at the host boundary. A command is
 // valid only while it belongs to the current runtime generation/revision and

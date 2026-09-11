@@ -8,6 +8,7 @@
 #include <QSize>
 
 #include "core/scene/PreviewLayerOrder.h"
+#include "preview/quick_scene/PreviewQuickGraphicsInfo.h"
 
 class QPainter;
 class PreviewRuntime;
@@ -27,6 +28,7 @@ void paintPreviewHudOverlay(
     const QSize& canvasSize,
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags
         = miacode::preview::scene::kPreviewAllRenderLayers,
+    const miacode::preview::quick_scene::QuickGraphicsInfo& graphicsInfo = {},
     const QColor& textColor = QColor(Qt::white),
     const QColor& shadowColor = QColor(0, 0, 0, 190));
 
@@ -83,4 +85,7 @@ private:
     QElapsedTimer hudUpdateThrottleTimer_;
     qint64 lastHudUpdateMs_ = -1;
     bool hudUpdatePending_ = false;
+    QPointer<QQuickWindow> graphicsInfoWindow_;
+    miacode::preview::quick_scene::QuickGraphicsInfo graphicsInfo_;
+    bool graphicsInfoReady_ = false;
 };

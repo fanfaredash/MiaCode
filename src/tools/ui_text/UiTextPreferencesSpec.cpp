@@ -1,4 +1,4 @@
-#include "app/ui/UiText.h"
+#include "app/ui/preferences/PreferenceDocument.h"
 
 #include <QCoreApplication>
 #include <QJsonObject>
@@ -28,21 +28,21 @@ int main(int argc, char** argv)
         {QStringLiteral("theme"), QStringLiteral("light")},
         {QStringLiteral("master_volume"), 0.5},
     };
-    QJsonObject normalized = UiText::normalizePreferencesObject(raw);
+    QJsonObject normalized = PreferenceDocument::normalizePreferencesObject(raw);
     ok &= expect(normalized.value(QStringLiteral("vendor.demo.setting")).toInt() == 42,
                  QStringLiteral("unknown extension-owned top-level keys survive normalization"), err);
     ok &= expect(normalized.value(QStringLiteral("extensionShortcuts")).toObject()
                          .value(QStringLiteral("demo.run")).toString() == QLatin1String("Ctrl+R"),
                  QStringLiteral("extension shortcuts survive normalization"), err);
-    ok &= expect(UiText::themeTokenFromPreferencesObject(normalized) == QLatin1String("light"),
+    ok &= expect(PreferenceDocument::themeTokenFromPreferencesObject(normalized) == QLatin1String("light"),
                  QStringLiteral("legacy top-level theme migrates to ui.theme"), err);
     ok &= expect(!normalized.contains(QStringLiteral("theme"))
                      && !normalized.contains(QStringLiteral("master_volume")),
                  QStringLiteral("migrated built-in top-level keys are removed"), err);
 
     raw.insert(QStringLiteral("ui"), QJsonObject{{QStringLiteral("theme"), QStringLiteral("dark")}});
-    normalized = UiText::normalizePreferencesObject(raw);
-    ok &= expect(UiText::themeTokenFromPreferencesObject(normalized) == QLatin1String("dark"),
+    normalized = PreferenceDocument::normalizePreferencesObject(raw);
+    ok &= expect(PreferenceDocument::themeTokenFromPreferencesObject(normalized) == QLatin1String("dark"),
                  QStringLiteral("canonical ui.theme wins over legacy top-level theme"), err);
 
     QJsonObject canonicalAudio{
@@ -69,7 +69,7 @@ int main(int argc, char** argv)
         {QStringLiteral("judge_volume"), 0.5},
         {QStringLiteral("touchhold_volume"), 0.95},
     };
-    const QJsonObject mixedNormalized = UiText::normalizePreferencesObject(mixed);
+    const QJsonObject mixedNormalized = PreferenceDocument::normalizePreferencesObject(mixed);
     const QJsonObject mixedApp = mixedNormalized.value(QStringLiteral("app")).toObject();
     const QJsonObject mixedPreview = mixedApp.value(QStringLiteral("preview")).toObject();
     const QJsonObject mixedAudio = mixedPreview.value(QStringLiteral("audio")).toObject();
@@ -82,7 +82,7 @@ int main(int argc, char** argv)
     ok &= expect(qFuzzyCompare(mixedAudio.value(QStringLiteral("slide_volume")).toDouble(), 0.3),
                  QStringLiteral("missing canonical audio members are backfilled from legacy container"), err);
 
-    const QJsonObject legacyTouchNormalized = UiText::normalizePreferencesObject(QJsonObject{
+    const QJsonObject legacyTouchNormalized = PreferenceDocument::normalizePreferencesObject(QJsonObject{
         {QStringLiteral("master_volume"), 0.6},
         {QStringLiteral("touch_volume"), 0.2},
         {QStringLiteral("touchhold_volume"), 0.8},
@@ -94,8 +94,8 @@ int main(int argc, char** argv)
                  QStringLiteral("legacy touch and touchhold volumes retain their maximum-value migration"), err);
 
     QJsonObject written = normalized;
-    UiText::setThemeTokenInPreferencesObject(&written, QStringLiteral("system"));
-    ok &= expect(UiText::themeTokenFromPreferencesObject(written) == QLatin1String("system")
+    PreferenceDocument::setThemeTokenInPreferencesObject(&written, QStringLiteral("system"));
+    ok &= expect(PreferenceDocument::themeTokenFromPreferencesObject(written) == QLatin1String("system")
                      && !written.contains(QStringLiteral("theme")),
                  QStringLiteral("canonical theme helper writes ui.theme only"), err);
 

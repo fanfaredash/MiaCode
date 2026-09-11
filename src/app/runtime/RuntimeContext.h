@@ -17,7 +17,7 @@
 #include "common/PreviewTimingSettings.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "core/chart/transform/ChartNormalization.h"
-#include "app/v2/PlaybackControl.h"
+#include "app/services/PlaybackControl.h"
 #include "timeline/TimelineData.h"
 #include "timeline/TimelineQuickModel.h"
 #include "timeline/TimelineSlowRefresh.h"
@@ -28,7 +28,9 @@ class IntroBannerSpec;
 class PreviewAudioDeviceWatcher;
 class PreviewRuntime;
 class PreviewStageMediaHost;
-class QmlExportSession;
+namespace miacode::ui {
+class ExportSession;
+}
 class QtPreviewSfxRuntime;
 class QuickShellPreviewCompositeSurface;
 class TimelineQuickStateBridge;
@@ -42,7 +44,7 @@ class WaveformCacheService;
 struct WaveformData;
 }
 
-namespace miacode::v2 {
+namespace miacode {
 class JobProgressService;
 class UiRequestService;
 }
@@ -169,8 +171,8 @@ public:
     // write them.
     struct PlaybackState {
         bool playing_ = false;
-        miacode::v2::PlaybackTransportState previewTransportState_ =
-            miacode::v2::PlaybackTransportState::Stopped;
+        miacode::PlaybackTransportState previewTransportState_ =
+            miacode::PlaybackTransportState::Stopped;
         double pauseSecond_ = 0.0;
         double previewPlaybackRate_ = 1.0;
         double qtPreviewStartSecond_ = 0.0;

@@ -46,12 +46,12 @@ void Session::setChartNormalizeOptions(
     savePortableState();
 }
 
-miacode::v2::UiRequestService* Session::uiRequestService() const
+miacode::UiRequestService* Session::uiRequestService() const
 {
     return uiRequests_;
 }
 
-miacode::v2::JobProgressService* Session::jobProgressService() const
+miacode::JobProgressService* Session::jobProgressService() const
 {
     return jobProgress_;
 }

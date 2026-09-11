@@ -71,8 +71,8 @@ ctest --test-dir <dev-build> -C Release -R '^<spec-target>$' --output-on-failure
 
 ## 代码结构与同步面
 
-- `src/app/qml_ui/`：产品前端、C++ models 和共享 QML 组件。
-- `src/app/v2/`：ChartWorkspace、ApplicationServices、共享服务与 typed ports。
+- `src/app/ui/`：产品前端、C++ models 和共享 QML 组件。
+- `src/app/services/`：ChartWorkspace、ApplicationServices、共享服务与 typed ports。
 - `src/app/runtime/`：Session 装配与各领域 host；按领域归属扩展已有宿主。
 - `src/core/chart/`：文档、解析和变换；`src/core/scene/`：无 GPU 依赖的场景数学。
 - `src/preview/`、`src/audio/`、`src/timeline/`：QSG 预览、音频运行时和时间轴。
@@ -93,8 +93,8 @@ JSON 和 worker task。详见 skill 的 `references/cross-chain-linkage.md`。
 基本规则：
 
 - 不要靠单个控件的像素微调修布局。先判断根因，再用结构性修复。
-- 优先复用 `src/app/qml_ui/components/` 的表单、对话框、菜单与滚动组件，并检查隐式尺寸和实际几何。
-- QML 页面与控件使用 `theme/Theme.qml` 的 token 和 `UiText.qml` 的文案入口，不复制颜色或本地化逻辑。
+- 优先复用 `src/app/ui/components/` 的表单、对话框、菜单与滚动组件，并检查隐式尺寸和实际几何。
+- QML 页面与控件使用 `theme/Theme.qml` 的 token 和 `qsTrId` 文案键，不复制颜色或本地化逻辑。
 - QML 图层顺序优先靠声明/绘制顺序表达，不要随手加局部 `z` hack。
 - hit test 和视觉位置必须来自同一套 canonical geometry。
 - 所有可交互控件应可键盘访问，文本输入获得焦点时不要让预览快捷键劫持普通方向键。

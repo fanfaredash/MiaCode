@@ -7,7 +7,7 @@ lifecycle: working
 > **⚠️ 本文已作废（2026-08-29）。**
 > 审计基线为 `origin/feature/qml-ui` @ `ea31fee6`，其中 A/B/C/D/E 各表的 P0 与多数 P1 均已在
 > `112434b2`…`117a76a1` 之间完成；「共同基线之后必须同步的 29 个 dev 提交」也已合入。
-> 现行工作清单以 [../specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md](../specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md) 为准。
+> 现行工作清单以 [../specs/ui/UI_TODO_ZH.md](../specs/ui/UI_TODO_ZH.md) 为准。
 > 本文仅保留为历史差距审计记录，不得据此排期。
 
 > 目的：为 `feature/qml-ui`（QML UI v2）回归 `dev` 的功能面提供可排序的清单和初步补完路线。
@@ -162,8 +162,8 @@ v2 已经不是空壳：基础打开/保存、难度切换、QML 文本编辑、
 
 ## 关键入口索引
 
-- v2 bootstrap/服务：`src/app/qml_ui/QmlUiBootstrap.*`、`QmlApplicationContext.*`、`QmlCommandService.*`、`QmlDocumentModel.*`、`QmlPreviewModel.*`。
-- v2 编辑器/timeline/预览：`src/app/qml_ui/editor/`、`timeline/BottomPanel.qml`、`preview/PreviewTransport.qml`。
-- v2 导出：`src/app/qml_ui/export/QmlExportSession.*`、`ExportVideoPage.qml`。
+- v2 bootstrap/服务：`src/app/ui/Bootstrap.*`、`QmlApplicationContext.*`、`QmlCommandService.*`、`QmlDocumentModel.*`、`QmlPreviewModel.*`。
+- v2 编辑器/timeline/预览：`src/app/ui/editor/`、`timeline/BottomPanel.qml`、`preview/PreviewTransport.qml`。
+- v2 导出：`src/app/ui/export/QmlExportSession.*`、`ExportVideoPage.qml`。
 - 共享编排与契约：`src/app/mainwindow/sections/{document,timeline,validation,preview,export}/`、`src/app/quick_shell/QuickShellController.*`、`src/timeline/quick/`。
-- 既有分支内 Todo：`docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`（仅存在于 `feature/qml-ui`，应在同步时与本文合并/更新）。
+- 既有分支内 Todo：`docs/specs/ui/UI_TODO_ZH.md`（仅存在于 `feature/qml-ui`，应在同步时与本文合并/更新）。

@@ -1,7 +1,7 @@
 #include "runtime/export/VideoExportHost.h"
 
 #include "runtime/shell/ShellHost.h"
-#include "app/qml_ui/export/QmlExportSession.h"
+#include "app/ui/export/ExportSession.h"
 
 #include <QPointer>
 
@@ -11,7 +11,7 @@ miacode::runtime::VideoExportHost::VideoExportHost(Session& session, RuntimeCont
     , state_(state)
 {}
 
-// ---- miacode::v2::ExportEngine ----
+// ---- miacode::ExportEngine ----
 //
 // Thin forwarders. The existing widget-side names stay because ~20 call sites
 // inside Session use them; the interface names are what the QML page sees.

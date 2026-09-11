@@ -2,11 +2,11 @@
 
 #include "runtime/Session.h"
 
-#include "app/v2/PreferencesStore.h"
+#include "app/services/PreferencesStore.h"
 
 namespace miacode::runtime {
 
-class SettingsHost final : public miacode::v2::PreferencesStore {
+class SettingsHost final : public miacode::PreferencesStore {
 public:
     SettingsHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 

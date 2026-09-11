@@ -516,8 +516,8 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
         [this, sourceGeneration](const QAVVideoFrame& avFrame) {
             const double ptsSeconds = avFrame.pts();
             const double durationSeconds = avFrame.duration();
-            // Implicit QAVVideoFrame -> QVideoFrame; a D3D11VA hardware frame
-            // stays a zero-copy RhiTexture handle through this conversion.
+            // Implicit QAVVideoFrame -> QVideoFrame; a platform hardware frame
+            // keeps its RHI texture handle through this conversion.
             QVideoFrame vf = avFrame;
             handleDecodedVideoFrame(vf, ptsSeconds, durationSeconds, sourceGeneration);
         });

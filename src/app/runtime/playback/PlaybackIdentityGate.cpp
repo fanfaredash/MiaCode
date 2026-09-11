@@ -5,7 +5,7 @@ namespace miacode::runtime {
 PlaybackIdentityGate::PlaybackIdentityGate(quint64 sessionGeneration)
     : sessionGeneration_(sessionGeneration != 0
                              ? sessionGeneration
-                             : miacode::v2::nextSessionGeneration())
+                             : miacode::nextSessionGeneration())
 {
 }
 
@@ -27,13 +27,13 @@ void PlaybackIdentityGate::invalidate()
     ++playbackSequence_;
 }
 
-miacode::v2::PlaybackCallbackStamp PlaybackIdentityGate::currentStamp() const
+miacode::PlaybackCallbackStamp PlaybackIdentityGate::currentStamp() const
 {
     return {sessionGeneration_, documentRevision_, playbackSequence_};
 }
 
 bool PlaybackIdentityGate::accepts(
-    const miacode::v2::PlaybackCallbackStamp& stamp) const
+    const miacode::PlaybackCallbackStamp& stamp) const
 {
     return active_ && stamp == currentStamp();
 }

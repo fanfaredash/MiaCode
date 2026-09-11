@@ -1,12 +1,12 @@
 ---
-lifecycle: working
+lifecycle: archive-legacy
 ---
 
-> 工作资料：包含待复核的实现描述或阶段目标，不能整体视为当前规范；以代码和 [文档索引](../../INDEX.md) 中的现行契约为准。
+> 历史资料：记录旧文案系统迁移期间的一次比对，所列类型与路径保留当时语义。当前本地化入口见 `translations/` 与 [文档索引](../../INDEX.md)。
 
 # QML v2 中文文案 vs v1 全量比对表
 
-本文档记录一次针对 `src/app/ui/UiText.cpp::qmlOnlyEntries()`（QML v2 重构中新增、v1 主表
+本文档记录一次针对旧 `UiText.cpp::qmlOnlyEntries()`（QML v2 重构中新增、v1 主表
 `zhMap()` 没有对应词条的 185 条字符串）与 v1 中文原文的全量比对结果。中文会话下
 `UiText::textForQmlSource` 会原样返回 QML 源串，所以 v2 重构引入的中文措辞偏差从未被
 自动改回——这张表就是找出这些偏差、判断哪些值得改、哪些不该动的记录。
@@ -35,7 +35,7 @@ lifecycle: working
 1. **"语义变了"里剩下的 1 条（`media_tools.batch_pv_description`）**：v1 多了"及其直接
    子文件夹""仅认 bg.mp4 或 pv.mp4"两个限定，v2 入口卡片简化成了"扫描一个目录，批量压缩
    其中的背景视频。"。已核实点开后的 `PvBatchCompressionDialog.qml`
-   （`src/app/qml_ui/media/PvBatchCompressionDialog.qml`）**没有**补充说明这两个限定的
+   （`src/app/ui/media/PvBatchCompressionDialog.qml`）**没有**补充说明这两个限定的
    文案（该对话框只有目录选择器、队列列表和进度摘要，没有规则说明文本）——但这属于
    "入口卡片文案是否应该带业务规则细节"的产品判断，不属于本轮"丢了本该在的一句话"这类
    可以照抄修复的问题，因此保留调查结果，不修改。
@@ -61,7 +61,7 @@ lifecycle: working
 
 ## 原始比对表（185 条，未改动）
 
-来源：`src/app/ui/UiText.cpp` 的 `qmlOnlyEntries()`（4282-4467 行，本文档写作时的行号；
+来源：旧 `UiText.cpp` 的 `qmlOnlyEntries()`（4282-4467 行，本文档写作时的行号；
 上面 7 条已处理的条目在当前代码里已被删除）逐条与主表 `zhMap()`（v1，1617-2799 行，1114
 个 key，24 个重复 key 取最后一次赋值）做中英文双语相似度自动匹配；对高置信度桶（约 30
 条）和全部"语义变了"候选做了人工抽查、改正。

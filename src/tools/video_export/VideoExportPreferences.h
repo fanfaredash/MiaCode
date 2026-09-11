@@ -2,7 +2,7 @@
 
 #include <QJsonObject>
 
-#include "UiText.h"
+#include "preferences/PreferenceDocument.h"
 
 namespace miacode::video_export {
 
@@ -32,7 +32,7 @@ inline QJsonObject migrateDialogPreferences(QJsonObject preferences)
 
 inline QJsonObject loadDialogPreferences()
 {
-    const QJsonObject root = UiText::loadPreferencesObject();
+    const QJsonObject root = PreferenceDocument::loadPreferencesObject();
     const QJsonObject app = root.value(QStringLiteral("app")).toObject();
     return migrateDialogPreferences(app.value(QStringLiteral("video_export")).toObject());
 }
@@ -41,11 +41,11 @@ inline bool saveDialogPreferences(const QJsonObject& preferences)
 {
     QJsonObject stamped = preferences;
     stamped.insert(QStringLiteral("schema_version"), kDialogPreferencesSchemaVersion);
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
     app.insert(QStringLiteral("video_export"), stamped);
     root.insert(QStringLiteral("app"), app);
-    return UiText::savePreferencesObject(root);
+    return PreferenceDocument::savePreferencesObject(root);
 }
 
 }  // namespace miacode::video_export

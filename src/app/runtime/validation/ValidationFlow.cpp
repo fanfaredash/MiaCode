@@ -81,7 +81,7 @@ void miacode::runtime::ValidationHost::addValidationDecoration(int line, int col
 void Session::clearPreviewFollowDecoration()
 {
     if (editorSyncController_ != nullptr) {
-        miacode::v2::EditorFollowState follow;
+        miacode::EditorFollowState follow;
         follow.playbackActive = playing_;
         editorSyncController_->publishFollow(follow);
     }

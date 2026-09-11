@@ -1,7 +1,6 @@
 #include "NetBatchUploadWorker.h"
 
 #include "NetUploadDiagnostics.h"
-#include "UiText.h"
 
 #include <QCryptographicHash>
 #include <QEventLoop>
@@ -16,6 +15,7 @@
 #include <QUrl>
 
 #include <utility>
+#include <QCoreApplication>
 
 namespace miacode::net {
 namespace {
@@ -95,7 +95,7 @@ bool addFilePart(
     auto* file = new QFile(filePath, multiPart);
     if (!file->open(QIODevice::ReadOnly)) {
         if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("net.upload_could_not_open_file_1_2"))
+            *errorMessage = qtTrId("net.upload_could_not_open_file_1_2")
                 .arg(filePath, file->errorString());
         }
         return false;
@@ -114,16 +114,16 @@ QString responseSummary(
     const NetUploadResponseAssessment& assessment)
 {
     if (response.timedOut) {
-        return UiText::text(QStringLiteral("net.upload_request_timed_out"));
+        return qtTrId("net.upload_request_timed_out");
     }
     if (assessment.isRateLimited) {
-        return UiText::text(QStringLiteral("net.upload_rate_limited"));
+        return qtTrId("net.upload_rate_limited");
     }
     if (assessment.isPayloadTooLarge) {
-        return UiText::text(QStringLiteral("net.upload_payload_too_large"));
+        return qtTrId("net.upload_payload_too_large");
     }
     if (assessment.isCloudflareChallenge) {
-        return UiText::text(QStringLiteral("net.upload_cloudflare_challenge"));
+        return qtTrId("net.upload_cloudflare_challenge");
     }
     const QString detail = !assessment.serverMessage.isEmpty()
         ? assessment.serverMessage
@@ -133,7 +133,7 @@ QString responseSummary(
             ? QStringLiteral("HTTP %1 %2").arg(response.statusCode).arg(response.reasonPhrase).trimmed()
             : QStringLiteral("HTTP %1: %2").arg(response.statusCode).arg(detail);
     }
-    return detail.isEmpty() ? UiText::text(QStringLiteral("net.upload_network_error")) : detail;
+    return detail.isEmpty() ? qtTrId("net.upload_network_error") : detail;
 }
 
 QString responseDetails(
@@ -144,21 +144,21 @@ QString responseDetails(
     const NetUploadResponseAssessment& assessment)
 {
     QStringList lines;
-    lines.append(UiText::text(QStringLiteral("net.upload_detail_stage_1")).arg(stage));
+    lines.append(qtTrId("net.upload_detail_stage_1").arg(stage));
     if (!chartName.isEmpty()) {
-        lines.append(UiText::text(QStringLiteral("net.upload_detail_chart_1")).arg(chartName));
+        lines.append(qtTrId("net.upload_detail_chart_1").arg(chartName));
     }
     if (!directoryPath.isEmpty()) {
-        lines.append(UiText::text(QStringLiteral("net.upload_detail_directory_1")).arg(directoryPath));
+        lines.append(qtTrId("net.upload_detail_directory_1").arg(directoryPath));
     }
-    lines.append(UiText::text(QStringLiteral("net.upload_detail_url_1")).arg(response.url.toString()));
+    lines.append(qtTrId("net.upload_detail_url_1").arg(response.url.toString()));
     if (response.statusCode > 0) {
-        lines.append(UiText::text(QStringLiteral("net.upload_detail_http_1_2"))
+        lines.append(qtTrId("net.upload_detail_http_1_2")
                          .arg(response.statusCode)
                          .arg(response.reasonPhrase));
     }
     if (!response.networkError.isEmpty()) {
-        lines.append(UiText::text(QStringLiteral("net.upload_detail_network_1")).arg(response.networkError));
+        lines.append(qtTrId("net.upload_detail_network_1").arg(response.networkError));
     }
     if (!response.contentType.isEmpty()) {
         lines.append(QStringLiteral("Content-Type: %1").arg(response.contentType));
@@ -173,15 +173,15 @@ QString responseDetails(
         lines.append(QStringLiteral("Retry-After: %1").arg(response.retryAfter));
     }
     if (assessment.isPayloadTooLarge) {
-        lines.append(UiText::text(QStringLiteral("net.upload_detail_payload_too_large")));
+        lines.append(qtTrId("net.upload_detail_payload_too_large"));
     } else if (assessment.isCloudflareChallenge) {
-        lines.append(UiText::text(QStringLiteral("net.upload_detail_cloudflare_challenge")));
+        lines.append(qtTrId("net.upload_detail_cloudflare_challenge"));
     } else if (assessment.isRateLimited) {
-        lines.append(UiText::text(QStringLiteral("net.upload_detail_rate_limited")));
+        lines.append(qtTrId("net.upload_detail_rate_limited"));
     }
     if (!assessment.responseBody.isEmpty()) {
         lines.append(QString());
-        lines.append(UiText::text(QStringLiteral("net.upload_detail_response_body")));
+        lines.append(qtTrId("net.upload_detail_response_body"));
         lines.append(assessment.responseBody);
     }
     return lines.join(QLatin1Char('\n'));
@@ -224,10 +224,10 @@ UploadAttemptResult login(
     result.rateLimited = assessment.isRateLimited;
     result.stopBatch = true;
     result.retryAfterSeconds = assessment.retryAfterSeconds;
-    result.summary = UiText::text(QStringLiteral("net.upload_login_failed_1"))
+    result.summary = qtTrId("net.upload_login_failed_1")
         .arg(responseSummary(response, assessment));
     result.details = responseDetails(
-        UiText::text(QStringLiteral("net.upload_stage_login")),
+        qtTrId("net.upload_stage_login"),
         QString(),
         QString(),
         response,
@@ -252,11 +252,11 @@ UploadAttemptResult uploadJob(
         delete multiPart;
         result.summary = localError;
         result.details = QStringList{
-            UiText::text(QStringLiteral("net.upload_detail_stage_1"))
-                .arg(UiText::text(QStringLiteral("net.upload_stage_local_file"))),
-            UiText::text(QStringLiteral("net.upload_detail_chart_1")).arg(job.displayName),
-            UiText::text(QStringLiteral("net.upload_detail_directory_1")).arg(job.directoryPath),
-            UiText::text(QStringLiteral("net.upload_detail_local_error_1")).arg(localError),
+            qtTrId("net.upload_detail_stage_1")
+                .arg(qtTrId("net.upload_stage_local_file")),
+            qtTrId("net.upload_detail_chart_1").arg(job.displayName),
+            qtTrId("net.upload_detail_directory_1").arg(job.directoryPath),
+            qtTrId("net.upload_detail_local_error_1").arg(localError),
         }.join(QLatin1Char('\n'));
         return result;
     }
@@ -286,7 +286,7 @@ UploadAttemptResult uploadJob(
     result.retryAfterSeconds = assessment.retryAfterSeconds;
     result.summary = responseSummary(response, assessment);
     result.details = responseDetails(
-        UiText::text(QStringLiteral("net.upload_stage_upload")),
+        qtTrId("net.upload_stage_upload"),
         job.displayName,
         job.directoryPath,
         response,
@@ -318,7 +318,7 @@ void NetBatchUploadWorker::run()
 
     const auto waitWithCountdown = [this](int seconds, const QString& textKey, int row) {
         for (int remaining = seconds; remaining > 0 && !isCanceled(); --remaining) {
-            const QString message = UiText::text(textKey).arg(remaining);
+            const QString message = qtTrId(textKey.toUtf8().constData()).arg(remaining);
             emit summary(message);
             if (row >= 0) {
                 emit rowStatus(row, message);
@@ -338,7 +338,7 @@ void NetBatchUploadWorker::run()
         return false;
     };
 
-    emit summary(UiText::text(QStringLiteral("net.upload_logging_in")));
+    emit summary(qtTrId("net.upload_logging_in"));
     UploadAttemptResult loginResult = login(
         &manager, request_.username, request_.password, cancelRequested_);
     QString loginDetails = loginResult.details;
@@ -346,7 +346,7 @@ void NetBatchUploadWorker::run()
         const int retryDelay = loginResult.retryAfterSeconds > 0
             ? loginResult.retryAfterSeconds
             : kRateLimitFallbackDelaySeconds;
-        loginDetails = UiText::text(QStringLiteral("net.upload_detail_attempt_1")).arg(1)
+        loginDetails = qtTrId("net.upload_detail_attempt_1").arg(1)
             + QLatin1Char('\n') + loginResult.details;
         if (waitWithCountdown(
                 retryDelay,
@@ -356,11 +356,11 @@ void NetBatchUploadWorker::run()
                 &manager, request_.username, request_.password, cancelRequested_);
             if (!loginResult.succeeded && !loginResult.details.isEmpty()) {
                 loginDetails += QStringLiteral("\n\n")
-                    + UiText::text(QStringLiteral("net.upload_detail_attempt_1")).arg(2)
+                    + qtTrId("net.upload_detail_attempt_1").arg(2)
                     + QLatin1Char('\n') + loginResult.details;
             }
             if (loginResult.rateLimited) {
-                loginResult.summary = UiText::text(QStringLiteral("net.upload_rate_limit_retry_exhausted"));
+                loginResult.summary = qtTrId("net.upload_rate_limit_retry_exhausted");
             }
         }
     }
@@ -379,15 +379,15 @@ void NetBatchUploadWorker::run()
         if (!job.selected) {
             continue;
         }
-        emit rowStatus(row, UiText::text(QStringLiteral("net.upload_uploading")));
-        emit summary(UiText::text(QStringLiteral("net.upload_uploading_1")).arg(job.displayName));
+        emit rowStatus(row, qtTrId("net.upload_uploading"));
+        emit summary(qtTrId("net.upload_uploading_1").arg(job.displayName));
         UploadAttemptResult result = uploadJob(&manager, job, cancelRequested_);
         QString details = result.details;
         if (result.rateLimited && !isCanceled()) {
             const int retryDelay = result.retryAfterSeconds > 0
                 ? result.retryAfterSeconds
                 : kRateLimitFallbackDelaySeconds;
-            const QString firstAttemptDetails = UiText::text(QStringLiteral("net.upload_detail_attempt_1"))
+            const QString firstAttemptDetails = qtTrId("net.upload_detail_attempt_1")
                 .arg(1) + QLatin1Char('\n') + result.details;
             if (!waitWithCountdown(
                     retryDelay,
@@ -395,27 +395,27 @@ void NetBatchUploadWorker::run()
                     row)) {
                 break;
             }
-            emit rowStatus(row, UiText::text(QStringLiteral("net.upload_uploading")));
+            emit rowStatus(row, qtTrId("net.upload_uploading"));
             result = uploadJob(&manager, job, cancelRequested_);
             details = firstAttemptDetails;
             if (!result.succeeded && !result.details.isEmpty()) {
                 details += QStringLiteral("\n\n")
-                    + UiText::text(QStringLiteral("net.upload_detail_attempt_1")).arg(2)
+                    + qtTrId("net.upload_detail_attempt_1").arg(2)
                     + QLatin1Char('\n') + result.details;
             }
             if (result.rateLimited) {
                 result.stopBatch = true;
-                result.summary = UiText::text(QStringLiteral("net.upload_rate_limit_retry_exhausted"));
+                result.summary = qtTrId("net.upload_rate_limit_retry_exhausted");
             }
         }
 
         if (result.succeeded) {
             ++succeeded;
-            emit rowStatus(row, UiText::text(QStringLiteral("net.upload_done")));
+            emit rowStatus(row, qtTrId("net.upload_done"));
             emit rowOutcome(row, true);
         } else if (!isCanceled()) {
             ++failed;
-            const QString status = UiText::text(QStringLiteral("net.failed_1")).arg(result.summary);
+            const QString status = qtTrId("net.failed_1").arg(result.summary);
             emit rowStatus(row, status);
             emit rowOutcome(row, false);
             emit failureDetail(row, status, details);
@@ -424,12 +424,12 @@ void NetBatchUploadWorker::run()
         emit progress(completed);
 
         if (!result.succeeded && result.stopBatch && !isCanceled()) {
-            fatalError = UiText::text(QStringLiteral("net.upload_batch_stopped_1")).arg(result.summary);
+            fatalError = qtTrId("net.upload_batch_stopped_1").arg(result.summary);
             for (int pendingRow = row + 1; pendingRow < request_.jobs.size(); ++pendingRow) {
                 if (request_.jobs.at(pendingRow).selected) {
                     emit rowStatus(
                         pendingRow,
-                        UiText::text(QStringLiteral("net.upload_not_uploaded_batch_stopped")));
+                        qtTrId("net.upload_not_uploaded_batch_stopped"));
                 }
             }
             break;

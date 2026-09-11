@@ -719,6 +719,7 @@ void PreviewStageMediaHost::handleDecodedVideoFrame(const QVideoFrame& frame,
                 .arg(rotationDegrees(frame.rotation()))
                 .arg(frame.mirrored() ? 1 : 0)
                 .arg(frame.handleType() == QVideoFrame::RhiTextureHandle ? 1 : 0));
+        emit diagnosticsChanged();
     }
     if (videoPlaybackActive_ && !videoPlaybackActiveElapsed_.isValid()) {
         videoPlaybackActiveElapsed_.restart();

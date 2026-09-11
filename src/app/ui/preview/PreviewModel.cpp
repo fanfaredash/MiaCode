@@ -1,0 +1,405 @@
+#include "preview/PreviewModel.h"
+
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "common/MuriRenderOptions.h"
+#include "ui/preferences/LocaleService.h"
+
+#include <array>
+#include <QElapsedTimer>
+#include <QRegularExpression>
+#include <QVariantMap>
+#include <QCoreApplication>
+
+
+namespace miacode::ui {
+namespace {
+
+struct StatisticDescriptor {
+    const char* kind;
+    const char* fallbackName;
+};
+
+constexpr std::array<StatisticDescriptor, 6> kStatisticDescriptors{{
+    {"tap", "Tap"},
+    {"hold", "Hold"},
+    {"slide", "Slide"},
+    {"touch", "Touch"},
+    {"break", "Break"},
+    {"total", "Total"},
+}};
+
+} // namespace
+
+PreviewModel::PreviewModel(miacode::ShellNotifications& notifications,
+                                 miacode::PreviewSurface*& surfaceSlot,
+                                 miacode::PlaybackControl*& controlSlot,
+                                 QObject* parent)
+    : QObject(parent)
+    , notifications_(&notifications)
+    , surfaceSlot_(&surfaceSlot)
+    , controlSlot_(&controlSlot)
+{
+    v2UiProbeEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
+    connect(notifications_, &miacode::ShellNotifications::presentationChanged, this, [this]() {
+        updateV2UiProbePlaybackState();
+        refreshFromBackend();
+    });
+    connect(notifications_, &miacode::ShellNotifications::previewPlayheadChanged, this, [this]() {
+        updateV2UiProbePlaybackState();
+        refreshFromBackend();
+    });
+    connect(notifications_, &miacode::ShellNotifications::previewSkinDirectoryChanged, this, [this]() {
+        refreshSkinDirectory();
+        rebuildStatistics();
+        emit statisticsChanged();
+    });
+    connect(&miacode::LocaleService::instance(), &miacode::LocaleService::languageChanged,
+            this, [this](const QString&) { refreshFromBackend(true); });
+    refreshSkinDirectory();
+    refreshFromBackend(/*force=*/true);
+}
+
+void PreviewModel::resetV2UiProbe()
+{
+    v2UiProbeStatisticsRebuildCount_ = 0;
+    v2UiProbeStatisticsBuildNs_ = 0;
+    v2UiProbeStatisticsBuildMaxNs_ = 0;
+    v2UiProbeSkinResolveNs_ = 0;
+    v2UiProbeSkinResolveMaxNs_ = 0;
+    v2UiProbeShellStateChangeCount_ = 0;
+}
+
+void PreviewModel::appendV2UiProbeSummary() const
+{
+    if (!v2UiProbeEnabled_) {
+        return;
+    }
+    const double divisor = static_cast<double>(qMax<qint64>(1, v2UiProbeStatisticsRebuildCount_));
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/v2_preview_probe"),
+        QStringLiteral(
+            "action=playback_summary shell_state_changes=%1 statistics_rebuilds=%2 "
+            "statistics_build_avg_ms=%3 statistics_build_max_ms=%4 skin_resolve_avg_ms=%5 "
+            "skin_resolve_max_ms=%6"
+        )
+            .arg(v2UiProbeShellStateChangeCount_)
+            .arg(v2UiProbeStatisticsRebuildCount_)
+            .arg(v2UiProbeStatisticsBuildNs_ / divisor / 1000000.0, 0, 'f', 3)
+            .arg(v2UiProbeStatisticsBuildMaxNs_ / 1000000.0, 0, 'f', 3)
+            .arg(v2UiProbeSkinResolveNs_ / divisor / 1000000.0, 0, 'f', 3)
+            .arg(v2UiProbeSkinResolveMaxNs_ / 1000000.0, 0, 'f', 3)
+    );
+}
+
+void PreviewModel::refreshSkinDirectory()
+{
+    const bool probeThisResolve = v2UiProbeEnabled_ && v2UiProbePlaybackActive_;
+    QElapsedTimer skinTimer;
+    if (probeThisResolve) {
+        skinTimer.start();
+    }
+    skinDirectory_ = surface() != nullptr ? surface()->resolveSkinDir() : QString();
+    if (probeThisResolve) {
+        const qint64 skinElapsedNs = skinTimer.nsecsElapsed();
+        v2UiProbeSkinResolveNs_ += skinElapsedNs;
+        v2UiProbeSkinResolveMaxNs_ = qMax(v2UiProbeSkinResolveMaxNs_, skinElapsedNs);
+    }
+}
+
+void PreviewModel::rebuildStatistics()
+{
+    const bool probeThisBuild = v2UiProbeEnabled_ && v2UiProbePlaybackActive_;
+    QElapsedTimer totalTimer;
+    if (probeThisBuild) {
+        totalTimer.start();
+    }
+    QVariantList nextStatistics;
+    const QString skinRevision = QString::number(qHash(skinDirectory_));
+    for (qsizetype index = 0; index < static_cast<qsizetype>(kStatisticDescriptors.size()); ++index) {
+        const StatisticDescriptor& descriptor = kStatisticDescriptors.at(static_cast<std::size_t>(index));
+        const QString text = statisticsTexts_.value(index);
+        const int separator = text.indexOf(QRegularExpression(QStringLiteral("\\s")));
+        const QString name = separator > 0
+            ? text.left(separator)
+            : QString::fromLatin1(descriptor.fallbackName);
+        const QString value = separator > 0 ? text.mid(separator + 1).trimmed() : QStringLiteral("0/0");
+        const int valueSeparator = value.indexOf(QLatin1Char('/'));
+        const int played = valueSeparator > 0 ? value.left(valueSeparator).toInt() : 0;
+        const int total = valueSeparator > 0 ? value.mid(valueSeparator + 1).toInt() : 0;
+        const QString kind = QString::fromLatin1(descriptor.kind);
+        nextStatistics.append(QVariantMap{
+            {QStringLiteral("kind"), kind},
+            {QStringLiteral("name"), name},
+            {QStringLiteral("played"), played},
+            {QStringLiteral("total"), total},
+            {QStringLiteral("value"), value},
+            {QStringLiteral("iconSource"), kind == QStringLiteral("total")
+                ? QString()
+                : QStringLiteral("image://noteicon/%1?skin=%2").arg(kind, skinRevision)},
+        });
+    }
+    statistics_ = std::move(nextStatistics);
+    if (probeThisBuild) {
+        const qint64 totalElapsedNs = totalTimer.nsecsElapsed();
+        ++v2UiProbeStatisticsRebuildCount_;
+        v2UiProbeStatisticsBuildNs_ += totalElapsedNs;
+        v2UiProbeStatisticsBuildMaxNs_ = qMax(v2UiProbeStatisticsBuildMaxNs_, totalElapsedNs);
+    }
+}
+
+void PreviewModel::refreshFromBackend(bool force)
+{
+    if (surface() == nullptr) {
+        return;
+    }
+    const double nextPosition = surface()->positionSeconds();
+    const double nextDuration = surface()->durationSeconds();
+    const double nextLowerBound = surface()->lowerBoundSeconds();
+    QString nextRateLabel = surface()->playbackRateLabel().trimmed();
+    nextRateLabel.remove(QLatin1Char('x'), Qt::CaseInsensitive);
+    bool rateOk = false;
+    const double nextRate = nextRateLabel.toDouble(&rateOk);
+    const bool nextPlaying = surface()->playing();
+    const RenderMode nextRenderModeValue = surface()->muriRenderMode();
+    const QString nextRenderMode = muriRenderModeToken(nextRenderModeValue);
+    if (nextRenderModeValue == RenderMode::Native
+        || nextRenderModeValue == RenderMode::EraseByArea) {
+        lastRegularMode_ = nextRenderModeValue;
+    }
+    const bool nextMuriCheckEnabled = nextRenderModeValue == RenderMode::MaimuriDxStyle;
+    const bool nextSmoothStarErase = lastRegularMode_ != RenderMode::EraseByArea;
+    const QString nextRenderModeLabel = nextMuriCheckEnabled
+        ? qtTrId("qml.muri_analysis")
+        : qtTrId("qml.normal_rendering");
+    const QStringList nextStatisticsTexts = surface()->statsTexts();
+    const int nextMuriHandRadiusPx = surface()->muriHandRadiusPx();
+    const int nextMuriTapOnSlideThresholdMs = surface()->muriTapOnSlideThresholdMs();
+
+    const bool positionChangedValue = force || nextPosition != positionSeconds_;
+    const bool transportChangedValue = force
+        || nextDuration != durationSeconds_
+        || nextLowerBound != lowerBoundSeconds_
+        || (rateOk ? nextRate : 1.0) != rate_;
+    const bool playingChangedValue = force || nextPlaying != playing_;
+    const bool renderModeChangedValue = force
+        || nextRenderMode != renderMode_
+        || nextRenderModeLabel != renderModeLabel_
+        || nextMuriCheckEnabled != muriCheckEnabled_
+        || nextSmoothStarErase != smoothStarErase_;
+    const bool statisticsChangedValue = force || nextStatisticsTexts != statisticsTexts_;
+    const bool muriParametersChangedValue = force
+        || nextMuriHandRadiusPx != muriHandRadiusPx_
+        || nextMuriTapOnSlideThresholdMs != muriTapOnSlideThresholdMs_;
+
+    positionSeconds_ = nextPosition;
+    durationSeconds_ = nextDuration;
+    lowerBoundSeconds_ = nextLowerBound;
+    rate_ = rateOk ? nextRate : 1.0;
+    playing_ = nextPlaying;
+    renderMode_ = nextRenderMode;
+    renderModeLabel_ = nextRenderModeLabel;
+    muriCheckEnabled_ = nextMuriCheckEnabled;
+    smoothStarErase_ = nextSmoothStarErase;
+    muriHandRadiusPx_ = nextMuriHandRadiusPx;
+    muriTapOnSlideThresholdMs_ = nextMuriTapOnSlideThresholdMs;
+    if (statisticsChangedValue) {
+        statisticsTexts_ = nextStatisticsTexts;
+        rebuildStatistics();
+    }
+
+    if (transportChangedValue) {
+        emit transportChanged();
+    }
+    if (positionChangedValue) {
+        emit positionChanged();
+    }
+    if (playingChangedValue) {
+        emit playingChanged();
+    }
+    if (renderModeChangedValue) {
+        emit renderModeChanged();
+    }
+    if (muriParametersChangedValue) {
+        emit muriParametersChanged();
+    }
+    if (statisticsChangedValue) {
+        emit statisticsChanged();
+    }
+    emit presentationChanged();
+}
+
+void PreviewModel::updateV2UiProbePlaybackState()
+{
+    if (!v2UiProbeEnabled_ || surface() == nullptr) {
+        return;
+    }
+    const bool playingNow = surface()->playing();
+    if (playingNow && !v2UiProbePlaybackActive_) {
+        resetV2UiProbe();
+    } else if (!playingNow && v2UiProbePlaybackActive_) {
+        appendV2UiProbeSummary();
+    }
+    v2UiProbePlaybackActive_ = playingNow;
+    if (playingNow) {
+        ++v2UiProbeShellStateChangeCount_;
+    }
+}
+
+double PreviewModel::positionSeconds() const { return positionSeconds_; }
+double PreviewModel::durationSeconds() const { return durationSeconds_; }
+double PreviewModel::lowerBoundSeconds() const { return lowerBoundSeconds_; }
+double PreviewModel::rate() const { return rate_; }
+bool PreviewModel::playing() const { return playing_; }
+QString PreviewModel::renderMode() const { return renderMode_; }
+QString PreviewModel::renderModeLabel() const { return renderModeLabel_; }
+bool PreviewModel::muriCheckEnabled() const { return muriCheckEnabled_; }
+bool PreviewModel::smoothStarErase() const { return smoothStarErase_; }
+int PreviewModel::muriHandRadiusPx() const { return muriHandRadiusPx_; }
+int PreviewModel::muriTapOnSlideThresholdMs() const { return muriTapOnSlideThresholdMs_; }
+
+QVariantMap PreviewModel::muriParameterRanges() const
+{
+    using namespace miacode::muri;
+    return QVariantMap{
+        {QStringLiteral("handRadiusMin"), kHandRadiusMinPx},
+        {QStringLiteral("handRadiusMax"), kHandRadiusMaxPx},
+        {QStringLiteral("handRadiusStep"), kHandRadiusStepPx},
+        {QStringLiteral("handRadiusDefault"), kHandRadiusDefaultPx},
+        {QStringLiteral("tapOnSlideThresholdMin"), kStaticTapOnSlideThresholdMinMs},
+        {QStringLiteral("tapOnSlideThresholdMax"), kStaticTapOnSlideThresholdMaxMs},
+        {QStringLiteral("tapOnSlideThresholdStep"), kStaticTapOnSlideThresholdStepMs},
+    };
+}
+
+QVariantList PreviewModel::statistics() const { return statistics_; }
+
+QString PreviewModel::currentSkinDirectory() const
+{
+    return skinDirectory_;
+}
+
+QObject* PreviewModel::runtime() const { return surface()->previewRuntimeObject(); }
+QObject* PreviewModel::mediaHost() const { return surface()->stageMediaHostObject(); }
+
+double PreviewModel::canvasAspectRatio() const
+{
+    return surface() != nullptr ? surface()->canvasAspectRatio() : 1.0;
+}
+
+void PreviewModel::setPositionSeconds(double value) { playbackControl()->seek(value); }
+
+// The rate commands announce nothing. PlaybackCoordinator::applyPreviewPlaybackRate
+// writes the new rate and drives the audio and media route, but emits no shell
+// notification, and while the preview is paused no playhead tick arrives either
+// — so the shell keeps reporting the OLD rate indefinitely, and the menu tick,
+// the transport label and the rate HUD all read from that. Pulling the value
+// back here is what the render-mode commands below already do for the same
+// reason. Without it the rate menu and Ctrl+O / Ctrl+P look completely dead
+// from the outside even though the backend took the command.
+void PreviewModel::applyRateCommandResult(const QString& action, const QString& request)
+{
+    refreshFromBackend();
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/preview_rate"),
+        QStringLiteral("action=%1 %2 rate=%3").arg(action, request).arg(rate_),
+        true);
+}
+
+void PreviewModel::setRate(double value)
+{
+    playbackControl()->setPlaybackRate(value);
+    applyRateCommandResult(QStringLiteral("set"), QStringLiteral("requested=%1").arg(value));
+}
+void PreviewModel::setPlaying(bool value)
+{
+    if (value != playing()) playbackControl()->togglePlayback();
+}
+
+void PreviewModel::toggleRenderMode()
+{
+    surface()->toggleMuriRenderMode();
+    refreshFromBackend();
+}
+
+void PreviewModel::setMuriCheckEnabled(bool enabled)
+{
+    if (surface() == nullptr) {
+        return;
+    }
+    const RenderMode current = surface()->muriRenderMode();
+    if (enabled) {
+        if (current == RenderMode::MaimuriDxStyle) {
+            return;
+        }
+        surface()->setMuriRenderMode(RenderMode::MaimuriDxStyle);
+    } else {
+        if (current != RenderMode::MaimuriDxStyle) {
+            return;
+        }
+        surface()->setMuriRenderMode(lastRegularMode_);
+    }
+    refreshFromBackend();
+}
+
+void PreviewModel::setMuriHandRadiusPx(int radiusPx)
+{
+    if (surface() == nullptr) {
+        return;
+    }
+    surface()->setMuriHandRadiusPx(radiusPx);
+    // Like the render mode, nothing announces this back; pull the stored value.
+    refreshFromBackend();
+}
+
+void PreviewModel::setMuriTapOnSlideThresholdMs(int thresholdMs)
+{
+    if (surface() == nullptr) {
+        return;
+    }
+    surface()->setMuriTapOnSlideThresholdMs(thresholdMs);
+    refreshFromBackend();
+}
+
+void PreviewModel::setSmoothStarErase(bool enabled)
+{
+    if (surface() == nullptr) {
+        return;
+    }
+    lastRegularMode_ = enabled ? RenderMode::Native : RenderMode::EraseByArea;
+    if (surface()->muriRenderMode() != RenderMode::MaimuriDxStyle) {
+        surface()->setMuriRenderMode(lastRegularMode_);
+    }
+    refreshFromBackend();
+}
+
+void PreviewModel::stop() { playbackControl()->stop(); }
+
+void PreviewModel::togglePlayback() { playbackControl()->togglePlayback(); }
+
+void PreviewModel::adjustRate(int direction)
+{
+    playbackControl()->nudgePlaybackRate(direction);
+    applyRateCommandResult(QStringLiteral("nudge"), QStringLiteral("direction=%1").arg(direction));
+}
+
+void PreviewModel::logPreviewInteraction(const QString& action, const QString& payload)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/preview_interaction"),
+        action.trimmed().isEmpty()
+            ? payload
+            : (payload.isEmpty() ? action : QStringLiteral("%1 %2").arg(action, payload)),
+        true);
+}
+
+void PreviewModel::beginScrub() { playbackControl()->beginScrub(); }
+
+void PreviewModel::updateScrub(double second) { playbackControl()->updateScrub(second); }
+
+void PreviewModel::endScrub(double second) { playbackControl()->endScrub(second); }
+
+} // namespace miacode::ui

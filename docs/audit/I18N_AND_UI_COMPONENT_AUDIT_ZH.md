@@ -1,6 +1,8 @@
 ---
-lifecycle: working
+lifecycle: archive-legacy
 ---
+
+> 历史资料：记录 Qt Linguist 接入前的文案系统与整改背景。当前入口为 `translations/{en_US,zh_CN,ja_JP}.ts`、`LocaleService` 和 `PreferenceDocument`。
 
 # 代码审计：多语言处理分布 & UI 组件复用（2026-07-07）
 
@@ -22,7 +24,7 @@ lifecycle: working
 
 ### 机制 1 — 中央键值表 `UiText::text(key)`（"正统"路径）
 
-- `src/app/ui/UiText.cpp` 内硬编码两张 QHash：`zhMap` 364 键、`jaMap` 412 键。
+- 旧 `UiText.cpp` 内硬编码两张 QHash：`zhMap` 364 键、`jaMap` 412 键。
   查不到返回空串，由调用点的英文 fallback 参数兜底。
 - **英文没有自己的表**，只以散落在 ~359 个调用点的字面量形式存在。同一个键在不同调用点
   可以有不同英文，覆盖率不可审计。

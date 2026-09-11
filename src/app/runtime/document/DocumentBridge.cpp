@@ -45,9 +45,9 @@ bool miacode::runtime::DocumentSessionHost::updateDocumentField(
 {
     // A designer write under the unified mode fans out to every &des_N inside
     // ChartWorkspace, so this path stays the same shape for every field.
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::ChartWorkspace& workspace = session_.applicationServices_.workspace();
     if (!workspace.updateDocumentField(
-            static_cast<miacode::v2::ChartWorkspaceDocumentField>(field), value)) {
+            static_cast<miacode::ChartWorkspaceDocumentField>(field), value)) {
         return false;
     }
 
@@ -69,9 +69,9 @@ bool miacode::runtime::DocumentSessionHost::updateDifficultyField(
     Session::DifficultyField field,
     const QString& value)
 {
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::ChartWorkspace& workspace = session_.applicationServices_.workspace();
     if (!workspace.updateDifficultyField(
-            difficultyId, static_cast<miacode::v2::ChartWorkspaceDifficultyField>(field), value)) {
+            difficultyId, static_cast<miacode::ChartWorkspaceDifficultyField>(field), value)) {
         return false;
     }
 
@@ -83,7 +83,7 @@ bool miacode::runtime::DocumentSessionHost::updateDifficultyField(
 
 bool miacode::runtime::DocumentSessionHost::updateActiveChartText(const QString& value)
 {
-    miacode::v2::ChartWorkspace& workspace = session_.applicationServices_.workspace();
+    miacode::ChartWorkspace& workspace = session_.applicationServices_.workspace();
     const SimaiDifficultyData* difficulty =
         workspace.document().difficulty(state_.activeDifficultyId_);
     if (difficulty == nullptr || difficulty->chart == value) {
@@ -116,16 +116,16 @@ Session::DocumentSourceReplaceResult miacode::runtime::DocumentSessionHost::repl
     // Phase 1: construct and strictly preflight the complete candidate.  Do
     // not invalidate validation, load widgets, or mutate state until every
     // candidate difficulty is known to be presentable.
-    const miacode::qml_ui::DocumentSourcePreflightResult preflight =
-        miacode::qml_ui::preflightDocumentSource(value, miacode::runtime::shared::uiValidationLocale());
+    const miacode::ui::DocumentSourcePreflightResult preflight =
+        miacode::ui::preflightDocumentSource(value, miacode::runtime::shared::uiValidationLocale());
     result.issues = preflight.issues;
-    miacode::qml_ui::DocumentSourceTransactionInput transactionInput;
+    miacode::ui::DocumentSourceTransactionInput transactionInput;
     transactionInput.committedSourceText = session_.applicationServices_.workspace().document().toText();
     transactionInput.attemptedSourceText = value;
     transactionInput.retainedRevision = session_.documentValidationSnapshot().revision;
     transactionInput.issues = result.issues;
-    const miacode::qml_ui::DocumentSourceTransactionState transaction =
-        miacode::qml_ui::projectDocumentSourceTransaction(transactionInput);
+    const miacode::ui::DocumentSourceTransactionState transaction =
+        miacode::ui::projectDocumentSourceTransaction(transactionInput);
     result.accepted = transaction.accepted;
     result.revision = transaction.revision;
     result.issues = transaction.issues;
@@ -135,7 +135,7 @@ Session::DocumentSourceReplaceResult miacode::runtime::DocumentSessionHost::repl
 
     // Phase 2: publish the fully preflighted document as one transaction and
     // immediately request a fresh timeline/validation revision.
-    const miacode::v2::ChartWorkspaceResult replaced =
+    const miacode::ChartWorkspaceResult replaced =
         session_.applicationServices_.workspace().replaceSource(value);
     if (!replaced.accepted) {
         result.accepted = false;
@@ -144,7 +144,7 @@ Session::DocumentSourceReplaceResult miacode::runtime::DocumentSessionHost::repl
     // Hand-written &des_N can now disagree with the shared name; the text the
     // user submitted wins and the mode steps down if it does.
     reconcileUnifiedDocumentDesigner(
-        miacode::v2::DocumentBridge::UnifiedDesignerReconcileReason::SourceReplaced);
+        miacode::DocumentBridge::UnifiedDesignerReconcileReason::SourceReplaced);
     loadDocument();
     state_.documentDirty_ = session_.applicationServices_.workspace().snapshot().dirty;
     markCurrentFieldDirty();
@@ -197,14 +197,14 @@ const MuriRenderOptions& Session::muriRenderOptions() const
 
 QString miacode::runtime::DocumentSessionHost::sourceText() const
 {
-    const miacode::v2::ChartWorkspaceSnapshot snapshot =
+    const miacode::ChartWorkspaceSnapshot snapshot =
         session_.applicationServices_.workspace().snapshot();
     return snapshot.hasDocument ? snapshot.sourceText : QString();
 }
 
 void miacode::runtime::DocumentSessionHost::importDroppedAudio(
     const QStringList& audioPaths, quint64 requestId, quint64 generation,
-    miacode::v2::ChartDropImportService::Completion completion)
+    miacode::ChartDropImportService::Completion completion)
 {
     session_.handleAudioDrop(audioPaths, requestId, generation, std::move(completion));
 }
@@ -270,7 +270,7 @@ void miacode::runtime::DocumentSessionHost::setLeaveDocumentHandler(
 
 QString Session::documentSourceText() const
 {
-    const miacode::v2::ChartWorkspaceSnapshot snapshot = applicationServices_.workspace().snapshot();
+    const miacode::ChartWorkspaceSnapshot snapshot = applicationServices_.workspace().snapshot();
     return snapshot.hasDocument ? snapshot.sourceText : QString();
 }
 

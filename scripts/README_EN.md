@@ -55,7 +55,7 @@ only its six required dylibs; it does not discover or copy Homebrew.
 - `debug/Start_MiaCode_Debug.bat`: the only Windows debug launcher shipped in release packages.
 - `debug/Start_MiaCode_Debug.command`: the macOS debug launcher at the release package root; double-click it to launch `MiaCode.app` with `--debug` and write logs to the package-root `logs/` directory.
 - `debug/Start_MiaCode_SoftwareVideoDecode.bat`, `debug/Start_MiaCode_QtPluginDiag.bat`: public support diagnostics; not shipped in the Windows release package.
-- `ffmpeg/ensure-windows-ffmpeg.ps1`, `ffmpeg/ensure-macos-ffmpeg.sh`: provision the standalone export `ffmpeg`.
+- `ffmpeg/ensure-windows-ffmpeg.ps1`, `ffmpeg/ensure-macos-ffmpeg.sh`, `ffmpeg/ensure-linux-ffmpeg.sh`: provision the standalone export `ffmpeg`.
 - `ffmpeg/ensure-macos-ffmpeg-dev.sh`: builds the pinned macOS FFmpeg 6 SDK for QtAVPlayer preview decode.
 - `ffmpeg/ensure-windows-ffmpeg-dev.ps1`: provisions the Windows QtAVPlayer preview-decode dev SDK.
 - `ffmpeg/trim/`: builds a trimmed Windows decode-only FFmpeg dev SDK.

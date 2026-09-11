@@ -5,7 +5,7 @@ namespace miacode::runtime {
 TimelineCommandGate::TimelineCommandGate(quint64 sessionGeneration)
     : sessionGeneration_(sessionGeneration != 0
                              ? sessionGeneration
-                             : miacode::v2::nextSessionGeneration())
+                             : miacode::nextSessionGeneration())
 {
 }
 

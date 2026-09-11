@@ -6,7 +6,6 @@
 
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
 #include "common/ContentDurationConfig.h"
@@ -16,8 +15,8 @@
 #include "common/PreviewSfxAssets.h"
 #include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "app/qml_ui/export/QmlExportSession.h"
-#include "app/qml_ui/export/QmlExportSession.h"
+#include "app/ui/export/ExportSession.h"
+#include "app/ui/export/ExportSession.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/video_export/VideoExportController.h"
 #include "tools/video_export/VideoExportPreferences.h"
@@ -268,30 +267,30 @@ QString localizeExportWorkerMessageForUiLanguage(const QString& rawMessage)
     );
     const QRegularExpressionMatch renderMatch = renderProgressPattern.match(trimmed);
     if (renderMatch.hasMatch()) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.rendering_count"))
+        return qtTrId("dialog.video_export.progress.rendering_count")
             .arg(renderMatch.captured(1), renderMatch.captured(2));
     }
 
     if (trimmed == QLatin1String("Preparing SFX track...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.preparing_audio"));
+        return qtTrId("dialog.video_export.progress.preparing_audio");
     }
     if (trimmed == QLatin1String("Starting ffmpeg...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.starting_ffmpeg"));
+        return qtTrId("dialog.video_export.progress.starting_ffmpeg");
     }
     if (trimmed == QLatin1String("Rendering frames and encoding...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.rendering"));
+        return qtTrId("dialog.video_export.progress.rendering");
     }
     if (trimmed == QLatin1String("Finalizing encoded video stream...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.finalizing_encode"));
+        return qtTrId("dialog.video_export.progress.finalizing_encode");
     }
     if (trimmed == QLatin1String("Repacking MP4 for fast start...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.repacking"));
+        return qtTrId("dialog.video_export.progress.repacking");
     }
     if (trimmed == QLatin1String("Collecting export summary...")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.finishing"));
+        return qtTrId("dialog.video_export.progress.finishing");
     }
     if (trimmed == QLatin1String("Export completed.")) {
-        return UiText::text(QStringLiteral("dialog.video_export.progress.done"));
+        return qtTrId("dialog.video_export.progress.done");
     }
     return rawMessage;
 }
@@ -585,25 +584,25 @@ bool miacode::runtime::VideoExportHost::runBatchExport(
     }
     if (chartDirectories.isEmpty()) {
         if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_chart_dirs"));
+            *errorMessage = qtTrId("dialog.batch_export.error.no_chart_dirs");
         }
         return false;
     }
     if (selectedDifficultyIds.isEmpty()) {
         if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_difficulties"));
+            *errorMessage = qtTrId("dialog.batch_export.error.no_difficulties");
         }
         return false;
     }
     if (outputDirectory.trimmed().isEmpty()) {
         if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_output_dir"));
+            *errorMessage = qtTrId("dialog.batch_export.error.no_output_dir");
         }
         return false;
     }
     if (!QDir().mkpath(outputDirectory)) {
         if (errorMessage != nullptr) {
-            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.output_dir_create_failed"))
+            *errorMessage = qtTrId("dialog.batch_export.error.output_dir_create_failed")
                 + QStringLiteral("\n") + QDir::toNativeSeparators(outputDirectory);
         }
         return false;
@@ -624,16 +623,14 @@ bool miacode::runtime::VideoExportHost::runBatchExport(
         const QString chartPath = resolveChartPathFromCliInput(directoryInfo.absoluteFilePath());
         if (trackPath.isEmpty() || chartPath.isEmpty()) {
             result->failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
-                + UiText::text(trackPath.isEmpty()
-                    ? QStringLiteral("dialog.batch_export.error.missing_track_file")
-                    : QStringLiteral("dialog.batch_export.error.missing_chart_file")));
+                + qtTrId(trackPath.isEmpty() ? "dialog.batch_export.error.missing_track_file" : "dialog.batch_export.error.missing_chart_file"));
             continue;
         }
         bool usedSystemEncoding = false;
         const QString chartText = readTextFileWithFallbackEncoding(chartPath, &usedSystemEncoding);
         if (chartText.isNull()) {
             result->failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
-                + UiText::text(QStringLiteral("dialog.batch_export.error.read_chart_failed"))
+                + qtTrId("dialog.batch_export.error.read_chart_failed")
                     .arg(QFileInfo(chartPath).fileName()));
             continue;
         }
@@ -654,7 +651,7 @@ bool miacode::runtime::VideoExportHost::runBatchExport(
                 requested.append(SimaiDocument::difficultyShortName(difficultyId));
             }
             result->failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
-                + UiText::text(QStringLiteral("dialog.batch_export.error.no_selected_difficulties_in_folder"))
+                + qtTrId("dialog.batch_export.error.no_selected_difficulties_in_folder")
                     .arg(requested.join(QStringLiteral(", "))));
         }
     }
@@ -665,7 +662,7 @@ bool miacode::runtime::VideoExportHost::runBatchExport(
         if (callbacks.progressChanged) {
             callbacks.progressChanged(
                 qRound(static_cast<double>(index) * 100.0 / totalJobs),
-                UiText::text(QStringLiteral("dialog.batch_export.progress.exporting_named"))
+                qtTrId("dialog.batch_export.progress.exporting_named")
                     .arg(index + 1).arg(jobs.size()).arg(job.displayName));
         }
         if (callbacks.cancellationRequested && callbacks.cancellationRequested()) {
@@ -697,7 +694,7 @@ bool miacode::runtime::VideoExportHost::runBatchExport(
                 / static_cast<double>(totalJobs);
             callbacks.progressChanged(
                 qBound(0, qRound(overall * 100.0), 100),
-                UiText::text(QStringLiteral("dialog.batch_export.progress.current_item"))
+                qtTrId("dialog.batch_export.progress.current_item")
                     .arg(job.displayName).arg(localizeExportWorkerMessageForUiLanguage(rawMessage)));
         };
         if (!runVideoExportWorkerSync(

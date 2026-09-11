@@ -198,13 +198,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
     // only after the selected platform hardware decoder reports InvalidMedia.
     using DecodePref = miacode::debug_options::PreviewVideoDecodePreference;
     const DecodePref decodePref = miacode::debug_options::previewVideoDecodePreference();
-    bool forceSoftware = videoDecodePreferSoftware_;
-    switch (decodePref) {
-    case DecodePref::ForceSoftware: forceSoftware = true; break;
-    case DecodePref::ForceHardware: forceSoftware = false; break;
-    case DecodePref::Auto:          break;  // env unset -> honor the user preference
-    }
-    const bool useSoftware = softwareDecodeFallbackTried_ || forceSoftware;
+    const bool useSoftware = videoDecodeUsesSoftware();
     if (useSoftware) {
         player_->setInputVideoCodec(QStringLiteral("software"));
     }
@@ -229,6 +223,13 @@ void PreviewStageMediaHost::initializeBackendObjects()
     appendPreviewStageMediaLog(
         QStringLiteral("media_backend"),
         QString("backend=qtavplayer ffmpeg=1 hardware_decoder=videotoolbox qt_runtime_version=%1 force_software=%2 pref=%3 renderer_bridge=metal")
+            .arg(QString::fromLatin1(qVersion()))
+            .arg(useSoftware ? 1 : 0)
+            .arg(QString::fromLatin1(prefName)));
+#elif defined(Q_OS_LINUX)
+    appendPreviewStageMediaLog(
+        QStringLiteral("media_backend"),
+        QString("backend=qtavplayer ffmpeg=1 hardware_decoder=vaapi qt_runtime_version=%1 force_software=%2 pref=%3 renderer_bridge=drm_egl")
             .arg(QString::fromLatin1(qVersion()))
             .arg(useSoftware ? 1 : 0)
             .arg(QString::fromLatin1(prefName)));
@@ -906,7 +907,7 @@ void PreviewStageMediaHost::reloadVideoDecodeInPlace()
             .arg(mediaPath_));
     player_->stop();
     player_->setInputVideoCodec(
-        videoDecodePreferSoftware_ ? QStringLiteral("software") : QString());
+        videoDecodeUsesSoftware() ? QStringLiteral("software") : QString());
     player_->setSource(QString());
     player_->setSource(mediaPath_);
     player_->setSpeed(static_cast<qreal>(playbackRate_));
@@ -918,6 +919,60 @@ void PreviewStageMediaHost::reloadVideoDecodeInPlace()
     }
 }
 #endif  // MIACODE_USE_QTAVPLAYER
+
+bool PreviewStageMediaHost::videoDecodeUsesSoftware() const
+{
+#ifdef MIACODE_USE_QTAVPLAYER
+    using DecodePref = miacode::debug_options::PreviewVideoDecodePreference;
+    const DecodePref decodePref = miacode::debug_options::previewVideoDecodePreference();
+    bool forceSoftware = videoDecodePreferSoftware_;
+    switch (decodePref) {
+    case DecodePref::ForceSoftware: forceSoftware = true; break;
+    case DecodePref::ForceHardware: forceSoftware = false; break;
+    case DecodePref::Auto:          break;
+    }
+    return softwareDecodeFallbackTried_ || forceSoftware;
+#else
+    return false;
+#endif
+}
+
+QString PreviewStageMediaHost::videoDecodeDescription() const
+{
+    if (mediaKind_ != MediaKind::Video || !hasVideoMedia()) {
+        return QStringLiteral("None");
+    }
+#ifdef MIACODE_USE_QTAVPLAYER
+    if (videoDecodeUsesSoftware()) {
+        return QStringLiteral("CPU (Software)");
+    }
+    if (lastVideoFrame_.isValid()) {
+        if (lastVideoFrame_.handleType() == QVideoFrame::RhiTextureHandle) {
+#if defined(Q_OS_LINUX)
+            return QStringLiteral("GPU (VA-API)");
+#elif defined(Q_OS_WIN)
+            return QStringLiteral("GPU (D3D11VA)");
+#elif defined(Q_OS_MACOS)
+            return QStringLiteral("GPU (VideoToolbox)");
+#else
+            return QStringLiteral("GPU (Hardware)");
+#endif
+        }
+        return QStringLiteral("CPU (Software)");
+    }
+#if defined(Q_OS_LINUX)
+    return QStringLiteral("GPU (VA-API)");
+#elif defined(Q_OS_WIN)
+    return QStringLiteral("GPU (D3D11VA)");
+#elif defined(Q_OS_MACOS)
+    return QStringLiteral("GPU (VideoToolbox)");
+#else
+    return QStringLiteral("GPU (Hardware)");
+#endif
+#else
+    return QStringLiteral("QtMultimedia");
+#endif
+}
 
 void PreviewStageMediaHost::setVideoDecodePreference(bool preferSoftware)
 {
@@ -942,7 +997,7 @@ void PreviewStageMediaHost::setVideoDecodePreference(bool preferSoftware)
         } else {
             // No PV loaded yet: apply now so the next load uses the chosen decoder.
             player_->setInputVideoCodec(
-                preferSoftware ? QStringLiteral("software") : QString());
+                videoDecodeUsesSoftware() ? QStringLiteral("software") : QString());
         }
     }
 #endif

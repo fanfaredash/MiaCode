@@ -1,6 +1,7 @@
 #include "AppVersion.h"
-#include "qml_ui/QmlUiBootstrap.h"
-#include "UiText.h"
+#include "ui/Bootstrap.h"
+#include "preferences/PreferenceDocument.h"
+#include "preferences/LocaleService.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
@@ -22,6 +23,8 @@
 #include <QIcon>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPixmap>
+#include <QSize>
 #include <QTextStream>
 #include <QTimer>
 #include <QStringList>
@@ -53,6 +56,28 @@
 #include "MainEntrypoints.h"
 
 namespace {
+
+QIcon applicationWindowIcon()
+{
+#ifdef Q_OS_LINUX
+    const QPixmap source(QStringLiteral(":/icons/app.png"));
+    if (!source.isNull()) {
+        QIcon icon;
+        const int iconSizes[] = {16, 20, 22, 24, 32, 48, 64, 96, 128, 256};
+        for (const int size : iconSizes) {
+            icon.addPixmap(
+                source.scaled(
+                    QSize(size, size),
+                    Qt::KeepAspectRatio,
+                    Qt::SmoothTransformation
+                )
+            );
+        }
+        return icon;
+    }
+#endif
+    return QIcon(QStringLiteral(":/icons/app.png"));
+}
 
 bool wantsCliVideoExport(const QStringList& arguments)
 {
@@ -218,6 +243,17 @@ int main(int argc, char* argv[])
     const bool cliVideoExportRequested = wantsCliVideoExport(rawArgs);
     const bool cliVideoExportWorkerRequested = wantsCliVideoExportWorker(rawArgs);
     const bool forceOpenGlGraphicsApi = cliVideoExportRequested || cliVideoExportWorkerRequested;
+#if defined(Q_OS_LINUX)
+    const QString requestedQpaPlatform =
+        qEnvironmentVariable("QT_QPA_PLATFORM").trimmed().toLower();
+    const bool exportUsesXcb =
+        forceOpenGlGraphicsApi
+        && (requestedQpaPlatform.startsWith(QStringLiteral("xcb"))
+            || requestedQpaPlatform.isEmpty());
+    if (exportUsesXcb && qEnvironmentVariableIsEmpty("QT_XCB_GL_INTEGRATION")) {
+        qputenv("QT_XCB_GL_INTEGRATION", QByteArrayLiteral("xcb_egl"));
+    }
+#endif
     const QString startupOpenTarget =
         !cliVideoExportRequested && !cliVideoExportWorkerRequested
             ? startupOpenTargetFromArguments(rawArgs)
@@ -510,7 +546,7 @@ int main(int argc, char* argv[])
 #endif
     app.setApplicationName("MiaCode");
     app.setApplicationVersion(MIACODE_DISPLAY_VERSION_STRING);
-    const QIcon appIcon(QStringLiteral(":/icons/app.png"));
+    const QIcon appIcon = applicationWindowIcon();
 #ifndef Q_OS_MACOS
     app.setWindowIcon(appIcon);
 #endif
@@ -518,7 +554,7 @@ int main(int argc, char* argv[])
 
     {
         QStringList cjkUiFamilies;
-        const QString uiLanguageToken = UiText::resolvedLanguageToken();
+        const QString uiLanguageToken = PreferenceDocument::resolvedLanguageToken();
         if (uiLanguageToken.startsWith(QStringLiteral("zh"))) {
             cjkUiFamilies = QStringList{"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC"};
         } else if (uiLanguageToken.startsWith(QStringLiteral("ja"))) {
@@ -542,6 +578,9 @@ int main(int argc, char* argv[])
         }
     }
     logStartupStage("ui_font_ready");
+
+    miacode::LocaleService::instance().applyResolvedLanguage();
+    logStartupStage("ui_locale_ready");
 
     if (cliVideoExportWorkerRequested) {
         QString cliError;
@@ -624,8 +663,8 @@ int main(int argc, char* argv[])
 #endif
         // Scope the bootstrap so it is destroyed before the teardown timing below.
         {
-            QmlUiBootstrap qmlUiBootstrap(appIcon);
-            if (!qmlUiBootstrap.start(startupOpenTarget)) {
+            miacode::ui::Bootstrap uiBootstrap(appIcon);
+            if (!uiBootstrap.start(startupOpenTarget)) {
 #ifdef Q_OS_WIN
                 miacode::oplog::appendStartupBeaconLine("phase=qml_ui_bootstrap_failed");
 #endif

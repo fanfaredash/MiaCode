@@ -2,13 +2,13 @@
 
 #include "runtime/Session.h"
 
-#include "app/v2/MediaToolsEngine.h"
+#include "app/services/MediaToolsEngine.h"
 
 #include <functional>
 
 namespace miacode::runtime {
 
-class MediaJobsHost final : public miacode::v2::MediaToolsEngine {
+class MediaJobsHost final : public miacode::MediaToolsEngine {
 public:
     MediaJobsHost(Session& session, RuntimeContext::Ui& ui, RuntimeContext::State& state);
 

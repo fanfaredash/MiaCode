@@ -9,7 +9,7 @@
 #include "editor/BookmarkCommentSyntax.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
-#include "UiText.h"
+#include "preferences/PreferenceDocument.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -131,12 +131,12 @@ QString defaultBookmarkNameFromComment(const QString& text)
 // usable comment: "第 8 行" / "L8".
 QString fallbackBookmarkNameForLine(int line)
 {
-    return UiText::text(QStringLiteral("editor.l_1")).arg(qMax(1, line));
+    return qtTrId("editor.l_1").arg(qMax(1, line));
 }
 
 QString defaultExplicitBookmarkLabel()
 {
-    return UiText::text(QStringLiteral("editor.new_bookmark"));
+    return qtTrId("editor.new_bookmark");
 }
 
 struct BookmarkCommentCandidate {
@@ -308,7 +308,7 @@ void miacode::runtime::EditorHost::loadPortableState()
         kEditorTextFontSizeMax
     );
 
-    const QJsonObject root = UiText::loadPreferencesObject();
+    const QJsonObject root = PreferenceDocument::loadPreferencesObject();
     const QJsonObject ui = root.value("ui").toObject();
     const QJsonObject app = root.value("app").toObject();
     const QJsonObject preview = app.value("preview").toObject();
@@ -760,7 +760,7 @@ void miacode::runtime::EditorHost::applyPortablePreviewSettings(const QJsonObjec
 
 void miacode::runtime::EditorHost::savePortableState() const
 {
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject ui = root.value("ui").toObject();
     QJsonObject app = root.value("app").toObject();
     QJsonObject preview = app.value("preview").toObject();
@@ -913,12 +913,12 @@ void miacode::runtime::EditorHost::savePortableState() const
 
     app.insert("preview", preview);
     root.insert("app", app);
-    UiText::savePreferencesObject(root);
+    PreferenceDocument::savePreferencesObject(root);
 }
 
 void miacode::runtime::EditorHost::persistEditorTextFontPreference() const
 {
-    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject ui = root.value("ui").toObject();
     ui.insert("editor_text_font_size", state_.editorTextFontPointSize_);
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
@@ -927,7 +927,7 @@ void miacode::runtime::EditorHost::persistEditorTextFontPreference() const
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
     ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
     root.insert("ui", ui);
-    UiText::savePreferencesObject(root);
+    PreferenceDocument::savePreferencesObject(root);
 }
 
 void miacode::runtime::EditorHost::applyEditorTextFontSize(int pointSize, bool persistPreference)

@@ -144,7 +144,7 @@ src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp
 `MainWindow::requestQmlEditorNavigation(...)` 调用注册在 `QmlDocumentModel` 中的处理器：
 
 ```text
-src/app/qml_ui/QmlDocumentModel.cpp:36
+src/app/ui/document/DocumentModel.cpp:36
 ```
 
 处理器在同一调用栈中同步发出：
@@ -160,7 +160,7 @@ emit qmlEditorNavigationRequested(...);
 信号由以下位置处理：
 
 ```text
-src/app/qml_ui/editor/SourceEditor.qml
+src/app/ui/editor/SourceEditor.qml
 ```
 
 调用过程：

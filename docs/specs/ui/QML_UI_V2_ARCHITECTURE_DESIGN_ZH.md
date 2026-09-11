@@ -59,7 +59,7 @@ v2 目前是一层 QML 外壳，驱动一个**隐藏的 v1 `QMainWindow`**。这
 ```
 QML UI (MiaCode.UI)            纯 Qt Quick，零 C++ UI 类型
         ↓  窄 QObject 门面
-v2 应用层  src/app/v2/
+v2 应用层  src/app/services/
    ApplicationServices  服务装配 + 生命周期（非 Widgets）
    ChartWorkspace    文档 + 难度 + revision + dirty（唯一所有者）
    AnalysisService   校验 + Muri，输出带 revision 的快照

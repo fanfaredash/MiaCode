@@ -33,30 +33,30 @@
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
-#include "app/qml_ui/QmlDocumentProjection.h"
-#include "app/qml_ui/QmlAnalysisProjection.h"
-#include "app/v2/ApplicationServices.h"
-#include "app/v2/PlaybackControl.h"
-#include "app/v2/PlaybackPreferencesPort.h"
-#include "app/v2/PlaybackPreviewPort.h"
-#include "app/v2/EditorSyncController.h"
-#include "app/v2/ChartDropImportService.h"
+#include "app/ui/document/DocumentProjection.h"
+#include "app/ui/document/AnalysisProjection.h"
+#include "app/services/ApplicationServices.h"
+#include "app/services/PlaybackControl.h"
+#include "app/services/PlaybackPreferencesPort.h"
+#include "app/services/PlaybackPreviewPort.h"
+#include "app/services/EditorSyncController.h"
+#include "app/services/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "runtime/RuntimeContext.h"
 
 class QByteArray;
 class QChronoTimer;
 class PreviewStageMediaHost;
-class QmlEditorPageHost;
-class QmlExportSession;
-namespace miacode::v2 {
+namespace miacode {
 class UiRequestService;
 class JobProgressService;
 }
-namespace miacode::qml_ui {
-class QmlPreviewSettingsModel;
+namespace miacode::ui {
+class PageHost;
+class ExportSession;
+class PreviewSettingsModel;
+class Bootstrap;
 }
-class QmlUiBootstrap;
 namespace miacode::latency {
 class LatencySandboxController;
 }
@@ -104,8 +104,8 @@ class PreviewHost;
 
 // QML 通过 ApplicationServices 槽位调用运行时宿主；本类只装配宿主并附着根窗口。
 class Session : public QObject,
-                public miacode::v2::PlaybackPreferencesPort,
-                public miacode::v2::PlaybackPreviewPort
+                public miacode::PlaybackPreferencesPort,
+                public miacode::PlaybackPreviewPort
 {
     Q_OBJECT
 
@@ -143,10 +143,10 @@ signals:
     void normalizeWholeChartRequested();
     void mediaToolsRequested();
     void preferencesRequested();
-    // Routed by QmlEditorPageHost to the v2 cover page.
+    // Routed by PageHost to the v2 cover page.
     void coverExportRequested(int difficultyId);
-    // Routed by QmlEditorPageHost to open the video export page once the
-    // matching selection range has been seeded onto QmlExportSession.
+    // Routed by PageHost to open the video export page once the
+    // matching selection range has been seeded onto ExportSession.
     void selectionRangeExportPageRequested();
     void documentValidationChanged();
     void previewSkinDirectoryChanged();
@@ -173,8 +173,8 @@ public:
         Designer,
     };
 
-    using DocumentValidationSnapshot = miacode::qml_ui::DocumentValidationProjection;
-    using QmlAnalysisSnapshot = miacode::qml_ui::AnalysisProjection;
+    using DocumentValidationSnapshot = miacode::ui::DocumentValidationProjection;
+    using QmlAnalysisSnapshot = miacode::ui::AnalysisProjection;
 
     // Result of the all-or-nothing QML metadata-source replacement.  The
     // candidate is parsed and strictly validated before the live document is
@@ -182,7 +182,7 @@ public:
     struct DocumentSourceReplaceResult {
         bool accepted = false;
         quint64 revision = 0;
-        QVector<miacode::qml_ui::DocumentValidationProjectionIssue> issues;
+        QVector<miacode::ui::DocumentValidationProjectionIssue> issues;
     };
 
     enum class QmlDocumentCommitKind {
@@ -225,10 +225,10 @@ public:
 
     // The application services are constructed before the window and outlive
     // it: the document domain, the UI-request boundary and the job-progress
-    // surface belong to miacode::v2::ApplicationServices, not to a QWidget.
+    // surface belong to miacode::ApplicationServices, not to a QWidget.
     // Session borrows them (stage 3.5 item 1) — it must not own or
     // re-create any of them.
-    explicit Session(miacode::v2::ApplicationServices& services,
+    explicit Session(miacode::ApplicationServices& services,
                         QObject* parent = nullptr);
     ~Session() override;
     bool exportPreviewVideoFromCli(
@@ -255,8 +255,8 @@ public:
     int documentActiveDifficultyId() const;
     void publishEditorCaret(int difficultyId, int line, int column);
     void handleEditorPointerInteraction(int difficultyId);
-    miacode::v2::EditorSyncController& editorSyncController();
-    const miacode::v2::EditorSyncController& editorSyncController() const;
+    miacode::EditorSyncController& editorSyncController();
+    const miacode::EditorSyncController& editorSyncController() const;
     bool editorAuthoringContextActive() const;
     void refreshEditorAuthoringContext();
     void setTouchPadAuthoringCtrlHold(bool active);
@@ -324,7 +324,7 @@ public:
     void handleAudioDrop(const QStringList& audioPaths,
                          quint64 requestId,
                          quint64 generation,
-                         miacode::v2::ChartDropImportService::Completion completion);
+                         miacode::ChartDropImportService::Completion completion);
     bool rootWindowFrameGeometryAvailable() const;
     QRect rootWindowFrameGeometry() const;
     void setBackendActive(bool active);
@@ -338,9 +338,9 @@ public:
     void setChartNormalizeOptions(const miacode::chart_transform::ChartNormalizationOptions& options);
     // Read-only hand-off to the single export-session owner. QML page services
     // may compose on top of this session, but never construct another one.
-    QmlExportSession* qmlExportSession() const { return qmlExportSession_; }
-    miacode::v2::UiRequestService* uiRequestService() const;
-    miacode::v2::JobProgressService* jobProgressService() const;
+    miacode::ui::ExportSession* qmlExportSession() const { return qmlExportSession_; }
+    miacode::UiRequestService* uiRequestService() const;
+    miacode::JobProgressService* jobProgressService() const;
     // PlaybackPreviewPort: the port's one method that is Session's own
     // orchestration rather than a StageMediaHost forward — see
     // PlaybackPreviewPort.h.
@@ -376,9 +376,9 @@ private:
     std::function<bool(const QString&)> qmlChartTextHandler_;
     quint64 appliedQmlWorkspaceRevision_ = 0;
     // Borrowed from applicationServices_; never owned here.
-    miacode::v2::ApplicationServices& applicationServices_;
-    miacode::v2::EditorSyncController* editorSyncController_ = nullptr;
-    miacode::v2::ChartDropImportService* chartDropImportService_ = nullptr;
+    miacode::ApplicationServices& applicationServices_;
+    miacode::EditorSyncController* editorSyncController_ = nullptr;
+    miacode::ChartDropImportService* chartDropImportService_ = nullptr;
     using BatchTransform = std::function<QString(const QString&, int*)>;
     using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {
@@ -468,12 +468,12 @@ public:
 
     // The QML pages' bounded reach into the window.
     //
-    // These were private, which meant QmlCommandService, QmlPreviewModel and
-    // QmlPreviewSettingsModel each needed `friend class` — and a friend grant is
+    // These were private, which meant CommandService, PreviewModel and
+    // PreviewSettingsModel each needed `friend class` — and a friend grant is
     // unbounded: it lets any later edit reach any member, forever. Publishing
     // exactly what those pages call replaced three blanket grants with this
     // list, at no cost to the recorded surface (docs/specs/ui/
-    // QML_UI_V2_BACKEND_SURFACE_ZH.md already counted every name here).
+    // UI_BACKEND_SURFACE_ZH.md already counted every name here).
     //
     // The skin/outline entries are catalog queries — path resolution and
     // directory listing, no state of their own. The two setters already took a
@@ -498,7 +498,7 @@ public:
     int activeDifficultyId() const;
 
     // The live-surface half of the preview appearance settings. The values
-    // themselves belong to miacode::v2::PreviewAppearanceState; these two push
+    // themselves belong to miacode::PreviewAppearanceState; these two push
     // them into the objects only this window holds, so the QML pages no longer
     // need `friend` access to scene_ / previewSfxRuntime_ to make an
     // appearance change take effect.

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "app/v2/PreviewSurface.h"
-#include "app/v2/TimelineSurface.h"
+#include "app/services/PreviewSurface.h"
+#include "app/services/TimelineSurface.h"
 
 namespace miacode::runtime {
 
@@ -10,7 +10,7 @@ class PlaybackCoordinator;
 // These adapters keep the legacy ApplicationServices surface contracts stable
 // while the coordinator itself implements only playback contracts. They carry
 // no transport, timeline, render, or document state of their own.
-class PlaybackPreviewSurfaceAdapter final : public miacode::v2::PreviewSurface
+class PlaybackPreviewSurfaceAdapter final : public miacode::PreviewSurface
 {
 public:
     explicit PlaybackPreviewSurfaceAdapter(PlaybackCoordinator& coordinator);
@@ -18,7 +18,7 @@ public:
     void invalidateSession();
 
     bool playing() const override;
-    miacode::v2::PlaybackTransportState playbackTransportState() const override;
+    miacode::PlaybackTransportState playbackTransportState() const override;
     double positionSeconds() const override;
     double durationSeconds() const override;
     double lowerBoundSeconds() const override;
@@ -58,7 +58,7 @@ private:
     PlaybackCoordinator* coordinator_ = nullptr;
 };
 
-class PlaybackTimelineSurfaceAdapter final : public miacode::v2::TimelineSurface
+class PlaybackTimelineSurfaceAdapter final : public miacode::TimelineSurface
 {
 public:
     explicit PlaybackTimelineSurfaceAdapter(PlaybackCoordinator& coordinator);
