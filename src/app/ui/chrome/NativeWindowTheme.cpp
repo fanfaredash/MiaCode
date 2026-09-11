@@ -27,6 +27,7 @@ constexpr DWORD kDwmwaMicaEffect = 1029;
 constexpr int kDwmsbtNone = 1;
 constexpr int kDwmsbtMainWindow = 2;
 constexpr COLORREF kDwmColorDefault = 0xFFFFFFFF;
+constexpr COLORREF kDwmColorNone = 0xFFFFFFFE;
 
 bool setDwmWindowAttribute(HWND hwnd, DWORD attribute, const void* value, DWORD size)
 {
@@ -61,16 +62,15 @@ void applyToNativeHandle(HWND hwnd, bool active, bool backdropEnabled, bool forc
     const BOOL darkMode = UiTheme::isDarkTheme() ? TRUE : FALSE;
     setDwmWindowAttribute(hwnd, kDwmwaUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
 
+    setDwmWindowAttribute(hwnd, kDwmwaBorderColor, &kDwmColorNone, sizeof(kDwmColorNone));
+
     if (PreferenceDocument::preferredTheme() == PreferenceDocument::ThemePreference::System) {
-        setDwmWindowAttribute(hwnd, kDwmwaBorderColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
         setDwmWindowAttribute(hwnd, kDwmwaCaptionColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
         setDwmWindowAttribute(hwnd, kDwmwaTextColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
     } else {
         const UiTheme::Colors& themeColors = UiTheme::colors();
-        const COLORREF borderColor = colorRefForDwm(active ? themeColors.borderStrong : themeColors.borderSoft);
         const COLORREF captionColor = colorRefForDwm(active ? themeColors.toolbarBg : themeColors.windowAltBg);
         const COLORREF textColor = colorRefForDwm(active ? themeColors.textPrimary : themeColors.textSecondary);
-        setDwmWindowAttribute(hwnd, kDwmwaBorderColor, &borderColor, sizeof(borderColor));
         setDwmWindowAttribute(hwnd, kDwmwaCaptionColor, &captionColor, sizeof(captionColor));
         setDwmWindowAttribute(hwnd, kDwmwaTextColor, &textColor, sizeof(textColor));
     }
