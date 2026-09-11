@@ -279,7 +279,7 @@ miacode::preview_audio::PreviewAudioHealthSample BassPreviewAudioBackend::sample
     // rather than after the early-return below.
     if (engineInitialized_) {
         drainOutputGlitchEvents();
-        drainSfxCallbackEvents();
+        serviceSfxScheduler();
     }
     if (!engineInitialized_ || !audioHealthPlaybackRunning_.load(std::memory_order_acquire)) {
         // A2: this used to return before latestHealthSample_ was ever assigned below, so
@@ -885,11 +885,9 @@ double BassPreviewAudioBackend::syncPreviewPlaybackClockTransaction(double fallb
     if (shuttingDown_.load(std::memory_order_acquire)) {
         return playbackSession_.lastAuthoritativeSecond;
     }
-    // The BASS callback never waits for schedulerMutex_. If it collided with a worker
-    // operation, complete that one-shot sync here while there is still buffer lead, then
-    // emit any POD diagnostics the callback handed off without formatting.
-    drainSfxCallbackEvents();
-    drainDeferredMixerSync();
+    // Non-GUI tools only: the worker never dispatches this method, which is why the
+    // scheduler upkeep also runs from drainEvents()/syncBackgroundTrack()/sampleHealth().
+    serviceSfxScheduler();
     logTrackFileMissingAfterLoadIfNeeded();
     const double second = authoritativeSecond();
     playbackSession_.lastAuthoritativeSecond = second;

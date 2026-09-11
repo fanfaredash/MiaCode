@@ -103,6 +103,32 @@ void PreviewHost::toggleMuriRenderMode()
     }
 }
 
+int PreviewHost::muriHandRadiusPx() const
+{
+    return legacySurface_ != nullptr ? legacySurface_->muriHandRadiusPx()
+                                     : miacode::muri::kHandRadiusDefaultPx;
+}
+
+void PreviewHost::setMuriHandRadiusPx(int radiusPx)
+{
+    if (legacySurface_ != nullptr) {
+        legacySurface_->setMuriHandRadiusPx(radiusPx);
+    }
+}
+
+int PreviewHost::muriTapOnSlideThresholdMs() const
+{
+    return legacySurface_ != nullptr ? legacySurface_->muriTapOnSlideThresholdMs()
+                                     : miacode::muri::kStaticTapOnSlideThresholdDefaultMs;
+}
+
+void PreviewHost::setMuriTapOnSlideThresholdMs(int thresholdMs)
+{
+    if (legacySurface_ != nullptr) {
+        legacySurface_->setMuriTapOnSlideThresholdMs(thresholdMs);
+    }
+}
+
 QStringList PreviewHost::availableSkinDirectoryNames() const
 {
     return legacySurface_ != nullptr ? legacySurface_->availableSkinDirectoryNames() : QStringList();

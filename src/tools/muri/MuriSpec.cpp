@@ -5,9 +5,12 @@
 #include <QtMath>
 
 #include "common/MuriConfig.h"
+#include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
 #include "timeline/TimelineMarkerOffset.h"
 #include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriAnalyzerInternal.h"
+#include "tools/muri/MuriRuntimeModelBuilder.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
 
@@ -166,6 +169,50 @@ int main(int argc, char** argv)
         err << "[FAIL] " << message << '\n';
         ++failed;
     };
+
+    {
+        // 手部半径 is set in the 1080 px reference playfield the pad geometry is written in.
+        // The default keeps the established hand; a configured radius is the footprint both
+        // the runtime judge and the overlay hand trails use.
+        MuriRenderOptions options;
+        expect(options.handRadiusPx == miacode::muri::kHandRadiusDefaultPx
+                   && nearlyEqual(miacode::muri::handRadiusForOptions(options), miacode::muri::kHandRadiusNormal),
+               QStringLiteral("the default hand radius is the established reference hand"));
+
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("(120){4}1,1h[4:1],B1,1-5[4:1],\nE\n"));
+        expect(parsed.ok, QStringLiteral("hand radius chart parses"));
+        options.handRadiusPx = 60;
+        const double configuredRadius = miacode::muri::handRadiusForOptions(options);
+        expect(nearlyEqual(configuredRadius, miacode::muri::kLogicalCanvasSize * 60.0 / 1080.0),
+               QStringLiteral("a configured hand radius converts from the 1080 px reference"));
+
+        const miacode::muri::detail::MuriRuntimeModel model =
+            miacode::muri::detail::MuriRuntimeModelBuilder::build(parsed.noteMarkers);
+        const auto actions = miacode::muri::detail::buildRuntimeHandActions(
+            parsed.noteMarkers, model.notes, model.touchGroups, model.touchGroupByChildNoteIndex,
+            configuredRadius, true);
+        bool actionsUseRadius = !actions.isEmpty();
+        for (const auto& action : actions) {
+            actionsUseRadius = actionsUseRadius && nearlyEqual(action.radius, configuredRadius);
+        }
+        expect(actionsUseRadius, QStringLiteral("the runtime judge's hands use the configured radius"));
+
+        const MuriAnalysisReport report = MuriAnalyzer::analyze(parsed.noteMarkers, options);
+        bool trailsUseRadius = !report.actionTrails.isEmpty();
+        for (const MuriActionTrail& trail : report.actionTrails) {
+            trailsUseRadius = trailsUseRadius && nearlyEqual(trail.radius, configuredRadius);
+        }
+        expect(trailsUseRadius, QStringLiteral("the overlay hand trails use the configured radius"));
+
+        expect(miacode::muri::kHandRadiusMinPx == 0 && miacode::muri::kHandRadiusMaxPx == 60
+                   && miacode::muri::kHandRadiusMaxPx == 2 * miacode::muri::kHandRadiusDefaultPx
+                   && miacode::muri::normalizedHandRadiusPx(0) == 0,
+               QStringLiteral("the hand radius spans 0%-200% of the default hand"));
+        expect(miacode::muri::normalizedHandRadiusPx(100000) == miacode::muri::kHandRadiusMaxPx
+                   && miacode::muri::normalizedHandRadiusPx(-3) == miacode::muri::kHandRadiusMinPx,
+               QStringLiteral("an out-of-range hand radius is clamped"));
+    }
 
     {
         const AnalyzedChart analyzed = analyzeChart(

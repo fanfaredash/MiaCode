@@ -112,6 +112,43 @@ void miacode::runtime::ValidationHost::applyMuriRenderOptions()
         state_.scene_->setMuriRenderOptions(state_.muriRenderOptions_);
     }
     applyAlignedMuriAnalysisReportToViews();
+    // The Muri tab is fed by the application-level analysis, which would otherwise keep
+    // the parameters it was constructed with.
+    session_.applicationServices_.analysis().setMuriParameters(
+        state_.muriRenderOptions_,
+        static_cast<double>(state_.staticTapOnSlideThresholdMs_) / 1000.0);
+}
+
+void miacode::runtime::ValidationHost::setMuriHandRadiusPx(int radiusPx)
+{
+    const int normalized = miacode::muri::normalizedHandRadiusPx(radiusPx);
+    if (state_.muriRenderOptions_.handRadiusPx == normalized) {
+        return;
+    }
+    state_.muriRenderOptions_.handRadiusPx = normalized;
+    applyMuriParameterChange();
+}
+
+void miacode::runtime::ValidationHost::setStaticTapOnSlideThresholdMs(int thresholdMs)
+{
+    const int normalized = qBound(
+        miacode::muri::kStaticTapOnSlideThresholdMinMs,
+        thresholdMs,
+        miacode::muri::kStaticTapOnSlideThresholdMaxMs);
+    if (state_.staticTapOnSlideThresholdMs_ == normalized) {
+        return;
+    }
+    state_.staticTapOnSlideThresholdMs_ = normalized;
+    applyMuriParameterChange();
+}
+
+void miacode::runtime::ValidationHost::applyMuriParameterChange()
+{
+    applyMuriRenderOptions();
+    session_.savePortableState();
+    if (session_.hasActiveDifficulty() && !session_.scheduleTimelineAnalysisRefreshFromLatestPreviewState()) {
+        session_.refreshTimelineMetadata();
+    }
 }
 
 void miacode::runtime::ValidationHost::setMuriRenderMode(RenderMode mode, bool persistState)

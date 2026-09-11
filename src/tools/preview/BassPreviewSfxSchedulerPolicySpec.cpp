@@ -1,9 +1,16 @@
+#include <QFile>
 #include <QString>
 #include <QTextStream>
+
+#include <limits>
 
 #include "audio/BassPreviewMasterMixerPolicy.h"
 #include "audio/BassPreviewSfxCallbackRing.h"
 #include "audio/BassPreviewSfxSchedulerPolicy.h"
+
+#ifndef MIACODE_SOURCE_ROOT
+#error "MIACODE_SOURCE_ROOT must be defined"
+#endif
 
 namespace {
 
@@ -13,6 +20,27 @@ bool require(bool condition, const QString& message, QTextStream& err)
         err << "FAIL: " << message << Qt::endl;
     }
     return condition;
+}
+
+QString readSource(const QString& relativePath)
+{
+    QFile file(QStringLiteral(MIACODE_SOURCE_ROOT) + QLatin1Char('/') + relativePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+    return QString::fromUtf8(file.readAll());
+}
+
+// The body of one out-of-line member definition: from its signature to the first
+// closing brace at column 0.
+QString functionBody(const QString& source, const QString& signature)
+{
+    const qsizetype start = source.indexOf(signature);
+    if (start < 0) {
+        return QString();
+    }
+    const qsizetype end = source.indexOf(QStringLiteral("\n}\n"), start);
+    return end < 0 ? QString() : source.mid(start, end - start);
 }
 
 }  // namespace
@@ -117,6 +145,62 @@ int main()
     ok &= require(
         !ring.tryPop(&empty),
         QStringLiteral("callback event ring is empty after a complete drain"), err);
+
+    using miacode::preview_audio::bass::kDeferredSyncMaxLateSeconds;
+    using miacode::preview_audio::bass::kMissedSyncGraceSeconds;
+    using miacode::preview_audio::bass::scheduledSyncWasMissed;
+    using miacode::preview_audio::bass::shouldReplayDeferredSync;
+    ok &= require(
+        !scheduledSyncWasMissed(1000, 999, 100),
+        QStringLiteral("a sync ahead of the decode cursor is still pending"), err);
+    ok &= require(
+        !scheduledSyncWasMissed(1000, 1099, 100),
+        QStringLiteral("a sync the cursor just crossed is still being dispatched"), err);
+    ok &= require(
+        scheduledSyncWasMissed(1000, 1100, 100) && scheduledSyncWasMissed(1000, 50000, 100),
+        QStringLiteral("a sync the cursor is past by the grace can no longer fire"), err);
+    ok &= require(
+        kMissedSyncGraceSeconds > kDeferredSyncMaxLateSeconds,
+        QStringLiteral("a deferred sync is replayed before the missed-sync watchdog could claim it"), err);
+    ok &= require(
+        shouldReplayDeferredSync(0.0) && shouldReplayDeferredSync(-0.004)
+            && shouldReplayDeferredSync(kDeferredSyncMaxLateSeconds),
+        QStringLiteral("a deferred sync near its note time is replayed"), err);
+    ok &= require(
+        !shouldReplayDeferredSync(kDeferredSyncMaxLateSeconds + 0.001)
+            && !shouldReplayDeferredSync(std::numeric_limits<double>::quiet_NaN()),
+        QStringLiteral("a deferred sync from a stalled worker is dropped and re-anchored"), err);
+
+    // A mixer callback that loses tryLock() hands its fired sync to the worker. That hand-off
+    // is only real if something the worker executes during playback services it: the
+    // backend's own clock-sync method is not dispatched by PreviewAudioWorker at all, so a
+    // drain placed only there strands the scheduler and silences every later note sound
+    // until a pause or seek re-anchors it.
+    const QString eventDrain = readSource(QStringLiteral("src/audio/BassPreviewAudioBackend_EventDrain.cpp"));
+    const QString transport = readSource(QStringLiteral("src/audio/BassPreviewAudioBackend_Transport.cpp"));
+    const QString playbackClock = readSource(QStringLiteral("src/audio/BassPreviewAudioBackend_PlaybackClock.cpp"));
+    const QString worker = readSource(QStringLiteral("src/audio/PreviewAudioWorker.cpp"));
+    ok &= require(
+        !eventDrain.isEmpty() && !transport.isEmpty() && !playbackClock.isEmpty() && !worker.isEmpty(),
+        QStringLiteral("backend and worker sources are readable from MIACODE_SOURCE_ROOT"), err);
+    const QString service = functionBody(
+        eventDrain, QStringLiteral("void BassPreviewAudioBackend::serviceSfxScheduler()"));
+    ok &= require(
+        service.contains(QStringLiteral("drainDeferredMixerSync();"))
+            && service.contains(QStringLiteral("recoverMissedSfxSync();")),
+        QStringLiteral("servicing the scheduler replays deferred syncs and recovers missed ones"), err);
+    ok &= require(
+        functionBody(eventDrain, QStringLiteral("void BassPreviewAudioBackend::drainEvents(double second)"))
+                .contains(QStringLiteral("serviceSfxScheduler();"))
+            && functionBody(transport, QStringLiteral("void BassPreviewAudioBackend::syncBackgroundTrack(double timelineSecond)"))
+                   .contains(QStringLiteral("serviceSfxScheduler();"))
+            && functionBody(playbackClock, QStringLiteral("BassPreviewAudioBackend::sampleHealth()"))
+                   .contains(QStringLiteral("serviceSfxScheduler();")),
+        QStringLiteral("the per-tick drain/sync commands and the worker health tick service the scheduler"), err);
+    ok &= require(
+        worker.contains(QStringLiteral("backend->drainEvents(command.second)"))
+            && worker.contains(QStringLiteral("backend->syncBackgroundTrack(command.second)")),
+        QStringLiteral("the worker dispatches the commands that service the scheduler"), err);
 
     if (ok) {
         out << "BASS preview SFX scheduler policy spec passed." << Qt::endl;

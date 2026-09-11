@@ -2,7 +2,7 @@
 lifecycle: stable-current
 canonical_id: muri.detection
 owner: src/tools/muri
-last_verified: 2026-09-06
+last_verified: 2026-09-11
 code_anchors: ["src/tools/muri/MuriAnalyzer.cpp", "src/tools/muri/MuriStaticChecker.cpp", "src/tools/muri/MuriSpec.cpp"]
 ---
 
@@ -58,6 +58,13 @@ code_anchors: ["src/tools/muri/MuriAnalyzer.cpp", "src/tools/muri/MuriStaticChec
 - slide-too-fast 阈值：`1 / 180 = 5.6 ms`。用于判断 slide / wifi 完成时机是否已经快到超出允许误差。
 - SlideHeadTap 无启动 tap 的警告阈值：`50.0 ms`。
 - SlideHeadTap 晚窗口警告阈值：`150.0 ms`。
+
+### 4.1 可调参数
+
+以下两项在“无理检测”渲染模式菜单中调整，随预览设置持久化；预览叠层、时间轴标记、无理面板和导出快照使用同一组值。
+
+- 手部半径：以 1080 px 参考判定区为单位，默认 `30 px`，范围 `0–60 px`（步长 3）；界面按默认值的百分比显示，即 `0%–200%`（步长 10%）。tap / hold / touch / slide 的运行时手部动作与预览手部轨迹共用该半径；wifi 的手部扇形固定为 `100 px`。
+- 撞尾阈值：静态 `TapOnSlide` 参考检查的碰撞时间阈值，默认 `200 ms`，范围 `150–250 ms`（步长 5）。
 
 ## 5. 运行时分析规则
 

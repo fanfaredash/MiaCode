@@ -116,7 +116,7 @@ public:
     // other difficulties at their on-disk text is the difference between
     // "save what I am doing" and "save everything I have open".
     //
-    // 0 表示全文档；MetadataSection 表示全局字段、等级与谱师；正数表示难度正文。
+    // 0 表示全文档；MetadataSection 表示全局字段、等级、谱师与难度删除；正数表示难度正文。
     QString textForSectionSave(int difficultyId) const;
     // Advance the save point for that section only. Callers write
     // textForSectionSave() first; this records that it landed.

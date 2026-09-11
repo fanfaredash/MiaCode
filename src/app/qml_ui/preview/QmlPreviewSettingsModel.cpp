@@ -31,7 +31,8 @@ QVariantMap option(const QVariant& value, const char* labelKey)
 
 }  // namespace
 
-QmlPreviewSettingsModel::QmlPreviewSettingsModel(miacode::v2::UiRequestService& uiRequests,
+QmlPreviewSettingsModel::QmlPreviewSettingsModel(miacode::v2::ShellNotifications& notifications,
+                                                 miacode::v2::UiRequestService& uiRequests,
                                                  miacode::v2::PreviewAppearanceState& appearance,
                                                  miacode::v2::PreviewSurface*& surfaceSlot,
                                                  QObject* parent)
@@ -41,6 +42,10 @@ QmlPreviewSettingsModel::QmlPreviewSettingsModel(miacode::v2::UiRequestService& 
     , appearance_(&appearance)
     , surfaceSlot_(&surfaceSlot)
 {
+    // `values` is a snapshot; QML re-reads it only on `changed`. The export page
+    // writes the same render state, so its writes have to arrive here too.
+    connect(&notifications, &miacode::v2::ShellNotifications::previewRenderSettingsChanged,
+            this, &QmlPreviewSettingsModel::changed);
 }
 
 QVariantMap QmlPreviewSettingsModel::values() const
@@ -432,8 +437,10 @@ void QmlPreviewSettingsModel::resetHudFont()
     setHudFontPath(QString());
 }
 
-void QmlPreviewSettingsModel::refreshFontLibrary()
+void QmlPreviewSettingsModel::refresh()
 {
+    emit changed();
+    emit skinChanged();
     emit fontLibraryChanged();
     emit hudFontChanged();
 }

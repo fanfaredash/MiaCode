@@ -34,6 +34,27 @@ AnalysisSnapshot AnalysisService::snapshot() const
     return snapshot_;
 }
 
+void AnalysisService::setMuriParameters(
+    const MuriRenderOptions& renderOptions, double staticTapOnSlideThresholdSeconds)
+{
+    // A negative threshold means "the default"; compare what the analyzer will use.
+    const auto effectiveThreshold = [](double seconds) {
+        return seconds >= 0.0
+            ? seconds
+            : static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0;
+    };
+    const bool analysisChanged = renderOptions.wifiNeedC != renderOptions_.wifiNeedC
+        || renderOptions.excludeTouchFromMultiTouch != renderOptions_.excludeTouchFromMultiTouch
+        || renderOptions.handRadiusPx != renderOptions_.handRadiusPx
+        || !qFuzzyCompare(effectiveThreshold(staticTapOnSlideThresholdSeconds) + 1.0,
+                          effectiveThreshold(staticTapOnSlideThresholdSeconds_) + 1.0);
+    renderOptions_ = renderOptions;
+    staticTapOnSlideThresholdSeconds_ = staticTapOnSlideThresholdSeconds;
+    if (analysisChanged && workspace_ != nullptr && workspace_->snapshot().hasDocument) {
+        requestAnalysis();
+    }
+}
+
 void AnalysisService::requestAnalysis()
 {
     if (workspace_ == nullptr) return;

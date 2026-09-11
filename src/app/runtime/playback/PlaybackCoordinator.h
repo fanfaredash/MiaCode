@@ -288,6 +288,10 @@ public:
     RenderMode muriRenderMode() const;
     void setMuriRenderMode(RenderMode mode);
     void toggleMuriRenderMode();
+    int muriHandRadiusPx() const;
+    void setMuriHandRadiusPx(int radiusPx);
+    int muriTapOnSlideThresholdMs() const;
+    void setMuriTapOnSlideThresholdMs(int thresholdMs);
     QStringList availableSkinDirectoryNames() const;
     QString skinDisplayName(const QString& directoryName) const;
     QString resolveSkinDir() const;

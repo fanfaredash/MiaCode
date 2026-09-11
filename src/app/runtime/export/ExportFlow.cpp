@@ -340,6 +340,8 @@ void miacode::runtime::VideoExportHost::applySharedExportTaskSettings(const Vide
     }
 
     session_.savePortableState();
+    // These are the values Preview Settings shows; it is open to them only if told.
+    emit session_.applicationServices_.shellNotifications().previewRenderSettingsChanged();
 }
 
 // Build the seed VideoExportTask shared by the export dialog AND the direct

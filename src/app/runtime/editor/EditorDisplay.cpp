@@ -542,6 +542,10 @@ void miacode::runtime::EditorHost::applyPortablePreviewSettings(const QJsonObjec
     if (preview.value("wifi_need_c").isBool()) {
         state_.muriRenderOptions_.wifiNeedC = preview.value("wifi_need_c").toBool(state_.muriRenderOptions_.wifiNeedC);
     }
+    if (preview.value("muri_hand_radius_px").isDouble()) {
+        state_.muriRenderOptions_.handRadiusPx = miacode::muri::normalizedHandRadiusPx(
+            qRound(preview.value("muri_hand_radius_px").toDouble(state_.muriRenderOptions_.handRadiusPx)));
+    }
     state_.muriRenderOptions_.excludeTouchFromMultiTouch = true;
     if (preview.value("outline_variant").isString()) {
         const QString outlineVariant = preview.value("outline_variant").toString().trimmed();
@@ -803,6 +807,7 @@ void miacode::runtime::EditorHost::savePortableState() const
     preview.insert("show_chart_review_break_judge_overlay", state_.muriRenderOptions_.showChartReviewBreakJudgeOverlay);
     preview.insert("show_chart_review_touch_judge_overlay", state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay);
     preview.insert("wifi_need_c", state_.muriRenderOptions_.wifiNeedC);
+    preview.insert("muri_hand_radius_px", state_.muriRenderOptions_.handRadiusPx);
     preview.insert("background_brightness", state_.previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_outer", state_.previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_inner", state_.previewBackgroundBrightnessInner_);

@@ -59,7 +59,8 @@ void addSlidePadWindowsAndTrails(
     const TimelineNoteMarker& marker,
     const QString& markerKey,
     QVector<MuriPadWindow>* padWindows,
-    QVector<MuriActionTrail>* actionTrails);
+    QVector<MuriActionTrail>* actionTrails,
+    double handRadius);
 void addWifiPadWindowsAndTrails(
     const TimelineNoteMarker& marker,
     const QString& markerKey,
@@ -87,12 +88,14 @@ double tickToSecond(int tick);
 // Runtime hand-action / touch-point model. The simulated finger footprint shared
 // by the slide/wifi judge (per-tick pad coverage) and the simple-note multi-touch
 // diagnostics (action clustering). Defaults live here (the sole declaration);
-// the definitions in MuriAnalyzer.cpp must not repeat them.
+// the definitions in MuriAnalyzer.cpp must not repeat them. `handRadius` is the
+// configured hand (handRadiusForOptions) for everything but wifi's fixed fan.
 QVector<RuntimeHandAction> buildRuntimeHandActions(
     const QVector<TimelineNoteMarker>& noteMarkers,
     const QVector<JudgeableSimpleNote>& notes,
     const QVector<RuntimeTouchGroup>& touchGroups,
     const QHash<int, int>& touchGroupByChildNoteIndex,
+    double handRadius,
     bool includeSlideLike = false);
 QVector<RuntimeTouchPoint> buildRuntimeTouchPoints(
     const QVector<RuntimeHandAction>& actions,

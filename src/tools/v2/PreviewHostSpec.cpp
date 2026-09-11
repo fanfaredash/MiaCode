@@ -55,6 +55,10 @@ public:
     RenderMode muriRenderMode() const override { return RenderMode::Native; }
     void setMuriRenderMode(RenderMode) override { ++setMuriModeCount; }
     void toggleMuriRenderMode() override { ++toggleMuriModeCount; }
+    int muriHandRadiusPx() const override { return 30; }
+    void setMuriHandRadiusPx(int) override {}
+    int muriTapOnSlideThresholdMs() const override { return 200; }
+    void setMuriTapOnSlideThresholdMs(int) override {}
     QStringList availableSkinDirectoryNames() const override { return {}; }
     QString skinDisplayName(const QString&) const override { return {}; }
     QString resolveSkinDir() const override { return QStringLiteral("skin"); }

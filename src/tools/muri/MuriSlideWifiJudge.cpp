@@ -644,6 +644,7 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
             notes,
             touchGroups,
             touchGroupByChildNoteIndex,
+            miacode::muri::handRadiusForOptions(renderOptions),
             true);
     int maxActionTick = 0;
     for (const RuntimeHandAction& action : actions) {

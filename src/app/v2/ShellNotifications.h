@@ -33,6 +33,11 @@ signals:
     // often.
     void previewPlayheadChanged();
     void previewSkinDirectoryChanged();
+    // A preview render setting (brightness, scale, flow speed, HUD toggles) was
+    // written. Preview Settings and the export page both write that one live
+    // state, so each re-reads it on this rather than keeping the copy it read
+    // when it opened.
+    void previewRenderSettingsChanged();
 
     // The document was replaced by a path outside the QML façade — startup,
     // root chart drop, native File/Open, crash recovery.

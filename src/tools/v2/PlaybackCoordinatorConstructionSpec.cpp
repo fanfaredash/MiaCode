@@ -50,6 +50,8 @@ class FakeValidation final : public miacode::v2::PlaybackValidationPort
 {
 public:
     void setMuriRenderMode(RenderMode, bool) override {}
+    void setMuriHandRadiusPx(int) override {}
+    void setStaticTapOnSlideThresholdMs(int) override {}
     void clearValidationCache() override {}
     void clearValidationDecorations() override {}
     void applyAlignedMuriAnalysisReportToViews() override {}

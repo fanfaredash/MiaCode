@@ -503,6 +503,8 @@ miacode_add_spec(bass_preview_sfx_scheduler_policy_spec
     LIBS Qt6::Core
     INCLUDES src src/common src/preview src/audio
 )
+target_compile_definitions(bass_preview_sfx_scheduler_policy_spec PRIVATE
+    "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
 # Simulation spec for the preview audio/stage-media cache mechanism: the
 # content-stamp skip decision (size:mtime, NOT path-only) and the live,

@@ -9,11 +9,16 @@ AppStickyPopup {
     required property var previewSession
     minimumWidth: 180
 
+    // The parameter sliders need the timeline brightness menu's 220 px of track.
+    readonly property int parameterRowWidth: 220
     readonly property real rowWidth: Math.max(
         180,
         regularRow.implicitWidth,
         muriRow.implicitWidth,
-        smoothSwitch.implicitWidth
+        smoothSwitch.implicitWidth,
+        root.previewSession.muriCheckEnabled
+            ? root.parameterRowWidth + muriParameters.leftPadding + muriParameters.rightPadding
+            : 0
     )
 
     contentItem: Column {
@@ -64,6 +69,72 @@ AppStickyPopup {
                 }
             }
 
+        }
+
+        // Same layout as the timeline brightness menu's rows: title and live value
+        // on one line, the slider under it.
+        component ParameterRow: Column {
+            id: parameterRow
+
+            required property string title
+            required property string valueText
+            required property real from
+            required property real to
+            required property real stepSize
+            required property real value
+            signal edited(int newValue)
+
+            spacing: 4
+
+            Item {
+                width: parent.width
+                implicitHeight: Math.max(parameterTitle.implicitHeight, parameterValue.implicitHeight)
+
+                Text {
+                    id: parameterTitle
+                    anchors.left: parent.left
+                    anchors.right: parameterValue.left
+                    anchors.rightMargin: 8
+                    text: parameterRow.title
+                    elide: Text.ElideRight
+                    color: Theme.colors.text.primary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.compactFontSize
+                    font.weight: Font.DemiBold
+                }
+
+                Text {
+                    id: parameterValue
+                    anchors.right: parent.right
+                    text: parameterRow.valueText
+                    color: Theme.colors.text.secondary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.compactFontSize
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
+
+            AppSlider {
+                id: parameterSlider
+                width: parent.width
+                from: parameterRow.from
+                to: parameterRow.to
+                stepSize: parameterRow.stepSize
+                snapMode: Slider.SnapAlways
+                value: parameterRow.value
+                onMoved: parameterRow.edited(Math.round(value))
+
+                // Dragging replaces the value binding; take the stored (possibly
+                // clamped) value back once the handle is released.
+                Connections {
+                    target: root.previewSession
+                    function onMuriParametersChanged() {
+                        if (parameterSlider.pressed)
+                            return
+                        parameterSlider.value = parameterRow.value
+                    }
+                }
+            }
         }
 
         ModeRow {
@@ -121,29 +192,40 @@ AppStickyPopup {
         }
 
         Column {
+            id: muriParameters
             visible: root.previewSession.muriCheckEnabled
             width: body.width
-            spacing: 4
+            spacing: 8
             leftPadding: 12
             rightPadding: 16
             topPadding: 4
-            bottomPadding: 4
+            bottomPadding: 8
 
-            Text {
-                width: parent.width - parent.leftPadding - parent.rightPadding
-                text: UiText.text("无理判定半径")
-                color: Theme.colors.text.primary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.uiFontSize
+            readonly property var ranges: root.previewSession.muriParameterRanges
+            readonly property real rowContentWidth: width - leftPadding - rightPadding
+
+            ParameterRow {
+                width: muriParameters.rowContentWidth
+                title: UiText.text("手部半径")
+                // Shown as a share of the default hand (30 px = 100%).
+                valueText: UiText.text("%1%").arg(Math.round(
+                    root.previewSession.muriHandRadiusPx * 100 / muriParameters.ranges.handRadiusDefault))
+                from: muriParameters.ranges.handRadiusMin
+                to: muriParameters.ranges.handRadiusMax
+                stepSize: muriParameters.ranges.handRadiusStep
+                value: root.previewSession.muriHandRadiusPx
+                onEdited: value => root.previewSession.setMuriHandRadiusPx(value)
             }
 
-            Text {
-                width: parent.width - parent.leftPadding - parent.rightPadding
-                wrapMode: Text.Wrap
-                text: UiText.text("A / B / C / D / E 各区半径不同，暂不可调。")
-                color: Theme.colors.text.secondary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.secondaryFontSize
+            ParameterRow {
+                width: muriParameters.rowContentWidth
+                title: UiText.text("撞尾阈值")
+                valueText: UiText.text("%1 ms").arg(root.previewSession.muriTapOnSlideThresholdMs)
+                from: muriParameters.ranges.tapOnSlideThresholdMin
+                to: muriParameters.ranges.tapOnSlideThresholdMax
+                stepSize: muriParameters.ranges.tapOnSlideThresholdStep
+                value: root.previewSession.muriTapOnSlideThresholdMs
+                onEdited: value => root.previewSession.setMuriTapOnSlideThresholdMs(value)
             }
         }
     }

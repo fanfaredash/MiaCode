@@ -306,6 +306,9 @@ private:
     void rebuildDifficultyList();
     void syncAudition();
     void applyLivePreviewSettings();
+    // Pulls the shared live render values into the task after someone else (Preview
+    // Settings) wrote them while this page is open.
+    void adoptPreviewRenderSettings();
     void stopAudition();
     void applyPreferences();
     void savePreferences() const;
@@ -340,6 +343,9 @@ private:
     }
     miacode::v2::ShellNotifications* notifications_ = nullptr;
     bool pageSessionActive_ = false;
+    // Set while this session pushes its own task into the shared preview state, so the
+    // echoed previewRenderSettingsChanged is not read back as someone else's write.
+    bool pushingSharedSettings_ = false;
     bool exportRunning_ = false;
     bool hasSeededTask_ = false;
     bool batchExportRunning_ = false;

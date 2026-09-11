@@ -201,6 +201,12 @@ private:
         miacode::preview_audio::bass::SfxCallbackEvent* event);
     void drainDeferredMixerSync();
     void drainSfxCallbackEvents();
+    // Re-anchors when the armed sync's target is already behind the decode cursor.
+    void recoverMissedSfxSync();
+    // Worker-side upkeep for the callback-driven chain: callback diagnostics, a deferred
+    // sync, a missed sync. Runs from the commands PreviewAudioWorker executes on every
+    // playback tick and from its health tick.
+    void serviceSfxScheduler();
     void logSfxCallbackEvent(
         const miacode::preview_audio::bass::SfxCallbackEvent& event) const;
     // Must be called with schedulerMutex_ released.
@@ -310,16 +316,20 @@ private:
     bool trackMissingAfterLoadLogged_ = false;
     std::atomic_bool shuttingDown_ = false;
     // Shared with the BASS mixer callback. The callback only uses tryLock(): contention is
-    // handed back to PreviewAudioWorker through deferredMixerSyncHandle_, so the real-time
-    // thread never waits on this mutex. Callback diagnostics use sfxCallbackEventRing_ and
-    // are formatted/written by the worker. Worker-owned paths may take the lock normally,
-    // but must not format or write logs while holding it.
+    // handed back to PreviewAudioWorker through deferredMixerSyncHandle_ and replayed by
+    // serviceSfxScheduler(), so the real-time thread never waits on this mutex. Callback
+    // diagnostics use sfxCallbackEventRing_ and are formatted/written by the worker.
+    // Worker-owned paths may take the lock normally, but must not format or write logs
+    // while holding it.
     mutable QMutex schedulerMutex_;
     std::atomic<quint32> deferredMixerSyncHandle_{0};
     miacode::preview_audio::bass::SfxCallbackEventRing sfxCallbackEventRing_;
     quint32 scheduledGroupSync_ = 0;
     int scheduledGroupIndex_ = -1;
     ScheduledMixerAction scheduledMixerAction_ = ScheduledMixerAction::None;
+    // Master decode position scheduledGroupSync_ fires at; lets the worker tell a pending
+    // sync from one the cursor has already passed.
+    quint64 scheduledGroupTargetPosition_ = 0;
     bool sfxSchedulerActive_ = false;
     SfxSchedulerArmFailure sfxSchedulerArmFailure_;
     miacode::preview_audio::bass::SfxSchedulerAnchor sfxSchedulerAnchor_;

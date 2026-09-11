@@ -236,7 +236,8 @@ MarkerMuriState buildWifiState(const TimelineNoteMarker& marker)
 void buildOverlayActions(
     const QVector<TimelineNoteMarker>& noteMarkers,
     QVector<MuriPadWindow>* padWindows,
-    QVector<MuriActionTrail>* actionTrails)
+    QVector<MuriActionTrail>* actionTrails,
+    double handRadius)
 {
     using namespace miacode::muri;
     if (padWindows == nullptr || actionTrails == nullptr) {
@@ -249,29 +250,29 @@ void buildOverlayActions(
         if (marker.type == QLatin1String("tap")) {
             if (!marker.slideHead) {
                 addPadWindow(padWindows, pad, marker.second, notePressEndSecond(marker), markerKey, marker.type);
-                addActionTrail(actionTrails, markerKey, marker.type, marker.second, notePressEndSecond(marker), kHandRadiusNormal, {miacode::muri::padCenter(pad)});
+                addActionTrail(actionTrails, markerKey, marker.type, marker.second, notePressEndSecond(marker), handRadius, {miacode::muri::padCenter(pad)});
             }
             continue;
         }
         if (marker.type == QLatin1String("hold")) {
             addPadWindow(padWindows, pad, marker.second, notePressEndSecond(marker), markerKey, marker.type);
-            addActionTrail(actionTrails, markerKey, marker.type, marker.second, notePressEndSecond(marker), kHandRadiusNormal, {miacode::muri::padCenter(pad)});
+            addActionTrail(actionTrails, markerKey, marker.type, marker.second, notePressEndSecond(marker), handRadius, {miacode::muri::padCenter(pad)});
             continue;
         }
         if (marker.type == QLatin1String("touch")) {
             if (!marker.onSlide) {
                 addPadWindow(padWindows, pad, marker.second, notePressEndSecond(marker), markerKey, marker.type);
-                addActionTrail(actionTrails, markerKey, marker.type, marker.second, notePressEndSecond(marker), kHandRadiusNormal, {marker.touchPoint});
+                addActionTrail(actionTrails, markerKey, marker.type, marker.second, notePressEndSecond(marker), handRadius, {marker.touchPoint});
             }
             continue;
         }
         if (marker.type == QLatin1String("touch_hold")) {
             addPadWindow(padWindows, pad, marker.second, notePressEndSecond(marker), markerKey, marker.type);
-            addActionTrail(actionTrails, markerKey, marker.type, marker.second, notePressEndSecond(marker), kHandRadiusNormal, {marker.touchPoint});
+            addActionTrail(actionTrails, markerKey, marker.type, marker.second, notePressEndSecond(marker), handRadius, {marker.touchPoint});
             continue;
         }
         if (marker.type == QLatin1String("slide")) {
-            addSlidePadWindowsAndTrails(marker, markerKey, padWindows, actionTrails);
+            addSlidePadWindowsAndTrails(marker, markerKey, padWindows, actionTrails, handRadius);
             continue;
         }
         if (marker.type == QLatin1String("wifi")) {

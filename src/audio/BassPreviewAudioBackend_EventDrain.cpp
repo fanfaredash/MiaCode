@@ -115,6 +115,7 @@ void BassPreviewAudioBackend::triggerGroup(
 
 void BassPreviewAudioBackend::drainEvents(double second)
 {
+    serviceSfxScheduler();
     // A live session is scheduled by the master mixer's decode cursor.  Keeping
     // this fallback only for the pre-commit edge avoids a GUI wake-up replaying
     // the groups that BASS already emitted while the GUI thread was stalled.
@@ -179,6 +180,7 @@ void BassPreviewAudioBackend::disarmSfxScheduler(const char* reason)
         scheduledGroupSync_ = 0;
         scheduledGroupIndex_ = -1;
         scheduledMixerAction_ = ScheduledMixerAction::None;
+        scheduledGroupTargetPosition_ = 0;
         sfxSchedulerActive_ = false;
         sfxSchedulerAnchorDecodePosition_ = 0;
     }
@@ -360,6 +362,7 @@ void BassPreviewAudioBackend::armNextGroupSyncLocked()
         return;
     }
     scheduledGroupSync_ = syncHandle;
+    scheduledGroupTargetPosition_ = targetPosition;
     scheduledGroupIndex_ = startBackgroundFirst && !sameInstant ? -1 : groupIndex;
     scheduledMixerAction_ = sameInstant
         ? ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack
@@ -461,6 +464,7 @@ void BassPreviewAudioBackend::processMixerGroupSyncLocked(
     scheduledGroupSync_ = 0;
     scheduledGroupIndex_ = -1;
     scheduledMixerAction_ = ScheduledMixerAction::None;
+    scheduledGroupTargetPosition_ = 0;
 
     const bool startBackground = action == ScheduledMixerAction::StartPendingBackgroundTrack
         || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
@@ -517,15 +521,106 @@ void BassPreviewAudioBackend::drainDeferredMixerSync()
     if (handle == 0) {
         return;
     }
+    // The sync already fired and BASS removed it; nothing arms the next group until it is
+    // processed here. A group still near its note time is played now, one that waited out a
+    // stalled worker is skipped and the scheduler re-anchored at the live mixer position.
+    const QWORD decodePosition = masterMixer_ != 0
+        ? BASS_ChannelGetPosition(masterMixer_, BASS_POS_BYTE | BASS_POS_DECODE)
+        : static_cast<QWORD>(-1);
     int callbackBassError = 0;
+    bool reanchor = false;
+    int lateGroupIndex = -1;
+    double lateSeconds = 0.0;
     miacode::preview_audio::bass::SfxCallbackEvent event;
     {
         ScopedRealtimeBassErrorSink errorSink(&callbackBassError);
         QMutexLocker locker(&schedulerMutex_);
-        processMixerGroupSyncLocked(handle, true, &event);
+        if (sfxSchedulerActive_ && handle == scheduledGroupSync_
+            && decodePosition != static_cast<QWORD>(-1)) {
+            lateSeconds = decodePosition >= scheduledGroupTargetPosition_
+                ? BASS_ChannelBytes2Seconds(masterMixer_, decodePosition - scheduledGroupTargetPosition_)
+                : -BASS_ChannelBytes2Seconds(masterMixer_, scheduledGroupTargetPosition_ - decodePosition);
+            reanchor = !miacode::preview_audio::bass::shouldReplayDeferredSync(lateSeconds);
+        }
+        if (reanchor) {
+            // Already removed by BASS; clearing it keeps the re-anchor's disarm from asking
+            // BASS to remove a handle that no longer exists.
+            lateGroupIndex = scheduledGroupIndex_;
+            scheduledGroupSync_ = 0;
+            scheduledGroupIndex_ = -1;
+            scheduledMixerAction_ = ScheduledMixerAction::None;
+            scheduledGroupTargetPosition_ = 0;
+        } else {
+            processMixerGroupSyncLocked(handle, true, &event);
+        }
     }
     event.callbackBassError = callbackBassError;
     logSfxCallbackEvent(event);
+    if (reanchor) {
+        const double liveChartSecond = currentSfxSchedulerChartSecond(
+            playbackSession_.lastAuthoritativeSecond);
+        appendAudioDebugLog(
+            QString("bass_sfx_scheduler action=recover reason=deferred_sync_late group_idx=%1 late_ms=%2 live_chart=%3")
+                .arg(lateGroupIndex)
+                .arg(lateSeconds * 1000.0, 0, 'f', 1)
+                .arg(liveChartSecond, 0, 'f', 6));
+        resetCursor(liveChartSecond, false);
+    }
+#endif
+}
+
+void BassPreviewAudioBackend::recoverMissedSfxSync()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    if (masterMixer_ == 0 || !playbackSession_.masterRunning
+        || shuttingDown_.load(std::memory_order_acquire)) {
+        return;
+    }
+    const QWORD decodePosition = BASS_ChannelGetPosition(
+        masterMixer_, BASS_POS_BYTE | BASS_POS_DECODE);
+    if (decodePosition == static_cast<QWORD>(-1)) {
+        return;
+    }
+    const QWORD graceBytes = BASS_ChannelSeconds2Bytes(
+        masterMixer_, miacode::preview_audio::bass::kMissedSyncGraceSeconds);
+    int groupIndex = -1;
+    double lateSeconds = 0.0;
+    {
+        QMutexLocker locker(&schedulerMutex_);
+        if (!sfxSchedulerActive_ || scheduledGroupSync_ == 0
+            // Fired but lost tryLock(): drainDeferredMixerSync() owns this one.
+            || deferredMixerSyncHandle_.load(std::memory_order_acquire) == scheduledGroupSync_
+            || !miacode::preview_audio::bass::scheduledSyncWasMissed(
+                scheduledGroupTargetPosition_, decodePosition, graceBytes)) {
+            return;
+        }
+        groupIndex = scheduledGroupIndex_;
+        lateSeconds = BASS_ChannelBytes2Seconds(
+            masterMixer_, decodePosition - scheduledGroupTargetPosition_);
+    }
+    // The dead sync is still registered with BASS. The disarm inside resetCursor removes it
+    // outside schedulerMutex_, the cursor skips the groups the mixer has already passed, and
+    // the anchor arms the next one ahead of the live position.
+    const double liveChartSecond = currentSfxSchedulerChartSecond(
+        playbackSession_.lastAuthoritativeSecond);
+    appendAudioDebugLog(
+        QString("bass_sfx_scheduler action=recover reason=missed_sync group_idx=%1 late_ms=%2 live_chart=%3")
+            .arg(groupIndex)
+            .arg(lateSeconds * 1000.0, 0, 'f', 1)
+            .arg(liveChartSecond, 0, 'f', 6));
+    resetCursor(liveChartSecond, false);
+#endif
+}
+
+void BassPreviewAudioBackend::serviceSfxScheduler()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    // PreviewAudioWorker never dispatches syncPreviewPlaybackClockTransaction(), so the
+    // chain's worker-side upkeep has to ride on what it does execute: DrainEvents and
+    // SyncBackgroundTrack every playback tick, plus its own health tick when the GUI stalls.
+    drainSfxCallbackEvents();
+    drainDeferredMixerSync();
+    recoverMissedSfxSync();
 #endif
 }
 

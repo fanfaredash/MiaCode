@@ -61,6 +61,12 @@ public:
     virtual void setMuriRenderMode(RenderMode mode) = 0;
     virtual void toggleMuriRenderMode() = 0;
 
+    // ---- 无理 detection parameters (1080 px reference radius, milliseconds) ----
+    virtual int muriHandRadiusPx() const = 0;
+    virtual void setMuriHandRadiusPx(int radiusPx) = 0;
+    virtual int muriTapOnSlideThresholdMs() const = 0;
+    virtual void setMuriTapOnSlideThresholdMs(int thresholdMs) = 0;
+
     // ---- skin / judge-line catalog on disk ----
     virtual QStringList availableSkinDirectoryNames() const = 0;
     virtual QString skinDisplayName(const QString& directoryName) const = 0;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <cstdint>
 
 #include "BassPreviewMasterMixerPolicy.h"
 
@@ -37,6 +38,34 @@ inline double chartSecondForMixerSecond(const SfxSchedulerAnchor& anchor, double
         ? anchor.playbackRate
         : 1.0;
     return anchor.chartSecond + (mixerSecond - anchor.mixerSecond) * rate;
+}
+
+// The scheduler keeps exactly one BASS_SYNC_POS armed and arms the next group from its
+// callback, so a sync that never fires silences every later note sound until a pause or
+// seek re-anchors. BASS only fires a position sync when the decode cursor crosses its
+// target; one armed at or behind the cursor (an anchor read a mix block before the
+// SetSync call, or a group armed late from the worker) is simply never delivered. The
+// grace covers the mix block in which a correctly armed sync is still being dispatched,
+// so a sync is only declared missed once the cursor is unambiguously past it.
+inline constexpr double kMissedSyncGraceSeconds = 0.200;
+
+inline bool scheduledSyncWasMissed(
+    std::uint64_t targetPosition,
+    std::uint64_t decodePosition,
+    std::uint64_t graceBytes) noexcept
+{
+    return decodePosition >= targetPosition && decodePosition - targetPosition >= graceBytes;
+}
+
+// A mixer callback that loses tryLock() leaves its already-fired one-shot sync for the
+// worker. A group still close to its note time is played when the worker replays it; one
+// that waited out a stalled worker is skipped and the scheduler re-anchored at the live
+// mixer position instead, so a stall never releases a burst of stale note sounds.
+inline constexpr double kDeferredSyncMaxLateSeconds = 0.100;
+
+inline bool shouldReplayDeferredSync(double lateSeconds) noexcept
+{
+    return std::isfinite(lateSeconds) && lateSeconds <= kDeferredSyncMaxLateSeconds;
 }
 
 }  // namespace miacode::preview_audio::bass

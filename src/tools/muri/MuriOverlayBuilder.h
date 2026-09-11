@@ -28,11 +28,13 @@ struct TimelineNoteMarker;
 namespace miacode::muri::detail {
 
 // Appends a pad-press window and hand-action trail for every note marker. This
-// is the report's playfield overlay; pure data → data.
+// is the report's playfield overlay; pure data → data. Trails other than wifi's
+// are drawn at `handRadius`, the hand the runtime judge uses.
 void buildOverlayActions(
     const QVector<TimelineNoteMarker>& noteMarkers,
     QVector<MuriPadWindow>* padWindows,
-    QVector<MuriActionTrail>* actionTrails);
+    QVector<MuriActionTrail>* actionTrails,
+    double handRadius);
 
 // Reconstructs the per-marker Muri state for a slide marker: each segment's area
 // checkpoints are resolved against the pad windows in allWindows (indexed by pad

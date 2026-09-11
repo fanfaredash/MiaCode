@@ -22,8 +22,8 @@ QmlApplicationContext::QmlApplicationContext(miacode::v2::ApplicationServices& s
                   services.mediaToolsEngineSlot(), this)
     , preferencesModel_(services.preferencesStoreSlot(), preferences_, this)
     , audioSettings_(services.previewSurfaceSlot(), this)
-    , previewSettings_(services.uiRequests(), services.previewAppearance(),
-                       services.previewSurfaceSlot(), this)
+    , previewSettings_(services.shellNotifications(), services.uiRequests(),
+                       services.previewAppearance(), services.previewSurfaceSlot(), this)
     , latency_(services.latencyEngineSlot(), this)
     , lifecycle_(services.editorPageRouterSlot(), this)
 {

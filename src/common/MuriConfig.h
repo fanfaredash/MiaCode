@@ -10,6 +10,7 @@ constexpr double kJudgeTps = 180.0;
 constexpr int kStaticTapOnSlideThresholdMinMs = 150;
 constexpr int kStaticTapOnSlideThresholdMaxMs = 250;
 constexpr int kStaticTapOnSlideThresholdDefaultMs = 200;
+constexpr int kStaticTapOnSlideThresholdStepMs = 5;
 constexpr double kReleaseDelaySeconds = 3.0 / kJudgeTps;
 constexpr double kExtraPadDownDelaySeconds = 9.0 / kJudgeTps;
 constexpr double kTapCriticalSeconds = 3.0 / kJudgeTps;
@@ -40,7 +41,25 @@ constexpr double kPadDistanceD = kPadDistanceA * 4.1 / 4.0;
 constexpr double kPadDistanceE = kPadDistanceA * 3.1 / 4.0;
 constexpr double kPadAngleBaseDegrees = -67.5;
 constexpr double kPadAngleStepDegrees = 45.0;
-constexpr double kHandRadiusNormal = kLogicalCanvasSize * 30.0 / 1080.0; // Set to half
+// 手部半径: the hand that presses taps, holds and touches and traces slides, in the
+// 1080 px reference playfield the pad geometry above is written in. Adjustable from
+// the 无理检测 render mode (MuriRenderOptions::handRadiusPx), shown there as a share of
+// the default (0%–200%, 10% steps); wifi keeps its own fan.
+constexpr int kHandRadiusDefaultPx = 30; // Set to half
+constexpr int kHandRadiusMinPx = 0;
+constexpr int kHandRadiusMaxPx = 60;
+constexpr int kHandRadiusStepPx = 3;
+constexpr double handRadiusForReferencePx(double referencePx)
+{
+    return kLogicalCanvasSize * referencePx / 1080.0;
+}
+constexpr int normalizedHandRadiusPx(int referencePx)
+{
+    return referencePx < kHandRadiusMinPx
+        ? kHandRadiusMinPx
+        : (referencePx > kHandRadiusMaxPx ? kHandRadiusMaxPx : referencePx);
+}
+constexpr double kHandRadiusNormal = handRadiusForReferencePx(kHandRadiusDefaultPx);
 constexpr double kHandRadiusWifi = kLogicalCanvasSize * 100.0 / 1080.0;
 constexpr double kHandRadiusMax = kLogicalCanvasSize * 180.0 / 1080.0;
 

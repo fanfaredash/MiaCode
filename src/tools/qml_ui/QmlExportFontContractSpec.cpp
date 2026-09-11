@@ -159,6 +159,27 @@ bool verifyQmlFontContract(QTextStream& err)
         ok &= require(previewSettingsDialog.contains(control),
                       QStringLiteral("Preview Settings owns %1").arg(control), err);
     }
+
+    // The export page and Preview Settings both write the one live preview render state,
+    // so each has to hear the other's writes. Without that, the dialog keeps showing the
+    // values it read when it was built, and the export task keeps its page-entry copy and
+    // writes it back over the newer value on the next edit or export.
+    const QString shellNotifications = readSource(QStringLiteral("src/app/v2/ShellNotifications.h"));
+    const QString renderSettingsWriter = readSource(
+        QStringLiteral("src/app/runtime/preview/WarmupAndSettings.cpp"));
+    const QString exportFlow = readSource(QStringLiteral("src/app/runtime/export/ExportFlow.cpp"));
+    ok &= require(shellNotifications.contains(QStringLiteral("void previewRenderSettingsChanged();")),
+                  QStringLiteral("the shell announces preview render setting changes"), err);
+    ok &= require(renderSettingsWriter.contains(QStringLiteral("previewRenderSettingsChanged()"))
+                      && exportFlow.contains(QStringLiteral("previewRenderSettingsChanged()")),
+                  QStringLiteral("both render-setting writers (Preview Settings, export page) announce writes"), err);
+    ok &= require(previewSettingsImplementation.contains(
+                      QStringLiteral("&miacode::v2::ShellNotifications::previewRenderSettingsChanged"))
+                      && implementation.contains(
+                          QStringLiteral("&miacode::v2::ShellNotifications::previewRenderSettingsChanged")),
+                  QStringLiteral("Preview Settings and the export session re-read announced render settings"), err);
+    ok &= require(previewSettingsDialog.contains(QStringLiteral("previewSettings.refresh()")),
+                  QStringLiteral("opening Preview Settings re-reads every value"), err);
     return ok;
 }
 

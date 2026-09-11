@@ -637,6 +637,7 @@ void Session::setPreviewRenderSetting(const QString& key, const QVariant& value)
         return;
     }
     savePortableState();
+    emit applicationServices_.shellNotifications().previewRenderSettingsChanged();
 }
 
 void Session::refreshEditorAuthoringContext()

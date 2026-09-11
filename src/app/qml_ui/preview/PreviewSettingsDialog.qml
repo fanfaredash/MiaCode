@@ -396,5 +396,5 @@ AppDialog {
         }
     }
 
-    onOpened: root.previewSettings.refreshFontLibrary()
+    onOpened: root.previewSettings.refresh()
 }

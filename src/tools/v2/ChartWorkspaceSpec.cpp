@@ -465,6 +465,34 @@ bool verifyExtraFieldTransactionIsAtomic(QTextStream& out)
     return ok;
 }
 
+bool verifyDifficultyRemovalIsAMetadataChange(QTextStream& out)
+{
+    using miacode::v2::ChartWorkspace;
+
+    ChartWorkspace workspace;
+    workspace.openSource(sourceWithTwoDifficulties(), QStringLiteral("chart.txt"));
+    bool ok = expect(workspace.removeDifficulty(6)
+                         && workspace.snapshot().dirty
+                         && workspace.snapshot().dirtyDifficultyIds.isEmpty()
+                         && workspace.metadataDirty(),
+                     QStringLiteral("removing a difficulty is a pending metadata change, not a tab edit"), out);
+
+    ok &= expect(workspace.textForSectionSave(5).contains(QStringLiteral("&inote_6=(120){4}2,")),
+                 QStringLiteral("a chart section save still writes only its own section"), out);
+
+    const QString metadataSave = workspace.textForSectionSave(ChartWorkspace::MetadataSection);
+    ok &= expect(!metadataSave.contains(QStringLiteral("&inote_6="))
+                     && !metadataSave.contains(QStringLiteral("&lv_6="))
+                     && metadataSave.contains(QStringLiteral("&inote_5=(120){4}1,")),
+                 QStringLiteral("the metadata save drops the removed difficulty and keeps the others"), out);
+
+    ok &= expect(workspace.markSectionSaved(ChartWorkspace::MetadataSection)
+                     && !workspace.snapshot().dirty && !workspace.metadataDirty()
+                     && workspace.textForSectionSave(5) == workspace.snapshot().sourceText,
+                 QStringLiteral("saving the metadata section records the removal as the new save point"), out);
+    return ok;
+}
+
 }  // namespace
 
 int main()
@@ -480,6 +508,7 @@ int main()
         && verifyAddedDifficultyAdoptsAChartlessName(out)
         && verifyIncrementalChartAllowsIntermediateText(out)
         && verifyDifficultyHeadersStayOutsideSectionDirtyState(out)
+        && verifyDifficultyRemovalIsAMetadataChange(out)
         && verifyDifficultyDiscardRestoresChartBody(out)
         && verifyOpenAcceptsEmptyInoteSlots(out)
         && verifyInlineSourceSpanWinsOverLaterLevel(out)

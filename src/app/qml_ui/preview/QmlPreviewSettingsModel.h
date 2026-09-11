@@ -7,6 +7,7 @@
 #include <QVariantMap>
 
 #include "app/v2/PreviewAppearanceState.h"
+#include "app/v2/ShellNotifications.h"
 #include "app/v2/UiRequestService.h"
 
 #include "app/v2/PreviewSurface.h"
@@ -60,7 +61,10 @@ class QmlPreviewSettingsModel final : public QObject
 public:
     // No MainWindow: the settings page reaches the live preview through the
     // surface and the stored values through PreviewAppearanceState.
-    explicit QmlPreviewSettingsModel(miacode::v2::UiRequestService& uiRequests,
+    // The export page writes the same render values; `notifications` is how this
+    // model hears about it.
+    explicit QmlPreviewSettingsModel(miacode::v2::ShellNotifications& notifications,
+                                    miacode::v2::UiRequestService& uiRequests,
                                     miacode::v2::PreviewAppearanceState& appearance,
                                     miacode::v2::PreviewSurface*& surfaceSlot,
                                     QObject* parent = nullptr);
@@ -99,7 +103,9 @@ public:
     Q_INVOKABLE void openJudgeLineDirectory();
     Q_INVOKABLE void importHudFont();
     Q_INVOKABLE void resetHudFont();
-    Q_INVOKABLE void refreshFontLibrary();
+    // Re-announces every value, font library included. The dialog is built once
+    // and kept, so it calls this each time it opens.
+    Q_INVOKABLE void refresh();
 
 signals:
     void changed();

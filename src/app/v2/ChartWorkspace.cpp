@@ -487,9 +487,11 @@ SimaiDocument ChartWorkspace::documentForSectionSave(int difficultyId) const
         for (int id = 1; id <= 7; ++id) {
             const auto* current = document_.difficulty(id);
             const auto* saved = savedDocument_.difficulty(id);
+            // Which difficulties exist is structure, like their levels and designers:
+            // a deletion has no tab of its own left to be saved from.
             if (current == nullptr && saved != nullptr)
-                continue;
-            if (current != nullptr && (saved != nullptr || !current->level.isEmpty()))
+                merged.removeDifficulty(id);
+            else if (current != nullptr && (saved != nullptr || !current->level.isEmpty()))
                 merged.ensureDifficulty(id).level = current->level;
             merged.setDesignerForSlot(id, document_.designerForSlot(id));
         }
@@ -535,7 +537,7 @@ bool ChartWorkspace::metadataDirty() const
         const auto* current = document_.difficulty(id);
         const auto* saved = savedDocument_.difficulty(id);
         if (current == nullptr && saved != nullptr)
-            continue;
+            return true;
         if (current != nullptr && current->level != (saved != nullptr ? saved->level : QString()))
             return true;
         if (document_.designerForSlot(id) != savedDocument_.designerForSlot(id)) return true;

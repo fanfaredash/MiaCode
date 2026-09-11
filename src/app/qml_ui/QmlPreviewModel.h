@@ -4,6 +4,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include "common/MuriRenderOptions.h"
 
@@ -36,6 +37,11 @@ class QmlPreviewModel final : public QObject
     Q_PROPERTY(QString renderModeLabel READ renderModeLabel NOTIFY renderModeChanged)
     Q_PROPERTY(bool muriCheckEnabled READ muriCheckEnabled NOTIFY renderModeChanged)
     Q_PROPERTY(bool smoothStarErase READ smoothStarErase NOTIFY renderModeChanged)
+    // 无理检测 parameters: 手部半径 (1080 px reference) and 撞尾阈值 (ms), plus the
+    // slider ranges, so the menu states no limits of its own.
+    Q_PROPERTY(int muriHandRadiusPx READ muriHandRadiusPx NOTIFY muriParametersChanged)
+    Q_PROPERTY(int muriTapOnSlideThresholdMs READ muriTapOnSlideThresholdMs NOTIFY muriParametersChanged)
+    Q_PROPERTY(QVariantMap muriParameterRanges READ muriParameterRanges CONSTANT)
     Q_PROPERTY(QVariantList statistics READ statistics NOTIFY statisticsChanged)
     Q_PROPERTY(QObject* runtime READ runtime CONSTANT)
     Q_PROPERTY(QObject* mediaHost READ mediaHost CONSTANT)
@@ -57,6 +63,9 @@ public:
     QString renderModeLabel() const;
     bool muriCheckEnabled() const;
     bool smoothStarErase() const;
+    int muriHandRadiusPx() const;
+    int muriTapOnSlideThresholdMs() const;
+    QVariantMap muriParameterRanges() const;
     QVariantList statistics() const;
     QString currentSkinDirectory() const;
     QObject* runtime() const;
@@ -69,6 +78,8 @@ public:
     Q_INVOKABLE void toggleRenderMode();
     Q_INVOKABLE void setMuriCheckEnabled(bool enabled);
     Q_INVOKABLE void setSmoothStarErase(bool enabled);
+    Q_INVOKABLE void setMuriHandRadiusPx(int radiusPx);
+    Q_INVOKABLE void setMuriTapOnSlideThresholdMs(int thresholdMs);
     Q_INVOKABLE void stop();
     Q_INVOKABLE void togglePlayback();
     // Step the rate one stop (-1 slower / +1 faster) along the menu's ladder.
@@ -84,6 +95,7 @@ signals:
     void transportChanged();
     void playingChanged();
     void renderModeChanged();
+    void muriParametersChanged();
     void statisticsChanged();
     void presentationChanged();
 
@@ -123,6 +135,8 @@ private:
     RenderMode lastRegularMode_ = RenderMode::Native;
     bool muriCheckEnabled_ = false;
     bool smoothStarErase_ = true;
+    int muriHandRadiusPx_ = miacode::muri::kHandRadiusDefaultPx;
+    int muriTapOnSlideThresholdMs_ = miacode::muri::kStaticTapOnSlideThresholdDefaultMs;
     QStringList statisticsTexts_;
     QString skinDirectory_;
     QVariantList statistics_;

@@ -168,6 +168,8 @@ void QmlPreviewModel::refreshFromBackend(bool force)
         ? tr("无理检测")
         : tr("常规渲染");
     const QStringList nextStatisticsTexts = surface()->statsTexts();
+    const int nextMuriHandRadiusPx = surface()->muriHandRadiusPx();
+    const int nextMuriTapOnSlideThresholdMs = surface()->muriTapOnSlideThresholdMs();
 
     const bool positionChangedValue = force || nextPosition != positionSeconds_;
     const bool transportChangedValue = force
@@ -181,6 +183,9 @@ void QmlPreviewModel::refreshFromBackend(bool force)
         || nextMuriCheckEnabled != muriCheckEnabled_
         || nextSmoothStarErase != smoothStarErase_;
     const bool statisticsChangedValue = force || nextStatisticsTexts != statisticsTexts_;
+    const bool muriParametersChangedValue = force
+        || nextMuriHandRadiusPx != muriHandRadiusPx_
+        || nextMuriTapOnSlideThresholdMs != muriTapOnSlideThresholdMs_;
 
     positionSeconds_ = nextPosition;
     durationSeconds_ = nextDuration;
@@ -191,6 +196,8 @@ void QmlPreviewModel::refreshFromBackend(bool force)
     renderModeLabel_ = nextRenderModeLabel;
     muriCheckEnabled_ = nextMuriCheckEnabled;
     smoothStarErase_ = nextSmoothStarErase;
+    muriHandRadiusPx_ = nextMuriHandRadiusPx;
+    muriTapOnSlideThresholdMs_ = nextMuriTapOnSlideThresholdMs;
     if (statisticsChangedValue) {
         statisticsTexts_ = nextStatisticsTexts;
         rebuildStatistics();
@@ -207,6 +214,9 @@ void QmlPreviewModel::refreshFromBackend(bool force)
     }
     if (renderModeChangedValue) {
         emit renderModeChanged();
+    }
+    if (muriParametersChangedValue) {
+        emit muriParametersChanged();
     }
     if (statisticsChangedValue) {
         emit statisticsChanged();
@@ -240,6 +250,23 @@ QString QmlPreviewModel::renderMode() const { return renderMode_; }
 QString QmlPreviewModel::renderModeLabel() const { return renderModeLabel_; }
 bool QmlPreviewModel::muriCheckEnabled() const { return muriCheckEnabled_; }
 bool QmlPreviewModel::smoothStarErase() const { return smoothStarErase_; }
+int QmlPreviewModel::muriHandRadiusPx() const { return muriHandRadiusPx_; }
+int QmlPreviewModel::muriTapOnSlideThresholdMs() const { return muriTapOnSlideThresholdMs_; }
+
+QVariantMap QmlPreviewModel::muriParameterRanges() const
+{
+    using namespace miacode::muri;
+    return QVariantMap{
+        {QStringLiteral("handRadiusMin"), kHandRadiusMinPx},
+        {QStringLiteral("handRadiusMax"), kHandRadiusMaxPx},
+        {QStringLiteral("handRadiusStep"), kHandRadiusStepPx},
+        {QStringLiteral("handRadiusDefault"), kHandRadiusDefaultPx},
+        {QStringLiteral("tapOnSlideThresholdMin"), kStaticTapOnSlideThresholdMinMs},
+        {QStringLiteral("tapOnSlideThresholdMax"), kStaticTapOnSlideThresholdMaxMs},
+        {QStringLiteral("tapOnSlideThresholdStep"), kStaticTapOnSlideThresholdStepMs},
+    };
+}
+
 QVariantList QmlPreviewModel::statistics() const { return statistics_; }
 
 QString QmlPreviewModel::currentSkinDirectory() const
@@ -308,6 +335,25 @@ void QmlPreviewModel::setMuriCheckEnabled(bool enabled)
         }
         surface()->setMuriRenderMode(lastRegularMode_);
     }
+    refreshFromBackend();
+}
+
+void QmlPreviewModel::setMuriHandRadiusPx(int radiusPx)
+{
+    if (surface() == nullptr) {
+        return;
+    }
+    surface()->setMuriHandRadiusPx(radiusPx);
+    // Like the render mode, nothing announces this back; pull the stored value.
+    refreshFromBackend();
+}
+
+void QmlPreviewModel::setMuriTapOnSlideThresholdMs(int thresholdMs)
+{
+    if (surface() == nullptr) {
+        return;
+    }
+    surface()->setMuriTapOnSlideThresholdMs(thresholdMs);
     refreshFromBackend();
 }
 

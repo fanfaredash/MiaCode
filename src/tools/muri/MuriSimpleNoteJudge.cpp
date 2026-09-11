@@ -320,6 +320,7 @@ void collectSimpleNoteMultiTouchDiagnostics(
             notes,
             touchGroups,
             touchGroupByChildNoteIndex,
+            miacode::muri::handRadiusForOptions(renderOptions),
             true);
     if (renderOptions.excludeTouchFromMultiTouch) {
         actions.erase(

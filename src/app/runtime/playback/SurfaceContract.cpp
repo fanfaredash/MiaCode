@@ -361,6 +361,26 @@ void miacode::runtime::PlaybackCoordinator::toggleMuriRenderMode()
     validation_.setMuriRenderMode(nextMode, true);
 }
 
+int miacode::runtime::PlaybackCoordinator::muriHandRadiusPx() const
+{
+    return state_.muriRenderOptions_.handRadiusPx;
+}
+
+void miacode::runtime::PlaybackCoordinator::setMuriHandRadiusPx(int radiusPx)
+{
+    validation_.setMuriHandRadiusPx(radiusPx);
+}
+
+int miacode::runtime::PlaybackCoordinator::muriTapOnSlideThresholdMs() const
+{
+    return state_.staticTapOnSlideThresholdMs_;
+}
+
+void miacode::runtime::PlaybackCoordinator::setMuriTapOnSlideThresholdMs(int thresholdMs)
+{
+    validation_.setStaticTapOnSlideThresholdMs(thresholdMs);
+}
+
 QStringList miacode::runtime::PlaybackCoordinator::availableSkinDirectoryNames() const
 {
     // Stage 4.9d-4a (T-class): calls runtime::shared directly instead of routing

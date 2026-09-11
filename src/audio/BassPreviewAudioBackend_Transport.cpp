@@ -636,6 +636,7 @@ bool BassPreviewAudioBackend::maybeStartPendingBackgroundTrack(double second)
 
 void BassPreviewAudioBackend::syncBackgroundTrack(double timelineSecond)
 {
+    serviceSfxScheduler();
     maybeStartPendingBackgroundTrack(timelineSecond);
     // The pending BGM transition itself is handled by the mixer sync while a
     // live transport is active. This tick remains status-only.

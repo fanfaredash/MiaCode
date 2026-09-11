@@ -22,6 +22,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonObject>
+#include <QScopedValueRollback>
 #include <QSettings>
 #include <QUrl>
 
@@ -64,6 +65,11 @@ QmlExportSession::QmlExportSession(miacode::v2::ShellNotifications& notification
         }
         exportRunning_ = running;
         emit exportRunningChanged();
+    });
+    connect(&notifications, &miacode::v2::ShellNotifications::previewRenderSettingsChanged, this, [this]() {
+        if (pageSessionActive_ && !pushingSharedSettings_) {
+            adoptPreviewRenderSettings();
+        }
     });
 }
 
@@ -643,8 +649,37 @@ void QmlExportSession::applyLivePreviewSettings()
     }
     VideoExportTask liveTask = task_;
     applyOwnerLiveFields(&liveTask);
-    engine()->applySharedTaskSettings(liveTask);
+    {
+        const QScopedValueRollback pushing(pushingSharedSettings_, true);
+        engine()->applySharedTaskSettings(liveTask);
+    }
     syncAudition();
+}
+
+void QmlExportSession::adoptPreviewRenderSettings()
+{
+    // The task is seeded from this live state on page entry. Left alone, the page would
+    // keep that entry-time copy and write it back over the newer value on its next edit
+    // or export.
+    if (preview() == nullptr) {
+        return;
+    }
+    const QVariantMap values = preview()->renderSettings();
+    const auto fromPercent = [&values](const char* key, double fallback) {
+        const QVariant value = values.value(QLatin1String(key));
+        return value.isValid() ? value.toDouble() / 100.0 : fallback;
+    };
+    task_.backgroundBrightnessOuter = fromPercent("brightnessOuter", task_.backgroundBrightnessOuter);
+    task_.backgroundBrightnessInner = fromPercent("brightnessInner", task_.backgroundBrightnessInner);
+    task_.layoutSquareScale = fromPercent("layoutSquareScale", task_.layoutSquareScale);
+    task_.backgroundScaleMode = static_cast<PreviewBackgroundScaleMode>(
+        values.value(QStringLiteral("scaleMode"), static_cast<int>(task_.backgroundScaleMode)).toInt());
+    task_.smoothBrightness = values.value(QStringLiteral("smoothBrightness"), task_.smoothBrightness).toBool();
+    task_.showTimestamp = values.value(QStringLiteral("showTimestamp"), task_.showTimestamp).toBool();
+    task_.tapFlowSpeed = values.value(QStringLiteral("tapFlowSpeed"), task_.tapFlowSpeed).toDouble();
+    task_.touchFlowSpeed = values.value(QStringLiteral("touchFlowSpeed"), task_.touchFlowSpeed).toDouble();
+    emit videoChanged();
+    emit gameplayChanged();
 }
 
 void QmlExportSession::stopAudition()
@@ -723,14 +758,18 @@ void QmlExportSession::startExport()
         // if the single-export range currently starts after chart zero.
         batchTask.intro.enabled = task_.intro.enabled;
         QString error;
-        const bool launched = engine()->launchBatchExport(
-            batchTask,
-            chartDirectories_,
-            batchSelectedDifficultyIds_,
-            batchOutputDirectory_,
-            &result,
-            callbacks,
-            &error);
+        bool launched = false;
+        {
+            const QScopedValueRollback pushing(pushingSharedSettings_, true);
+            launched = engine()->launchBatchExport(
+                batchTask,
+                chartDirectories_,
+                batchSelectedDifficultyIds_,
+                batchOutputDirectory_,
+                &result,
+                callbacks,
+                &error);
+        }
         if (jobProgress != nullptr && jobProgress->token() == batchJobToken) {
             jobProgress->end();
         }
@@ -785,8 +824,12 @@ void QmlExportSession::startExport()
     QString error;
     exportRunning_ = true;
     emit exportRunningChanged();
-    if (!engine()->launchVideoExport(
-            buildRequestedTask(), selectedDifficultyId_, &error)) {
+    bool launched = false;
+    {
+        const QScopedValueRollback pushing(pushingSharedSettings_, true);
+        launched = engine()->launchVideoExport(buildRequestedTask(), selectedDifficultyId_, &error);
+    }
+    if (!launched) {
         exportRunning_ = false;
         emit exportRunningChanged();
         uiRequests_->postNotice(

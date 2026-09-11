@@ -35,6 +35,10 @@ public:
     RenderMode muriRenderMode() const override;
     void setMuriRenderMode(RenderMode mode) override;
     void toggleMuriRenderMode() override;
+    int muriHandRadiusPx() const override;
+    void setMuriHandRadiusPx(int radiusPx) override;
+    int muriTapOnSlideThresholdMs() const override;
+    void setMuriTapOnSlideThresholdMs(int thresholdMs) override;
     QStringList availableSkinDirectoryNames() const override;
     QString skinDisplayName(const QString& directoryName) const override;
     QString resolveSkinDir() const override;

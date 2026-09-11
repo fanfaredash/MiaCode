@@ -90,6 +90,32 @@ void PlaybackPreviewSurfaceAdapter::toggleMuriRenderMode()
     }
 }
 
+int PlaybackPreviewSurfaceAdapter::muriHandRadiusPx() const
+{
+    return coordinator_ != nullptr ? coordinator_->muriHandRadiusPx()
+                                   : miacode::muri::kHandRadiusDefaultPx;
+}
+
+void PlaybackPreviewSurfaceAdapter::setMuriHandRadiusPx(int radiusPx)
+{
+    if (coordinator_ != nullptr) {
+        coordinator_->setMuriHandRadiusPx(radiusPx);
+    }
+}
+
+int PlaybackPreviewSurfaceAdapter::muriTapOnSlideThresholdMs() const
+{
+    return coordinator_ != nullptr ? coordinator_->muriTapOnSlideThresholdMs()
+                                   : miacode::muri::kStaticTapOnSlideThresholdDefaultMs;
+}
+
+void PlaybackPreviewSurfaceAdapter::setMuriTapOnSlideThresholdMs(int thresholdMs)
+{
+    if (coordinator_ != nullptr) {
+        coordinator_->setMuriTapOnSlideThresholdMs(thresholdMs);
+    }
+}
+
 QStringList PlaybackPreviewSurfaceAdapter::availableSkinDirectoryNames() const
 {
     return coordinator_ != nullptr ? coordinator_->availableSkinDirectoryNames() : QStringList();

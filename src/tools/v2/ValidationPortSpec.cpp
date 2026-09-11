@@ -42,6 +42,10 @@ public:
         ++setMuriRenderModeCount;
     }
 
+    void setMuriHandRadiusPx(int radiusPx) override { lastHandRadiusPx = radiusPx; }
+
+    void setStaticTapOnSlideThresholdMs(int thresholdMs) override { lastThresholdMs = thresholdMs; }
+
     void clearValidationCache() override { ++clearValidationCacheCount; }
 
     void clearValidationDecorations() override { ++clearValidationDecorationsCount; }
@@ -54,6 +58,8 @@ public:
 
     RenderMode lastMode = RenderMode::Native;
     bool lastPersistState = false;
+    int lastHandRadiusPx = 0;
+    int lastThresholdMs = 0;
     int setMuriRenderModeCount = 0;
     int clearValidationCacheCount = 0;
     int clearValidationDecorationsCount = 0;

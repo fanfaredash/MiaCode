@@ -354,7 +354,8 @@ void addSlidePadWindowsAndTrails(
     const TimelineNoteMarker& marker,
     const QString& markerKey,
     QVector<MuriPadWindow>* padWindows,
-    QVector<MuriActionTrail>* actionTrails)
+    QVector<MuriActionTrail>* actionTrails,
+    double handRadius)
 {
     using namespace miacode::muri;
     const int segmentCount = qMin(
@@ -390,7 +391,7 @@ void addSlidePadWindowsAndTrails(
             marker.type,
             shootSecond,
             trailEnd,
-            kHandRadiusNormal,
+            handRadius,
             centeredPathPoints(marker.slideSegmentPoints.at(segmentIndex))
         );
     }
@@ -521,7 +522,9 @@ QVector<MuriPadWindow> buildRuntimePadWindows(
             continue;
         }
         if (marker.type == QLatin1String("slide")) {
-            addSlidePadWindowsAndTrails(marker, markerKey, &windows, &ignoredActionTrails);
+            // Only the pad windows are used here; the trail radius is irrelevant.
+            addSlidePadWindowsAndTrails(
+                marker, markerKey, &windows, &ignoredActionTrails, miacode::muri::kHandRadiusNormal);
             continue;
         }
         if (marker.type == QLatin1String("wifi")) {
@@ -629,6 +632,7 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
     const QVector<JudgeableSimpleNote>& notes,
     const QVector<RuntimeTouchGroup>& touchGroups,
     const QHash<int, int>& touchGroupByChildNoteIndex,
+    double handRadius,
     bool includeSlideLike)
 {
     using namespace miacode::muri;
@@ -654,7 +658,7 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
                 note.momentSecond,
                 note.pressEndSecond,
                 simpleNoteActionCenter(note),
-                kHandRadiusNormal,
+                handRadius,
                 false);
             continue;
         }
@@ -670,7 +674,7 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
                 note.momentSecond,
                 note.pressEndSecond,
                 simpleNoteActionCenter(note),
-                kHandRadiusNormal,
+                handRadius,
                 false);
             continue;
         }
@@ -689,7 +693,7 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
                 note.momentSecond,
                 note.pressEndSecond,
                 simpleNoteActionCenter(note),
-                kHandRadiusNormal,
+                handRadius,
                 false);
             continue;
         }
@@ -705,7 +709,7 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
                 note.momentSecond,
                 note.pressEndSecond,
                 simpleNoteActionCenter(note),
-                kHandRadiusNormal,
+                handRadius,
                 false);
             continue;
         }
@@ -739,7 +743,7 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
                     note.momentSecond,
                     note.pressEndSecond,
                     simpleNoteActionCenter(note),
-                    kHandRadiusNormal,
+                    handRadius,
                     false);
             }
             continue;
@@ -809,7 +813,7 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
                         startSecond,
                         durationSecond,
                         endSecond,
-                        kHandRadiusNormal,
+                        handRadius,
                         centeredPathPoints(actionPoints));
                 }
                 continue;
@@ -1207,7 +1211,11 @@ MuriAnalysisReport MuriAnalyzer::analyze(
     report.sourceSignature = signatureParts.join(QLatin1Char(';'));
 
     MuriDiagnosticCollector collector;
-    buildOverlayActions(noteMarkers, &report.padWindows, &report.actionTrails);
+    buildOverlayActions(
+        noteMarkers,
+        &report.padWindows,
+        &report.actionTrails,
+        miacode::muri::handRadiusForOptions(renderOptions));
     collectSimpleNoteRuntimeDiagnostics(
         noteMarkers,
         renderOptions,

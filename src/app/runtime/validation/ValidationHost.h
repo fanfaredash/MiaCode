@@ -26,6 +26,8 @@ public:
     void refreshValidationPanelForActiveField();
     void applyMuriRenderOptions();
     void setMuriRenderMode(RenderMode mode, bool persistState = true) override;
+    void setMuriHandRadiusPx(int radiusPx) override;
+    void setStaticTapOnSlideThresholdMs(int thresholdMs) override;
     void onToggleJudgeMarkers(bool checked);
     void onToggleTouchTrail(bool checked);
     bool runValidateSimaiSilently();
@@ -33,6 +35,8 @@ public:
     Session::QmlAnalysisSnapshot qmlAnalysisSnapshot() const;
 
 private:
+    void applyMuriParameterChange();
+
     Session& session_;
     RuntimeContext::Ui& ui_;
     RuntimeContext::State& state_;
