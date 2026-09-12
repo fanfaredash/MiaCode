@@ -1,0 +1,43 @@
+name: Build macOS Dev
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package Apple Silicon dev build
+    runs-on: macos-14
+    timeout-minutes: 90
+    env:
+      CMAKE_OSX_ARCHITECTURES: arm64
+      CMAKE_OSX_DEPLOYMENT_TARGET: "13.0"
+      MIACODE_BUILD_DEV_TOOLS: "ON"
+      MIACODE_FFMPEG_BUILD_JOBS: "4"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Prepare FFmpeg development SDK
+        run: bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh
+
+      - name: Build and package
+        run: bash scripts/build/build-macos.sh
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiaCode-dev-macos-apple-silicon-${{ github.run_number }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
