@@ -8,6 +8,7 @@ on:
     branches:
       - dev
       - feature/qml-ui
+      - ci/**
   workflow_dispatch:
 
 permissions:
