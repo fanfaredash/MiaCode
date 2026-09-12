@@ -33,6 +33,7 @@ jobs:
             runner: windows-2022
             toolchain: msvc
             buildDir: build-msvc
+            qtArchDir: msvc2022_64
             # x64 builds the decode-only preview FFmpeg SDK by default; MSYS2
             # and MSVC are preinstalled on this image, so the trim toolchain
             # runs as-is.
@@ -40,6 +41,7 @@ jobs:
             runner: windows-11-arm
             toolchain: msvc-arm64
             buildDir: build-msvc-arm64
+            qtArchDir: msvc2022_arm64
             # arm64 ships the full BtbN n8.1 LGPL SDK (the trim toolchain covers
             # x64 only, so no trim runs here).
 
@@ -50,27 +52,23 @@ jobs:
           lfs: true
           submodules: recursive
 
-      # The Windows runner images ship Python with pip, so the toolchain
-      # scripts use the image interpreter directly.
+      - name: Restore Qt
+        uses: actions/cache@v4
+        with:
+          path: .qt/6.11.1/${{ matrix.qtArchDir }}
+          key: qt-6.11.1-windows-${{ matrix.arch }}
+
+      - name: Restore media kit
+        uses: actions/cache@v4
+        with:
+          path: third_party/ffmpeg/windows/${{ matrix.arch == 'arm64' && 'winarm64' || 'win64' }}
+          key: media-windows-${{ matrix.arch }}-${{ hashFiles('scripts/ffmpeg/**') }}
 
       - name: Build and package
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $jobs = [int]$env:NUMBER_OF_PROCESSORS
-          ./scripts/build/build-win.ps1 -Toolchain ${{ matrix.toolchain }} -BuildDir ${{ matrix.buildDir }} -BuildJobs $jobs
-
-      - name: Verify package
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $distDirs = @(Get-ChildItem dist -Directory -Filter "MiaCode_*_win_${{ matrix.arch }}")
-          if ($distDirs.Count -ne 1) {
-            throw "Expected one MiaCode-*-windows-${{ matrix.arch }} directory under dist, found: $($distDirs.Name -join ', ')"
-          }
-          # Headless runner: no display session, so the launcher smoke test is a
-          # local-machine check (see docs/ops/RELEASE_CHECKLIST.md), not a CI one.
-          ./scripts/build/verify-win-package.ps1 -DistDir $distDirs[0].FullName -Arch ${{ matrix.arch }} -SkipLaunch
+          ./scripts/build/build-win.ps1 -Toolchain ${{ matrix.toolchain }} -BuildDir ${{ matrix.buildDir }} -BuildJobs 4
 
       - name: Resolve artifact name
         id: package

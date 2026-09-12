@@ -14,7 +14,19 @@ PACKAGE_ARCHITECTURES="${CMAKE_OSX_ARCHITECTURES:-arm64}"
 THIN_SINGLE_ARCH_PACKAGE="${MIACODE_THIN_MACOS_APP:-ON}"
 MIACODE_FFMPEG_DEV_DIR="${MIACODE_FFMPEG_DEV_DIR:-}"
 PACKAGE_CHANNEL="${MIACODE_PACKAGE_CHANNEL:-}"
-PACKAGE_JOBS="${MIACODE_PACKAGE_JOBS:-$(sysctl -n hw.ncpu)}"
+PACKAGE_JOBS="${MIACODE_PACKAGE_JOBS:-4}"
+FFMPEG_RUNTIME_LIBRARIES=(
+  "libavcodec.62.dylib"
+  "libavfilter.11.dylib"
+  "libavformat.62.dylib"
+  "libavutil.60.dylib"
+  "libswresample.6.dylib"
+  "libswscale.9.dylib"
+)
+if [[ ! "$PACKAGE_JOBS" =~ ^[1-4]$ ]]; then
+  echo "MIACODE_PACKAGE_JOBS must be an integer from 1 to 4 (got: $PACKAGE_JOBS)" >&2
+  exit 2
+fi
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
   QT_ROOT="$QT_ROOT_DIR"
 fi
@@ -129,14 +141,6 @@ validate_minos() {
 
 resolve_macos_ffmpeg_dev_dir() {
   local library
-  local -a required_libraries=(
-    "libavcodec.60.dylib"
-    "libavfilter.9.dylib"
-    "libavformat.60.dylib"
-    "libavutil.58.dylib"
-    "libswresample.4.dylib"
-    "libswscale.7.dylib"
-  )
 
   if [[ -z "$MIACODE_FFMPEG_DEV_DIR" ]]; then
     MIACODE_FFMPEG_DEV_DIR="$ROOT_DIR/third_party/ffmpeg/macos/dev"
@@ -150,7 +154,7 @@ resolve_macos_ffmpeg_dev_dir() {
     echo "Run: bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh" >&2
     exit 1
   fi
-  for library in "${required_libraries[@]}"; do
+  for library in "${FFMPEG_RUNTIME_LIBRARIES[@]}"; do
     if [[ ! -f "$MIACODE_FFMPEG_DEV_DIR/lib/$library" ]]; then
       echo "macOS FFmpeg SDK is missing required library: $MIACODE_FFMPEG_DEV_DIR/lib/$library" >&2
       exit 1
@@ -230,14 +234,6 @@ stage_macos_ffmpeg_runtime() {
   local frameworks_dir="$app_path/Contents/Frameworks"
   local app_binary="$app_path/Contents/MacOS/MiaCode"
   local library source_path destination_path macho_path dependency dependency_base
-  local -a required_libraries=(
-    "libavcodec.60.dylib"
-    "libavfilter.9.dylib"
-    "libavformat.60.dylib"
-    "libavutil.58.dylib"
-    "libswresample.4.dylib"
-    "libswscale.7.dylib"
-  )
 
   if [[ ! -d "$frameworks_dir" ]]; then
     echo "Missing Frameworks directory while staging FFmpeg: $frameworks_dir" >&2
@@ -248,7 +244,7 @@ stage_macos_ffmpeg_runtime() {
     return 1
   fi
 
-  for library in "${required_libraries[@]}"; do
+  for library in "${FFMPEG_RUNTIME_LIBRARIES[@]}"; do
     source_path="$MIACODE_FFMPEG_DEV_DIR/lib/$library"
     destination_path="$frameworks_dir/$library"
     cp -L "$source_path" "$destination_path"
@@ -258,7 +254,7 @@ stage_macos_ffmpeg_runtime() {
   while IFS= read -r -d '' macho_path; do
     while IFS= read -r dependency; do
       dependency_base="$(basename "$dependency")"
-      for library in "${required_libraries[@]}"; do
+      for library in "${FFMPEG_RUNTIME_LIBRARIES[@]}"; do
         if [[ "$dependency_base" == "$library" && "$dependency" != "@rpath/$library" ]]; then
           install_name_tool -change "$dependency" "@rpath/$library" "$macho_path"
         fi
@@ -326,7 +322,7 @@ remove_qt_ffmpeg_backend() {
     "libswscale.8.dylib"
   )
 
-  # macOS preview uses QtAVPlayer and FFmpeg 6. QVideoFrame, VideoOutput, and
+  # macOS preview uses QtAVPlayer and the project FFmpeg runtime. QVideoFrame, VideoOutput, and
   # QMediaDevices still require Qt Multimedia, but not Qt's parallel FFmpeg 7
   # backend. Keep libdarwinmediaplugin.dylib for the native device backend.
   rm -f "$plugin_path"
@@ -335,8 +331,7 @@ remove_qt_ffmpeg_backend() {
     case "$macho_path" in
       "$frameworks_dir"/libavcodec.61.dylib|"$frameworks_dir"/libavfilter.10.dylib|"$frameworks_dir"/libavformat.61.dylib|"$frameworks_dir"/libavutil.59.dylib|"$frameworks_dir"/libswresample.5.dylib|"$frameworks_dir"/libswscale.8.dylib)
         # The Qt FFmpeg runtime libraries may reference one another, but are
-        # removed as one unit. Qt 6.10.2 does not stage avfilter.10; include
-        # it defensively so a future Qt deployment cannot reintroduce it.
+        # removed as one unit. Include avfilter for Qt package revisions that stage it.
         continue
         ;;
     esac
@@ -613,7 +608,7 @@ rm -rf "$DIST_DIR/MiaCode.app/Contents/PlugIns/sqldrivers"
 package_step "Removing the unused Qt FFmpeg 7 media backend"
 remove_qt_ffmpeg_backend "$DIST_DIR/MiaCode.app"
 
-package_step "Staging the self-contained FFmpeg 6 preview runtime"
+package_step "Staging the self-contained FFmpeg 8.1 preview runtime"
 stage_macos_ffmpeg_runtime "$DIST_DIR/MiaCode.app"
 strip_absolute_build_rpaths "$DIST_DIR/MiaCode.app/Contents/MacOS/MiaCode"
 

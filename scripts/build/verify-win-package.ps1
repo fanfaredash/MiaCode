@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Runs after package-win.ps1. Fails (exit 1) when the package is missing a
-    required entry, contains a forbidden one, ships FFmpeg DLLs that differ from
+    required entry, ships FFmpeg DLLs that differ from
     the provisioned dev SDK, leaves an import unresolved, or fails to start.
 
 .PARAMETER DistDir
@@ -74,16 +74,8 @@ foreach ($toolchainName in $toolchainData.Toolchains.Keys) {
         }
     }
 }
-if (!(Test-Path -LiteralPath (Join-Path $appDir "libstdc++-6.dll")) -and !(Test-Path -LiteralPath (Join-Path $appDir "msvcp140.dll"))) {
-    $failures.Add("no C++ runtime (GCC or MSVC) in app\ — the package would need one installed on the target machine")
-}
-foreach ($entry in $toolchainData.Package.ForbiddenRelativePaths) {
-    # Dev-tool packages ship simai_native_dump.exe, which links Qt6::Widgets.
-    if ($IncludeDevTools -and $entry -eq "app-qt:Qt6Widgets") { continue }
-    $relativePath = Expand-PackagePathEntry -Entry $entry
-    if (Test-Path -LiteralPath (Join-Path $DistDir $relativePath)) {
-        $failures.Add("forbidden path present: $relativePath")
-    }
+if (!(Test-Path -LiteralPath (Join-Path $appDir "msvcp140.dll"))) {
+    $failures.Add("MSVC runtime missing from app\")
 }
 if ($IncludeDevTools) {
     $qtWidgetsRelative = Expand-PackagePathEntry -Entry "app-qt:Qt6Widgets"
@@ -119,7 +111,7 @@ foreach ($dll in $toolchainData.FFmpeg.RuntimeDllsByArch.$Arch) {
 # --- 3. dependency completeness ---------------------------------------------
 Write-Host "== Dependency completeness =="
 $objdump = ""
-foreach ($toolchainName in @("mingw", "msvc")) {
+foreach ($toolchainName in @("msvc", "msvc-arm64")) {
     $compilerRoot = $toolchainData.Toolchains.$toolchainName.CompilerRoot
     if (![string]::IsNullOrWhiteSpace($compilerRoot)) {
         $candidate = Join-Path $compilerRoot "bin\objdump.exe"

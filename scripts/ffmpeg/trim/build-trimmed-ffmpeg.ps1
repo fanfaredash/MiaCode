@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Build a decode-only, minimal-size FFmpeg (n7.1, LGPL, shared) for MiaCode's
+    Build a decode-only, minimal-size FFmpeg 8.1.2 (LGPL, shared) for MiaCode's
     QtAVPlayer preview backend and install it into third_party/ffmpeg/windows/win64/dev.
 
 .DESCRIPTION
@@ -252,7 +252,7 @@ if (-not $SkipToolchainInstall) {
     Write-Host "== Toolchain (pacman) =="
     # mingw-w64-x86_64-dav1d: software AV1 decoder (libdav1d), required by the
     # --enable-libdav1d flag in trim-allowlist.psd1 ExtraConfigureArgs. Ships a
-    # static libdav1d.a so it can link into avcodec-61.dll (self-contained).
+    # static libdav1d.a so it can link into avcodec-62.dll (self-contained).
     Invoke-Msys2Bash "$(To-Msys2Path $pacmanExe) -S --needed --noconfirm make diffutils pkgconf git mingw-w64-x86_64-gcc mingw-w64-x86_64-nasm mingw-w64-x86_64-dav1d"
 } else {
     Write-Host "== Toolchain install skipped (-SkipToolchainInstall) =="
@@ -325,7 +325,7 @@ $stageLib = Join-Path $prefix 'lib'
 foreach ($base in $allow.ExpectedDlls) {
     $dll = Join-Path $stageBin "$base.dll"
     if (!(Test-Path $dll)) { throw "Expected DLL not produced: $dll (check the allowlist / configure output)" }
-    # avcodec-61.dll -> avcodec.lib (strip the -NN major suffix to match find_library NAMES)
+    # avcodec-62.dll -> avcodec.lib (strip the -NN major suffix to match find_library NAMES)
     $libBase = ($base -replace '-\d+$', '')
     New-MsvcImportLib -DllPath $dll -OutLibPath (Join-Path $stageLib "$libBase.lib") -Vcvars $vcvars
     Write-Host "  $base.dll -> $libBase.lib"

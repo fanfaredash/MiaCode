@@ -12,15 +12,11 @@
 # The whole dev/ tree is gitignored - never committed. CMake discovers it via
 # the MIACODE_FFMPEG_DEV_DIR cache variable (built from the target architecture).
 #
-# Default source per architecture:
-#   x64   BtbN FFmpeg-Builds n7.1 LGPL *shared* (the pre-trim baseline; CI then
-#         replaces it with the decode-only build from scripts/ffmpeg/trim/)
-#   arm64 BtbN FFmpeg-Builds n8.1 LGPL *shared*, pinned to one immutable
-#         autobuild tag so the archive hash stays valid. arm64 ships this full
-#         SDK — the trim toolchain covers x64 only.
+# Both architectures use the FFmpeg 8.1 ABI. x64 comes from the decode-only
+# source build in scripts/ffmpeg/trim; arm64 uses a pinned upstream shared SDK.
 # LGPL (decode-only, no --enable-gpl/--enable-nonfree) matches the existing
-# redistribution terms. Major versions must stay avcodec-61/62, avformat-61/62,
-# avutil-59/60, swresample-5/6, swscale-8/9, avfilter-10/11 respectively, to
+# redistribution terms. Major versions stay avcodec-62, avformat-62,
+# avutil-60, swresample-6, swscale-9 and avfilter-11 to
 # match scripts/build/windows-toolchain.psd1. (avdevice is dropped -
 # capture-device only, see third_party/ffmpeg/README.md -> Size trimming.)
 #
@@ -59,17 +55,10 @@ $binDir = Join-Path $devDir "bin"
 # Runtime DLLs the build + package require (names are major-version pinned).
 # avdevice is intentionally excluded - it's capture-device-only and dropped to
 # trim package size (QtAVPlayer is patched not to link/use it).
-$requiredDlls = if ($Arch -eq "arm64") {
-    @(
-        "avcodec-62.dll", "avformat-62.dll", "avutil-60.dll",
-        "swresample-6.dll", "swscale-9.dll", "avfilter-11.dll"
-    )
-} else {
-    @(
-        "avcodec-61.dll", "avformat-61.dll", "avutil-59.dll",
-        "swresample-5.dll", "swscale-8.dll", "avfilter-10.dll"
-    )
-}
+$requiredDlls = @(
+    "avcodec-62.dll", "avformat-62.dll", "avutil-60.dll",
+    "swresample-6.dll", "swscale-9.dll", "avfilter-11.dll"
+)
 $requiredLibs = @(
     "avcodec.lib", "avformat.lib", "avutil.lib",
     "swresample.lib", "swscale.lib", "avfilter.lib"
@@ -83,9 +72,8 @@ if ($Arch -eq "arm64") {
     $defaultUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$ffmpegReleaseTag/ffmpeg-$ffmpegBuildVersion-winarm64-lgpl-shared-8.1.zip"
     $defaultSha256 = "DFB3F394B316F91CC2C399BBAA38A280F81E523E150A20F7DDD477843AA70608"
 } else {
-    # x64: the trim build produces this SDK; there is no downloadable n7.1
-    # prebuilt left upstream. Only an explicit override URL reaches the
-    # download path below.
+    # x64 is produced by the compact source build. An override URL can provide
+    # the same include/lib/bin layout.
     $defaultUrl = ""
     $defaultSha256 = ""
 }
@@ -194,7 +182,7 @@ try {
     foreach ($dll in $requiredDlls) {
         $src = Join-Path (Join-Path $srcRoot "bin") $dll
         if (!(Test-Path $src)) {
-            throw "Downloaded FFmpeg dev SDK is missing runtime DLL '$dll' - wrong build/major version? Expected an n7.1 win64 / n8.1 winarm64 lgpl *shared* build."
+            throw "Downloaded FFmpeg dev SDK is missing runtime DLL '$dll' - expected an FFmpeg 8.1 LGPL shared build."
         }
         Copy-Item $src (Join-Path $binDir $dll) -Force
     }

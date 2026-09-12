@@ -6,7 +6,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-QT_VERSION="${QT_VERSION:-6.10.2}"
+QT_VERSION="${QT_VERSION:-6.11.1}"
 QT_ROOT="${QT_ROOT:-${QT_ROOT_DIR:-}}"
 BUILD_DIR="${BUILD_DIR:-$ROOT_DIR/build-macos}"
 DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-13.0}"

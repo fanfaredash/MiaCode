@@ -37,7 +37,6 @@ if (MSVC)
     set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
         "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
     )
-    add_compile_options(/MP)
 endif()
 
 set(CMAKE_AUTOMOC ON)
@@ -1219,9 +1218,8 @@ if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 
     if (WIN32)
         # Runtime: the preview backend loads these next to MiaCode.exe. Resolve
-        # the six families from the dev SDK so x64 (n7.1, avcodec-61) and arm64
-        # (n8.1, avcodec-62) each stage their own majors; the package contract in
-        # scripts/build/windows-toolchain.psd1 pins the exact names per arch.
+        # the six families from the project FFmpeg 8.1 SDK; the package contract
+        # in scripts/build/windows-toolchain.psd1 pins the exact names.
         file(GLOB MIACODE_FFMPEG_WINDOWS_RUNTIME_DLLS
             "${MIACODE_FFMPEG_DEV_DIR}/bin/avcodec-*.dll"
             "${MIACODE_FFMPEG_DEV_DIR}/bin/avformat-*.dll"
@@ -1245,12 +1243,12 @@ if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
         # app bundle runnable too, then let the release packager stage the
         # same six dylibs in its final Frameworks directory.
         set(MIACODE_MACOS_FFMPEG_RUNTIME_LIBRARIES
-            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavcodec.60.dylib"
-            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavfilter.9.dylib"
-            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavformat.60.dylib"
-            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavutil.58.dylib"
-            "${MIACODE_FFMPEG_DEV_DIR}/lib/libswresample.4.dylib"
-            "${MIACODE_FFMPEG_DEV_DIR}/lib/libswscale.7.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavcodec.62.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavfilter.11.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavformat.62.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libavutil.60.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libswresample.6.dylib"
+            "${MIACODE_FFMPEG_DEV_DIR}/lib/libswscale.9.dylib"
         )
         foreach(MIACODE_MACOS_FFMPEG_RUNTIME_LIBRARY IN LISTS MIACODE_MACOS_FFMPEG_RUNTIME_LIBRARIES)
             if (NOT EXISTS "${MIACODE_MACOS_FFMPEG_RUNTIME_LIBRARY}")

@@ -13,7 +13,7 @@ This file inventories libraries, tools, fonts, media assets, and reference proje
 | Component | Location / Use | License / Notes |
 | --- | --- | --- |
 | Qt 6 | Application framework, widgets, Qt Quick, multimedia, deployment tools | Qt is available under commercial and open-source licenses. Confirm the intended distribution model and comply with Qt redistribution obligations. |
-| FFmpeg | Export executable and Windows preview decode SDK | The repository documents an LGPL shared baseline in [third_party/ffmpeg/README.md](third_party/ffmpeg/README.md). Keep GPL/nonfree build flags out unless the project license/distribution plan changes. |
+| FFmpeg | Export executable and preview decode SDK | Preview uses LGPL shared libraries; export runs a separate GPL executable carrying libx264. Build sources, flags and distribution layout are documented in [third_party/ffmpeg/README.md](third_party/ffmpeg/README.md). |
 | QtAVPlayer | Vendored preview video decode backend under [third_party/QtAVPlayer](third_party/QtAVPlayer) | MIT License, see [third_party/QtAVPlayer/LICENSE](third_party/QtAVPlayer/LICENSE). |
 | SoundTouch | Audio processing under [third_party/soundtouch](third_party/soundtouch) | LGPL 2.1, see [third_party/soundtouch/COPYING.TXT](third_party/soundtouch/COPYING.TXT). Static linking and redistribution obligations need review before public release. |
 | miniz | ZIP packaging under [third_party/miniz](third_party/miniz) | MIT License, see [third_party/miniz/LICENSE](third_party/miniz/LICENSE). |

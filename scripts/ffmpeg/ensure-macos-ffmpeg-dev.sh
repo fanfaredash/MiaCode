@@ -4,20 +4,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SDK_DIR="${MIACODE_MACOS_FFMPEG_DEV_DIR:-$ROOT_DIR/third_party/ffmpeg/macos/dev}"
 SDK_PARENT="$(dirname "$SDK_DIR")"
-FFMPEG_VERSION="6.1.2"
+FFMPEG_VERSION="8.1.2"
 FFMPEG_ARCHIVE="ffmpeg-${FFMPEG_VERSION}.tar.xz"
 FFMPEG_URL="https://ffmpeg.org/releases/${FFMPEG_ARCHIVE}"
-FFMPEG_SHA256="3b624649725ecdc565c903ca6643d41f33bd49239922e45c9b1442c63dca4e38"
+FFMPEG_SHA256="464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
 MACOS_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
-BUILD_JOBS="${MIACODE_FFMPEG_BUILD_JOBS:-$(sysctl -n hw.ncpu)}"
+BUILD_JOBS="${MIACODE_FFMPEG_BUILD_JOBS:-4}"
 
 required_libraries=(
-  "libavcodec.60.dylib"
-  "libavfilter.9.dylib"
-  "libavformat.60.dylib"
-  "libavutil.58.dylib"
-  "libswresample.4.dylib"
-  "libswscale.7.dylib"
+  "libavcodec.62.dylib"
+  "libavfilter.11.dylib"
+  "libavformat.62.dylib"
+  "libavutil.60.dylib"
+  "libswresample.6.dylib"
+  "libswscale.9.dylib"
 )
 
 temp_root=""
@@ -53,7 +53,7 @@ version_gt() {
 
 is_allowed_dependency() {
   case "$1" in
-    /System/Library/*|/usr/lib/*|*.framework/*|@rpath/libavcodec.60.dylib|@rpath/libavfilter.9.dylib|@rpath/libavformat.60.dylib|@rpath/libavutil.58.dylib|@rpath/libswresample.4.dylib|@rpath/libswscale.7.dylib) return 0 ;;
+    /System/Library/*|/usr/lib/*|*.framework/*|@rpath/libavcodec.62.dylib|@rpath/libavfilter.11.dylib|@rpath/libavformat.62.dylib|@rpath/libavutil.60.dylib|@rpath/libswresample.6.dylib|@rpath/libswscale.9.dylib) return 0 ;;
   esac
   return 1
 }
@@ -91,8 +91,8 @@ validate_sdk() {
 }
 
 [[ "$(uname -s)" == "Darwin" ]] || { echo "macOS FFmpeg SDK provisioning must run on macOS." >&2; exit 2; }
-if [[ ! "$BUILD_JOBS" =~ ^[1-9][0-9]*$ ]]; then
-  echo "MIACODE_FFMPEG_BUILD_JOBS must be a positive integer (got: $BUILD_JOBS)" >&2
+if [[ ! "$BUILD_JOBS" =~ ^[1-4]$ ]]; then
+  echo "MIACODE_FFMPEG_BUILD_JOBS must be an integer from 1 to 4 (got: $BUILD_JOBS)" >&2
   exit 2
 fi
 for required_tool in curl shasum tar make xcrun install_name_tool lipo otool; do
@@ -105,7 +105,7 @@ if [[ -d "$SDK_DIR" ]] && validate_sdk "$SDK_DIR"; then
 fi
 
 mkdir -p "$SDK_PARENT"
-temp_root="$(mktemp -d "${TMPDIR:-/tmp}/miacode-ffmpeg6.XXXXXX")"
+temp_root="$(mktemp -d "${TMPDIR:-/tmp}/miacode-ffmpeg.XXXXXX")"
 archive_path="$temp_root/$FFMPEG_ARCHIVE"
 source_dir="$temp_root/ffmpeg-$FFMPEG_VERSION"
 staging_dir="$(mktemp -d "$SDK_PARENT/.dev.staging.XXXXXX")"

@@ -39,7 +39,22 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Restore Qt
+        uses: actions/cache@v4
+        with:
+          path: .qt/6.11.1
+          key: qt-6.11.1-macos-arm64
+
+      - name: Restore media kit
+        uses: actions/cache@v4
+        with:
+          path: third_party/ffmpeg/macos
+          key: media-macos-arm64-${{ hashFiles('scripts/ffmpeg/**') }}
+
       - name: Build and package
+        env:
+          MIACODE_FFMPEG_BUILD_JOBS: "4"
+          MIACODE_PACKAGE_JOBS: "4"
         run: bash scripts/build/build-macos-ci.sh
 
       - name: Resolve artifact name

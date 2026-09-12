@@ -19,7 +19,7 @@ Use this checklist before making the repository public. It intentionally separat
 - [x] Review package contents against THIRD_PARTY_NOTICES.md after removing Remotion prototype files.
 - [x] Ensure BASS runtime DLLs are explicitly tracked for the intended non-commercial Windows build.
 - [x] Audit third-party build inputs from a clean-clone perspective: required vendored headers/libs/assets are tracked, and intentionally untracked FFmpeg binaries/SDKs have provisioning scripts and documented URLs.
-- [x] Verify pinned FFmpeg download URLs are reachable: Windows export package, Windows QtAVPlayer dev SDK, macOS package, and FFmpeg `n7.1` source mirrors.
+- [x] Verify pinned FFmpeg download URLs are reachable: Windows export package, Windows QtAVPlayer dev SDK, macOS package, and FFmpeg 8.1.2 source mirrors.
 - [x] Fix Windows export FFmpeg URL after the old Gyan.dev package path returned 404.
 - [x] Update Windows/macOS build scripts to install the Qt ShaderTools module required by CMake.
 - [x] Update Windows build script to provision both standalone export FFmpeg and the QtAVPlayer FFmpeg dev SDK.
@@ -98,23 +98,19 @@ Clean-clone verification:
   - Checked: both archives reachable; the arm64 `ffmpeg.exe` hash reproduced from the extracted binary.
 - Windows QtAVPlayer FFmpeg dev SDK:
   - x64: built from FFmpeg source by `scripts/ffmpeg/trim/build-trimmed-ffmpeg.ps1` (run by
-    `build-win.ps1` unless `-SkipTrim` is passed). There is no prebuilt download for this tree:
-    BtbN removed the n7.1 assets, so the old
-    `.../releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1.zip` URL now returns
-    404 (checked while wiring the trim build in CI).
+    `build-win.ps1` unless `-SkipTrim` is passed). It uses the FFmpeg 8.1.2 source tag and emits
+    the same avcodec-62 ABI used by arm64.
   - arm64 (BtbN n8.1 LGPL **shared**, pinned immutable tag):
     `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-lgpl-shared-8.1.zip`
     - Expected archive SHA256: `DFB3F394B316F91CC2C399BBAA38A280F81E523E150A20F7DDD477843AA70608`.
   - Checked: both archives reachable. The n8.1 win64/winarm64 payloads are byte-identical to the
     rolling `latest` tag of the same day, while the archive hashes differ (the embedded top-level
     directory name differs, so the hash is tag-bound).
-- macOS export FFmpeg: `https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip`
-  - Checked: reachable via redirect to `200 OK`.
-  - Expected SHA256: `430D60FBF419DAB28DAEE9B679E7929A31EE9BAE53F6E42E8AE26B725584290F`.
-- FFmpeg trim source mirrors for tag `n7.1`:
+- macOS export FFmpeg: `https://ffmpeg.martin-riedl.de/download/macos/arm64/1783011502_8.1.2/ffmpeg.zip`
+  - Expected SHA256: `EAF91238E104DD0E262BC6510E25061855CC99A6955A721B0AC99660D58C473D`.
+- FFmpeg preview source mirrors for tag `n8.1.2`:
   - `https://gitee.com/mirrors/ffmpeg.git`
   - `https://github.com/FFmpeg/FFmpeg.git`
   - `https://git.ffmpeg.org/ffmpeg.git`
-  - Checked: all returned `refs/tags/n7.1` at `507a51fbe9732f0f6f12f43ce12431e8faa834b7`.
-    Re-checked while moving the chain: `github.com` and `git.ffmpeg.org` answer for `n7.1`; the Gitee
-    mirror was unreachable from the checking host (TLS failure) at that time.
+  - GitHub returned `refs/tags/n8.1.2` at `1c2c67c0b9f7f66ab32c19dcf7f227bcd290aa4c`.
+  - The official source archive SHA256 is `464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c`.
