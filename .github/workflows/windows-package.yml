@@ -68,7 +68,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          ./scripts/build/build-win.ps1 -Toolchain ${{ matrix.toolchain }} -BuildDir ${{ matrix.buildDir }} -BuildJobs 4
+          $jobs = [int]$env:NUMBER_OF_PROCESSORS
+          ./scripts/build/build-win.ps1 -Toolchain ${{ matrix.toolchain }} -BuildDir ${{ matrix.buildDir }} -BuildJobs $jobs
 
       - name: Resolve artifact name
         id: package

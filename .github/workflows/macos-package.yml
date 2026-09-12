@@ -52,9 +52,6 @@ jobs:
           key: media-macos-arm64-${{ hashFiles('scripts/ffmpeg/**') }}
 
       - name: Build and package
-        env:
-          MIACODE_FFMPEG_BUILD_JOBS: "4"
-          MIACODE_PACKAGE_JOBS: "4"
         run: bash scripts/build/build-macos-ci.sh
 
       - name: Resolve artifact name

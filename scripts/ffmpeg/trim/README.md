@@ -87,7 +87,7 @@ scripts\ffmpeg\trim\survey-chart-codecs.ps1 -ChartRoots '<chart-root-1>','<chart
 # 2. Review the build plan without building:
 scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1 -PrintPlanOnly
 
-# 3. Build + install into third_party/ffmpeg/windows/win64/dev (~30–60 min):
+# 3. Build + install into third_party/ffmpeg/windows/win64/dev:
 scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1
 
 # 4. Rebuild MiaCode against the trimmed SDK + re-verify:

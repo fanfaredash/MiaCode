@@ -14,7 +14,7 @@ PACKAGE_ARCHITECTURES="${CMAKE_OSX_ARCHITECTURES:-arm64}"
 THIN_SINGLE_ARCH_PACKAGE="${MIACODE_THIN_MACOS_APP:-ON}"
 MIACODE_FFMPEG_DEV_DIR="${MIACODE_FFMPEG_DEV_DIR:-}"
 PACKAGE_CHANNEL="${MIACODE_PACKAGE_CHANNEL:-}"
-PACKAGE_JOBS="${MIACODE_PACKAGE_JOBS:-4}"
+PACKAGE_JOBS="${MIACODE_PACKAGE_JOBS:-$(sysctl -n hw.ncpu)}"
 FFMPEG_RUNTIME_LIBRARIES=(
   "libavcodec.62.dylib"
   "libavfilter.11.dylib"
@@ -23,10 +23,6 @@ FFMPEG_RUNTIME_LIBRARIES=(
   "libswresample.6.dylib"
   "libswscale.9.dylib"
 )
-if [[ ! "$PACKAGE_JOBS" =~ ^[1-4]$ ]]; then
-  echo "MIACODE_PACKAGE_JOBS must be an integer from 1 to 4 (got: $PACKAGE_JOBS)" >&2
-  exit 2
-fi
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
   QT_ROOT="$QT_ROOT_DIR"
 fi

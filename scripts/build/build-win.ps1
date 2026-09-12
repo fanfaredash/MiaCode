@@ -18,7 +18,7 @@
     architecture directory and the C++ runtime that ends up in the package.
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildJobs 4
+    powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildJobs 8
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc-arm64 -BuildDir build-msvc-arm64
@@ -33,8 +33,7 @@ param(
     [string]$BuildDir = "build",
     [ValidateSet("Release", "Debug")]
     [string]$Config = "Release",
-    [ValidateRange(1, 4)]
-    [int]$BuildJobs = 4,
+    [int]$BuildJobs = [Environment]::ProcessorCount,
     # Skip the decode-only preview FFmpeg SDK build for architectures that
     # default to it (FFmpeg.TrimByArch in windows-toolchain.psd1). The trim
     # toolchain builds the x64 av*.dll set from FFmpeg source, which takes the

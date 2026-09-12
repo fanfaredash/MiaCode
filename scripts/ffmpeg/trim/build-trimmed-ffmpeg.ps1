@@ -243,7 +243,7 @@ if ($PrintPlanOnly) {
     Write-Host ("    " + ($extraArgs -join ' '))
     Write-Host ""
     Write-Host "  phases: toolchain(pacman) -> clone $($allow.FFmpegVersion) -> validate -> configure -> make -j$Jobs -> import-libs -> assemble(+backup) -> verify"
-    Write-Host "  Re-run without -PrintPlanOnly to build. Expect ~30-60 min."
+    Write-Host "  Re-run without -PrintPlanOnly to build."
     return
 }
 

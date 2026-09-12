@@ -7,8 +7,7 @@
     [string]$BuildDir = "build",
     [string]$DistDir = "",
     [switch]$IncludeDevTools,
-    [ValidateRange(1, 4)]
-    [int]$BuildJobs = 4
+    [int]$BuildJobs = [Environment]::ProcessorCount
 )
 
 $ErrorActionPreference = "Stop"
