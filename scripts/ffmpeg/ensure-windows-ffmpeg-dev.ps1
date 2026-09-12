@@ -83,10 +83,10 @@ if ($Arch -eq "arm64") {
     $defaultUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$ffmpegReleaseTag/ffmpeg-$ffmpegBuildVersion-winarm64-lgpl-shared-8.1.zip"
     $defaultSha256 = "DFB3F394B316F91CC2C399BBAA38A280F81E523E150A20F7DDD477843AA70608"
 } else {
-    # x64 baseline: the n7.1 rolling asset the repository has always used, and
-    # the exact SDK the trim allowlist targets. The trim toolchain replaces this
-    # tree before packaging, so the archive is not hash-pinned.
-    $defaultUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1.zip"
+    # x64: the trim build produces this SDK; there is no downloadable n7.1
+    # prebuilt left upstream. Only an explicit override URL reaches the
+    # download path below.
+    $defaultUrl = ""
     $defaultSha256 = ""
 }
 
@@ -110,6 +110,12 @@ $ffmpegUrl = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_DEV_UR
     $defaultUrl
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_DEV_URL
+}
+if ([string]::IsNullOrWhiteSpace($ffmpegUrl)) {
+    throw ("No FFmpeg dev SDK source for $Arch. x64 builds the decode-only SDK with " +
+        "scripts/ffmpeg/trim/build-trimmed-ffmpeg.ps1 (scripts/build/build-win.ps1 does that by " +
+        "default); arm64 downloads the pinned n8.1 build. Pass " +
+        "MIACODE_WINDOWS_FFMPEG_DEV_URL=<zip> to fetch a specific SDK instead.")
 }
 $expectedSha256 = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_DEV_SHA256)) {
     $defaultSha256

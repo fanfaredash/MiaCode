@@ -28,17 +28,16 @@ jobs:
             toolchain: msvc
             buildDir: build-msvc
             distSuffix: win64
-            # x64 packages the decode-only preview FFmpeg SDK; MSYS2 + MSVC are
-            # preinstalled on this image, so the trim toolchain runs as-is.
-            trim: true
+            # x64 builds the decode-only preview FFmpeg SDK by default; MSYS2
+            # and MSVC are preinstalled on this image, so the trim toolchain
+            # runs as-is.
           - arch: arm64
             runner: windows-11-arm
             toolchain: msvc-arm64
             buildDir: build-msvc-arm64
             distSuffix: winarm64
             # arm64 ships the full BtbN n8.1 LGPL SDK (the trim toolchain covers
-            # x64 only).
-            trim: false
+            # x64 only, so no trim runs here).
 
     steps:
       - name: Check out source
@@ -55,9 +54,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $jobs = [int]$env:NUMBER_OF_PROCESSORS
-          $trimArgs = @()
-          if ("${{ matrix.trim }}" -eq "true") { $trimArgs += "-TrimFfmpeg" }
-          ./scripts/build/build-win.ps1 -Toolchain ${{ matrix.toolchain }} -BuildDir ${{ matrix.buildDir }} -BuildJobs $jobs @trimArgs
+          ./scripts/build/build-win.ps1 -Toolchain ${{ matrix.toolchain }} -BuildDir ${{ matrix.buildDir }} -BuildJobs $jobs
 
       - name: Verify package contents and dependencies
         shell: pwsh

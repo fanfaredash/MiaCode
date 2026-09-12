@@ -40,11 +40,12 @@ param(
     [string]$Config = "Release",
     [ValidateRange(1, 64)]
     [int]$BuildJobs = 4,
-    # Build the decode-only preview FFmpeg SDK with scripts/ffmpeg/trim/ instead
-    # of downloading the full BtbN LGPL SDK. Cuts the packaged av*.dll set from
-    # ~150 MB to ~20 MB. Covers x64 only (FFmpeg.TrimByArch in
-    # windows-toolchain.psd1); arm64 ships the full n8.1 SDK.
-    [switch]$TrimFfmpeg
+    # Skip the decode-only preview FFmpeg SDK build for architectures that
+    # default to it (FFmpeg.TrimByArch in windows-toolchain.psd1). The trim
+    # toolchain builds the x64 av*.dll set from FFmpeg source, which takes the
+    # packaged size from ~150 MB to ~20 MB; arm64 has no trim path and always
+    # uses the full BtbN SDK.
+    [switch]$SkipTrim
 )
 
 $ErrorActionPreference = "Stop"
@@ -195,12 +196,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "Windows ffmpeg preparation failed."
 }
 
-# 3. Preview FFmpeg dev SDK: the decode-only trim build, or the downloaded SDK.
-$trimSupported = $toolchainData.FFmpeg.TrimByArch.$targetArch
-if ($TrimFfmpeg) {
-    if (!$trimSupported) {
-        throw "The decode-only FFmpeg trim toolchain covers x64 only (FFmpeg.TrimByArch.$targetArch is false); arm64 uses the full BtbN n8.1 LGPL SDK. Drop -TrimFfmpeg for this toolchain."
-    }
+# 3. Preview FFmpeg dev SDK. Architectures with a trim path always build the
+#    decode-only SDK; the others download the pinned full SDK.
+$trimPreviewSdk = ($toolchainData.FFmpeg.TrimByArch.$targetArch) -and !$SkipTrim
+if ($trimPreviewSdk) {
     $devSdkDir = Join-Path $repoRoot $toolchainData.FFmpeg.DevDirByArch.$targetArch
     Write-Host "FFmpeg: building the decode-only preview SDK into $devSdkDir"
     & (Join-Path $repoRoot "scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1") `

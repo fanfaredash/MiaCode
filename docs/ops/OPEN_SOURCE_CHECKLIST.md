@@ -97,11 +97,11 @@ Clean-clone verification:
     - Expected `ffmpeg.exe` SHA256: `22E1BB241B8747ED5EA5ECE8DE64AFCC8720F4550ED35ED24657D00C2BADBA5E`.
   - Checked: both archives reachable; the arm64 `ffmpeg.exe` hash reproduced from the extracted binary.
 - Windows QtAVPlayer FFmpeg dev SDK:
-  - x64 pre-trim baseline (BtbN n7.1 LGPL **shared**, rolling `latest` asset, no hash pin — the
-    decode-only trim build replaces this tree before packaging):
-    `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1.zip`
-    - Provisioned by `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1 -Arch x64`, then replaced by
-      `scripts/ffmpeg/trim/build-trimmed-ffmpeg.ps1` (driven by `build-win.ps1 -TrimFfmpeg`).
+  - x64: built from FFmpeg source by `scripts/ffmpeg/trim/build-trimmed-ffmpeg.ps1` (run by
+    `build-win.ps1` unless `-SkipTrim` is passed). There is no prebuilt download for this tree:
+    BtbN removed the n7.1 assets, so the old
+    `.../releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1.zip` URL now returns
+    404 (checked while wiring the trim build in CI).
   - arm64 (BtbN n8.1 LGPL **shared**, pinned immutable tag):
     `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-lgpl-shared-8.1.zip`
     - Expected archive SHA256: `DFB3F394B316F91CC2C399BBAA38A280F81E523E150A20F7DDD477843AA70608`.

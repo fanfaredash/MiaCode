@@ -52,10 +52,10 @@ third_party/ffmpeg/windows/<win64|winarm64>/dev/
 ```
 
 - Provision:
-  - x64: `scripts/ffmpeg/trim/build-trimmed-ffmpeg.ps1` builds the decode-only n7.1 SDK
-    (thin package). `scripts/build/build-win.ps1 -TrimFfmpeg` runs it; without the switch the
-    x64 SDK comes from `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`, which downloads the
-    BtbN n7.1 LGPL **shared** build as the pre-trim baseline.
+  - x64: `scripts/ffmpeg/trim/build-trimmed-ffmpeg.ps1` builds the decode-only n7.1 SDK from
+    source; `scripts/build/build-win.ps1` runs it by default (`-SkipTrim` turns it off, and then
+    `MIACODE_WINDOWS_FFMPEG_DEV_URL` has to point at a compatible SDK — BtbN dropped the n7.1
+    prebuilt assets, so there is no default download for x64).
   - arm64: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1 -Arch arm64` downloads the pinned
     BtbN n8.1 LGPL **shared** build; the trim toolchain covers x64 only, so the arm64 package
     ships that full SDK.

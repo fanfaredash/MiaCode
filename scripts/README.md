@@ -19,9 +19,9 @@ Windows:
 
 ```powershell
 # MSVC x64：生成器由 vswhere 解析，需已装 Visual Studio 与 Windows SDK
-# -TrimFfmpeg 用 ffmpeg/trim 从源码构建 decode-only 预览 SDK（体积从约 150 MB 降到约 20 MB，
-# 需 MSYS2；CI 的 x64 作业默认带此开关）
-powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildDir build-msvc -TrimFfmpeg
+# x64 默认用 ffmpeg/trim 从源码构建 decode-only 预览 SDK（体积从约 150 MB 降到约 20 MB，需 MSYS2）；
+# 跳过裁剪加 -SkipTrim
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildDir build-msvc
 
 # MSVC arm64：原生 arm64 主机，走 ARM64 平台参数与 Qt 的 arm64 包
 powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc-arm64 -BuildDir build-msvc-arm64
@@ -37,7 +37,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 
 ```
 
 `build-win.ps1` 依次执行：Python 依赖（仅 py7zr）、导出用 `ffmpeg.exe`、预览用 FFmpeg
-dev SDK（`-TrimFfmpeg` 时改为裁剪构建）、Qt 定位、CMake 配置与构建、调用 `package-win.ps1` 打包。两条 FFmpeg 链与打包
+dev SDK（x64 走裁剪构建，`-SkipTrim` 关闭）、Qt 定位、CMake 配置与构建、调用 `package-win.ps1` 打包。两条 FFmpeg 链与打包
 链都按 `-Toolchain` 推导出的目标架构选择各自的目录：`third_party\ffmpeg\windows\<win64|winarm64>\`
 与 `third_party\bass\bin\<win64|winarm64>\`，包名分别为 `MiaCode-v<version>-win64` 与
 `MiaCode-v<version>-winarm64`。arm64 不随包分发 `bass_aac.dll`（上游只提供 x86/x64 版本），
