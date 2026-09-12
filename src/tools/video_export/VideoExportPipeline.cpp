@@ -115,6 +115,7 @@ bool shouldWriteSummaryExportStage(const QString& stage)
         QStringLiteral("premultiplied_pipe"),
         QStringLiteral("offscreen_warmup"),
         QStringLiteral("render_backend_fallback"),
+        QStringLiteral("frame_conservation"),
         QStringLiteral("frame_timing_summary"),
         QStringLiteral("render_stage_timing_summary"),
         QStringLiteral("raw_pipe_summary"),

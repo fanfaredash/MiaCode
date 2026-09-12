@@ -18,6 +18,7 @@
 #include "LegacyExportAudioBackend.h"
 #include "RawVideoPipeTransport.h"
 #include "VideoExportAudioRenderPlan.h"
+#include "VideoExportPendingFrameRedraw.h"
 #include "VideoExportQuickRenderBackend.h"
 #include "VideoExportRuntimePolicy.h"
 #include "common/AssetPaths.h"
@@ -69,6 +70,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace miacode::video_export::detail {
 
@@ -330,10 +332,28 @@ struct ReadyFramePayload {
     bool usedGpuRenderer = false;
 };
 
-struct PendingPboFrame {
-    bool valid = false;
+// Everything the backend needs to draw one output frame. A frame that is still
+// in flight in the readback pipeline may have to be redrawn synchronously later
+// (see redrawPendingPipelineFrames), and that redraw must reproduce the state
+// this frame was submitted with rather than the state of whichever frame the
+// loop has reached by then.
+struct ExportFrameRenderParams {
     int frameIndex = -1;
     double exportSecond = 0.0;
+    bool showTimestamp = false;
+    bool showObjectStatsHud = false;
+    double hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN();
+    // Intro overlay state, applied to the scene per output frame. `introApplied`
+    // is false for exports without an intro, where the scene has no intro state
+    // to restore.
+    bool introApplied = false;
+    int introAuthoringFrame = 0;
+    bool introActive = false;
+};
+
+struct PendingPboFrame {
+    bool valid = false;
+    ExportFrameRenderParams params;
     QVector<ObjectTraceItem> traceItems;
 };
 
@@ -442,27 +462,31 @@ ReadyFramePayload buildReadyFramePayload(
     qint64 renderNs,
     bool usedOffscreenPath
 );
+QImage renderExportFrameSynchronously(
+    VideoExportQuickRenderBackend* exportBackend,
+    bool useOffscreenGpu,
+    const QSize& frameSize,
+    const ExportFrameRenderParams& params
+);
+// Appends every frame that became deliverable during this call to
+// `readyFrames`, in output order. That is normally one frame (or none, while the
+// readback pipeline fills up), but a pipeline failure also flushes the frames
+// still in flight, so the caller must consume the whole vector.
 ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     VideoExportQuickRenderBackend* exportBackend,
     bool* useOffscreenGpu,
     bool* useOffscreenPboReadback,
     std::deque<PendingPboFrame>* pendingPboFrames,
     const QSize& frameSize,
-    int frameIndex,
-    double exportSecond,
-    bool showTimestamp,
-    bool showObjectStatsHud,
+    const ExportFrameRenderParams& params,
     QVector<ObjectTraceItem>&& traceItems,
-    ReadyFramePayload* readyFrame,
-    QString* fallbackDetail,
-    double hudPlayheadSecondsOverride
+    std::vector<ReadyFramePayload>* readyFrames,
+    QString* fallbackDetail
 );
 bool drainPendingExportFrame(
     VideoExportQuickRenderBackend* exportBackend,
     std::deque<PendingPboFrame>* pendingPboFrames,
     const QSize& frameSize,
-    bool showTimestamp,
-    bool showObjectStatsHud,
     ReadyFramePayload* readyFrame,
     QString* errorMessage
 );

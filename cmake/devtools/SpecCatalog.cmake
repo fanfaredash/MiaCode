@@ -24,6 +24,8 @@ function(set_tests_properties)
 endfunction()
 function(add_custom_command)
 endfunction()
+function(add_dependencies)
+endfunction()
 
 include("${CMAKE_CURRENT_LIST_DIR}/SharedSources.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/MiaCodeSpecRegistry.cmake")

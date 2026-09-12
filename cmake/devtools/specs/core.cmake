@@ -283,6 +283,31 @@ miacode_add_spec(video_export_runtime_policy_spec
     INCLUDES src src/tools
 )
 
+miacode_add_spec(raw_video_pipe_frame_conservation_spec
+    OWNER src/tools/video_export
+    CONTRACT video-export.raw-video-pipe-frame-conservation
+    DOMAIN video_export KIND behavior RISK high
+    EXECUTION ctest STATUS active PLATFORM all
+    SOURCES
+        src/tools/video_export/RawVideoPipeFrameConservationSpec.cpp
+        src/tools/video_export/RawVideoPipeTransport.h
+        src/tools/video_export/RawVideoPipeTransport.cpp
+    LIBS Qt6::Core Qt6::Gui
+    INCLUDES src src/tools src/tools/video_export
+)
+
+miacode_add_spec(video_export_pending_frame_redraw_spec
+    OWNER src/tools/video_export
+    CONTRACT video-export.video-export-pending-frame-redraw
+    DOMAIN video_export KIND behavior RISK high
+    EXECUTION ctest STATUS active PLATFORM all
+    SOURCES
+        src/tools/video_export/VideoExportPendingFrameRedrawSpec.cpp
+        src/tools/video_export/VideoExportPendingFrameRedraw.h
+    LIBS Qt6::Core
+    INCLUDES src src/tools src/tools/video_export
+)
+
 miacode_add_spec(video_export_intro_mode_spec
     OWNER src/tools/video_export
     CONTRACT video-export.video-export-intro-mode

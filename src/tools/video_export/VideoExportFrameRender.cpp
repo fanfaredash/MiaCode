@@ -365,31 +365,49 @@ ReadyFramePayload buildReadyFramePayload(
     return readyFrame;
 }
 
+QImage renderExportFrameSynchronously(
+    VideoExportQuickRenderBackend* exportBackend,
+    bool useOffscreenGpu,
+    const QSize& frameSize,
+    const ExportFrameRenderParams& params
+)
+{
+    return useOffscreenGpu
+        ? exportBackend->renderOverlayFrameOffscreen(
+              frameSize,
+              params.exportSecond,
+              params.showTimestamp,
+              params.showObjectStatsHud,
+              params.hudPlayheadSecondsOverride)
+        : exportBackend->renderOverlayFrame(
+              frameSize,
+              params.exportSecond,
+              params.showTimestamp,
+              params.showObjectStatsHud,
+              params.hudPlayheadSecondsOverride);
+}
+
 ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     VideoExportQuickRenderBackend* exportBackend,
     bool* useOffscreenGpu,
     bool* useOffscreenPboReadback,
     std::deque<PendingPboFrame>* pendingPboFrames,
     const QSize& frameSize,
-    int frameIndex,
-    double exportSecond,
-    bool showTimestamp,
-    bool showObjectStatsHud,
+    const ExportFrameRenderParams& params,
     QVector<ObjectTraceItem>&& traceItems,
-    ReadyFramePayload* readyFrame,
-    QString* fallbackDetail,
-    double hudPlayheadSecondsOverride
+    std::vector<ReadyFramePayload>* readyFrames,
+    QString* fallbackDetail
 )
 {
     if (exportBackend == nullptr
         || useOffscreenGpu == nullptr
         || useOffscreenPboReadback == nullptr
         || pendingPboFrames == nullptr
-        || readyFrame == nullptr) {
+        || readyFrames == nullptr) {
         return ExportFrameRenderStatus::Failed;
     }
 
-    *readyFrame = ReadyFramePayload{};
+    readyFrames->clear();
     QElapsedTimer frameTimer;
     frameTimer.start();
     bool usedOffscreenPath = false;
@@ -401,14 +419,14 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
         QString pboStepError;
         const bool pboStepOk = exportBackend->renderOverlayFrameOffscreenPboStep(
             frameSize,
-            exportSecond,
-            showTimestamp,
-            showObjectStatsHud,
+            params.exportSecond,
+            params.showTimestamp,
+            params.showObjectStatsHud,
             &completedFrame,
             &completedFrameReady,
             false,
             &pboStepError,
-            hudPlayheadSecondsOverride
+            params.hudPlayheadSecondsOverride
         );
         const qint64 renderNs = frameTimer.nsecsElapsed();
         if (pboStepOk) {
@@ -423,20 +441,19 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
             if (producedReadyFrame) {
                 PendingPboFrame oldest = std::move(pendingPboFrames->front());
                 pendingPboFrames->pop_front();
-                *readyFrame = buildReadyFramePayload(
+                readyFrames->push_back(buildReadyFramePayload(
                     exportBackend,
-                    oldest.frameIndex,
-                    oldest.exportSecond,
+                    oldest.params.frameIndex,
+                    oldest.params.exportSecond,
                     std::move(oldest.traceItems),
                     std::move(completedFrame),
                     renderNs,
                     true
-                );
+                ));
             }
             PendingPboFrame newPending;
             newPending.valid = true;
-            newPending.frameIndex = frameIndex;
-            newPending.exportSecond = exportSecond;
+            newPending.params = params;
             newPending.traceItems = std::move(traceItems);
             pendingPboFrames->push_back(std::move(newPending));
             return producedReadyFrame ? ExportFrameRenderStatus::Ready : ExportFrameRenderStatus::Deferred;
@@ -445,42 +462,82 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
         appendRenderBackendFallbackDetail(
             fallbackDetail,
             QStringLiteral("frame=%1 reason=offscreen_pbo_failed error=%2")
-                .arg(frameIndex)
+                .arg(params.frameIndex)
                 .arg(pboStepError)
         );
         exportBackend->resetOffscreenPboReadback();
         *useOffscreenPboReadback = false;
+        // The reset abandons the GPU side of the pipeline, so the frames it
+        // still owed us can only be produced by drawing them again here,
+        // before the frame we were actually called for. Dropping them would
+        // renumber the rest of the export instead of leaving a visible gap
+        // (see redrawPendingPipelineFrames).
+        const bool useOffscreenForRedraw = *useOffscreenGpu;
+        const bool redrawOk = redrawPendingPipelineFrames(
+            pendingPboFrames,
+            [&](PendingPboFrame& pending, ReadyFramePayload* payload) {
+                QElapsedTimer redrawTimer;
+                redrawTimer.start();
+                if (pending.params.introApplied) {
+                    exportBackend->setIntroFrame(
+                        pending.params.introAuthoringFrame, pending.params.introActive);
+                }
+                QImage redrawnFrame = renderExportFrameSynchronously(
+                    exportBackend, useOffscreenForRedraw, frameSize, pending.params);
+                if (redrawnFrame.isNull()) {
+                    appendRenderBackendFallbackDetail(
+                        fallbackDetail,
+                        QStringLiteral("frame=%1 reason=pending_frame_redraw_failed")
+                            .arg(pending.params.frameIndex)
+                    );
+                    return false;
+                }
+                *payload = buildReadyFramePayload(
+                    exportBackend,
+                    pending.params.frameIndex,
+                    pending.params.exportSecond,
+                    std::move(pending.traceItems),
+                    std::move(redrawnFrame),
+                    redrawTimer.nsecsElapsed(),
+                    useOffscreenForRedraw
+                );
+                appendRenderBackendFallbackDetail(
+                    fallbackDetail,
+                    QStringLiteral("frame=%1 reason=pending_frame_redrawn")
+                        .arg(pending.params.frameIndex)
+                );
+                return true;
+            },
+            readyFrames
+        );
+        if (!redrawOk) {
+            return ExportFrameRenderStatus::Failed;
+        }
+        // The redraws rewound the scene's intro state to older frames; put it
+        // back where the current frame expects it.
+        if (params.introApplied) {
+            exportBackend->setIntroFrame(params.introAuthoringFrame, params.introActive);
+        }
+        frameTimer.restart();
     }
 
-    frame = *useOffscreenGpu
-        ? exportBackend->renderOverlayFrameOffscreen(
-              frameSize,
-              exportSecond,
-              showTimestamp,
-              showObjectStatsHud,
-              hudPlayheadSecondsOverride)
-        : exportBackend->renderOverlayFrame(
-              frameSize,
-              exportSecond,
-              showTimestamp,
-              showObjectStatsHud,
-              hudPlayheadSecondsOverride);
+    frame = renderExportFrameSynchronously(exportBackend, *useOffscreenGpu, frameSize, params);
     if (frame.isNull()) {
         appendRenderBackendFallbackDetail(
             fallbackDetail,
-            QStringLiteral("frame=%1 reason=quick_render_failed").arg(frameIndex));
+            QStringLiteral("frame=%1 reason=quick_render_failed").arg(params.frameIndex));
         return ExportFrameRenderStatus::Failed;
     }
 
-    *readyFrame = buildReadyFramePayload(
+    readyFrames->push_back(buildReadyFramePayload(
         exportBackend,
-        frameIndex,
-        exportSecond,
+        params.frameIndex,
+        params.exportSecond,
         std::move(traceItems),
         std::move(frame),
         frameTimer.nsecsElapsed(),
         usedOffscreenPath || *useOffscreenGpu
-    );
+    ));
     return ExportFrameRenderStatus::Ready;
 }
 
@@ -488,8 +545,6 @@ bool drainPendingExportFrame(
     VideoExportQuickRenderBackend* exportBackend,
     std::deque<PendingPboFrame>* pendingPboFrames,
     const QSize& frameSize,
-    bool showTimestamp,
-    bool showObjectStatsHud,
     ReadyFramePayload* readyFrame,
     QString* errorMessage
 )
@@ -508,15 +563,17 @@ bool drainPendingExportFrame(
     QImage drainedFrame;
     bool drainedFrameReady = false;
     QString drainError;
+    const ExportFrameRenderParams& drainParams = pendingPboFrames->front().params;
     const bool drainOk = exportBackend->renderOverlayFrameOffscreenPboStep(
         frameSize,
-        pendingPboFrames->front().exportSecond,
-        showTimestamp,
-        showObjectStatsHud,
+        drainParams.exportSecond,
+        drainParams.showTimestamp,
+        drainParams.showObjectStatsHud,
         &drainedFrame,
         &drainedFrameReady,
         true,
-        &drainError
+        &drainError,
+        drainParams.hudPlayheadSecondsOverride
     );
     if (!drainOk || !drainedFrameReady) {
         if (errorMessage != nullptr) {
@@ -529,8 +586,8 @@ bool drainPendingExportFrame(
     pendingPboFrames->pop_front();
     *readyFrame = buildReadyFramePayload(
         exportBackend,
-        oldest.frameIndex,
-        oldest.exportSecond,
+        oldest.params.frameIndex,
+        oldest.params.exportSecond,
         std::move(oldest.traceItems),
         std::move(drainedFrame),
         frameTimer.nsecsElapsed(),

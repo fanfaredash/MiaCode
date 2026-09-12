@@ -200,8 +200,8 @@ FFmpeg 路径先用 `MIACODE_FFMPEG_PATH`（未设时用 `MIACODE_FFMPEG`），�
 
 | 编号 | 对应症状 | 结论与证据强度 | 优先级 |
 |---|---|---|---|
-| R1 | 突然跳帧、之后音画错位、末尾重复 | 流水线失败转同步遗漏 pending 帧；**确定的条件性缺陷** | P1 |
-| R2 | 导出“成功”但有遗漏或重复 | 没有逐帧序号守恒和内容校验，FFmpeg 可把缺帧隐藏成完整帧数；**确定的验收缺口** | P1 |
+| R1 | 突然跳帧、之后音画错位、末尾重复 | 流水线失败转同步遗漏 pending 帧；**确定的条件性缺陷** | P1 — **已修复，待 Windows 实测** |
+| R2 | 导出“成功”但有遗漏或重复 | 没有逐帧序号守恒和内容校验，FFmpeg 可把缺帧隐藏成完整帧数；**确定的验收缺口** | P1 — **已修复，待 Windows 实测** |
 | R3 | 单帧图片/轨迹横带撕裂 | OpenGL Fast PBO/驱动读回；**历史 + 当前风险候选** | P1 调查 |
 | R4 | 旧帧重复、局部随机像素 | GL 读回命令错误未检查，buffer 内容可能继续进入编码；**确定的检查缺口，发生待验证** | P2 |
 | R5 | 沿运动轮廓的噪点、蚊噪、暗色晕边 | 有损量化、码率限制和4:2:0；**首要画质候选** | P1 调查 |
@@ -228,6 +228,10 @@ pipe 中只传像素字节，packet 的 frameIndex 没有进入 rawvideo 协议�
 
 低性能设备更容易发生内存/GPU错误只是候选诱因；不能从静态代码证明这段回退在用户机器上已触发。应检查 `render_backend_fallback ... reason=offscreen_pbo_failed`，再对照故障帧附近输出内容。只见 `pbo_fence_wait_failed` 不等于发生了这项回退。
 
+**修复状态（2026-09-13，本报告之后）：已修复，待 Windows 实测。** 回退分支现在先按提交顺序把在途帧逐帧同步重画再处理当前帧，重画失败则中止导出而不是交出短流：新增 `redrawPendingPipelineFrames`（[VideoExportPendingFrameRedraw.h](/Users/caoyusen/Desktop/MiaCode/src/tools/video_export/VideoExportPendingFrameRedraw.h)），`PendingPboFrame` 改带 `ExportFrameRenderParams`（各帧自己的 exportSecond、HUD 开关、hud override、intro 帧状态），重画按该帧当时的参数并在结束后把 intro 状态恢复到当前帧；`renderExportFrameWithConfiguredBackend` 改为一次交出 `std::vector<ReadyFramePayload>`。新增日志 `render_backend_fallback ... reason=pending_frame_redrawn` / `pending_frame_redraw_failed`。
+
+覆盖范围：`video_export_pending_frame_redraw_spec` 锁定顺序、逐帧参数与失败中止；全量 ctest 无新增失败。**尚未在真实硬件上执行到这条回退分支**——macOS CLI 固定 HighQuality（日志 `pboEnabled=0`），这条 GL Fast / D3D11 流水线路径需要 Windows 环境或按本报告第13节第4条注入一次 step 失败才会走到。
+
 ### 3. R2：缺帧可被末帧延长掩盖，成功判定不验证内容
 
 FFmpeg 最终 overlay 的主输入是有完整时长的 base，谱面是第二输入；没有设置 `repeatlast=0` 或 `shortest=1`。FFmpeg framesync 默认会延长第二输入最后一帧。因此 R1 少送帧后，可能仍产出指定数量的 MP4 帧，代价是末尾重复和中途时间错位。这个推论依赖实际 FFmpeg 构建按该契约运行。[最终 overlay](/Users/caoyusen/Desktop/MiaCode/src/tools/video_export/VideoExportPreparedTask.cpp:1121)、[FFmpeg framesync 文档](https://ffmpeg.org/ffmpeg-filters.html#Options-for-filters-with-several-inputs-framesync)
@@ -235,6 +239,12 @@ FFmpeg 最终 overlay 的主输入是有完整时长的 base，谱面是第二�
 writer 不检查 frameIndex 连续性，也不核对总写帧数等于计划数；`finishRawVideoPipePump` 仅检查已有 failureDetail。最终 ffprobe 摘要只记日志，不据其判断 success，更没有解码后内容比对。[writer](/Users/caoyusen/Desktop/MiaCode/src/tools/video_export/RawVideoPipeTransport.cpp:235)、[结束](/Users/caoyusen/Desktop/MiaCode/src/tools/video_export/RawVideoPipeTransport.cpp:614)、[无条件成功点](/Users/caoyusen/Desktop/MiaCode/src/tools/video_export/VideoExportPreparedTask.cpp:2485)
 
 **所以 `avg_frame_rate=60`、`nb_frames` 正确、导出显示成功，都不能排除物件内容跳帧。** 修复验收需要生产帧号/写入帧号守恒，并检查实际内容时间；单看容器帧数不够。
+
+**修复状态（2026-09-13，本报告之后）：已修复，待 Windows 实测。** pipe pump 现在做帧号守恒：记录 `expectedFrameIndex / enqueuedFrameCount / writtenFrameCount`，入队只接受 0,1,2…（跳号或重号直接失败），`finishRawVideoPipePump` 新增 `plannedFrameCount` 参数并要求 produced=written=planned，否则导出失败；原先 `packedFrameSize == 0` 的静默跳过也改为失败。新增 summary 日志 `frame_conservation planned=N enqueued=N written=N`。
+
+未改动最终 overlay 的 `repeatlast` / `shortest`：谱面层输入本来就是 frameCount 帧、输出有 `-frames:v frameCount`，改成 `repeatlast=0` 只是把“末帧重复”换成“尾部图层消失”，而短流现在根本到不了 success。同理没有加 ffprobe 帧数硬门禁——有 `-frames:v` 时容器帧数恒等于计划值，正如本节所述它证明不了内容守恒。
+
+覆盖范围：`raw_video_pipe_frame_conservation_spec` 锁定跳号/重号拒绝与写入总数校验；macOS CLI 端到端导出（同步读回路径）实测 `frame_conservation planned=150 enqueued=150 written=150`、输出解码 150 帧、导出成功。Windows 默认 D3D11 流水线路径待实测。
 
 ### 4. R3：OpenGL PBO 撕裂线索及其边界
 

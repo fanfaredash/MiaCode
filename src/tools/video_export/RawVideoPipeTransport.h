@@ -84,6 +84,17 @@ struct RawVideoPipePump {
     std::atomic<bool> abortRequested = false;
     QString failureDetail;
     RawVideoPipeStats stats;
+    // Frame-number conservation. The rawvideo protocol carries pixels only, so
+    // a frame that never reaches the pipe does not leave a hole downstream:
+    // ffmpeg reads the next frame's bytes into the missing slot and every later
+    // frame lands one slot early (chart content then runs ahead of the audio and
+    // background for the rest of the export, while the final overlay's framesync
+    // repeats the last chart frame so the container still reports the planned
+    // frame count). The pump is the last stage that still knows the real frame
+    // numbers, so it accepts 0,1,2,... only and counts what actually got written.
+    int expectedFrameIndex = 0;
+    int enqueuedFrameCount = 0;
+    int writtenFrameCount = 0;
 };
 
 RawVideoPipePlan chooseRawVideoPipePlan(const QSize& frameSize);
@@ -128,7 +139,14 @@ bool enqueueRawVideoFrame(
     int* queuedFramesAfterEnqueue = nullptr,
     QString* failureDetail = nullptr
 );
-bool finishRawVideoPipePump(RawVideoPipePump* pump, QString* failureDetail = nullptr);
+// `plannedFrameCount` is the number of frames the export planned to produce.
+// Finalize fails when the pump did not hand exactly that many frames to the
+// pipe, so a shortened stream cannot be reported as a successful export.
+bool finishRawVideoPipePump(
+    RawVideoPipePump* pump,
+    int plannedFrameCount,
+    QString* failureDetail = nullptr
+);
 void shutdownRawVideoPipe(RawVideoPipe* pipe);
 void shutdownRawVideoPipePump(RawVideoPipePump* pump);
 

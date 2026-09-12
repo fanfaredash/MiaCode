@@ -293,6 +293,7 @@ void rawVideoPipeWriterMain(RawVideoPipePump* pump)
         }
 
         std::lock_guard<std::mutex> lock(pump->mutex);
+        ++pump->writtenFrameCount;
         pump->stats.totalPipeWriteNs += writeNs;
         if (writeNs > pump->stats.maxPipeWriteNs) {
             pump->stats.maxPipeWriteNs = writeNs;
@@ -454,6 +455,16 @@ bool enqueuePreparedPacket(
     int queuedFrames = 0;
     {
         std::unique_lock<std::mutex> lock(pump->mutex);
+        if (pump->failureDetail.isEmpty() && frameIndex != pump->expectedFrameIndex) {
+            // Refuse rather than write: a gap or a repeat here is a producer
+            // bug (a dropped in-flight readback, a double delivery), and the
+            // resulting stream would look complete while being out of sync
+            // from this frame onwards.
+            pump->failureDetail =
+                QStringLiteral("raw pipe frame sequence violation: expected=%1 frame=%2")
+                    .arg(pump->expectedFrameIndex)
+                    .arg(frameIndex);
+        }
         while (true) {
             if (!pump->failureDetail.isEmpty()) {
                 if (failureDetail != nullptr) {
@@ -478,6 +489,8 @@ bool enqueuePreparedPacket(
         }
 
         pump->queue.emplace_back(std::move(packet));
+        pump->expectedFrameIndex = frameIndex + 1;
+        ++pump->enqueuedFrameCount;
         queuedFrames = static_cast<int>(pump->queue.size());
         pump->stats.maxQueuedFrames = qMax(pump->stats.maxQueuedFrames, queuedFrames);
         if (waited) {
@@ -602,7 +615,7 @@ void shutdownRawVideoPipePump(RawVideoPipePump* pump)
     shutdownRawVideoPipe(&pump->pipe);
 }
 
-bool finishRawVideoPipePump(RawVideoPipePump* pump, QString* failureDetail)
+bool finishRawVideoPipePump(RawVideoPipePump* pump, int plannedFrameCount, QString* failureDetail)
 {
     if (pump == nullptr) {
         if (failureDetail != nullptr) {
@@ -627,6 +640,17 @@ bool finishRawVideoPipePump(RawVideoPipePump* pump, QString* failureDetail)
     if (!pump->failureDetail.isEmpty()) {
         if (failureDetail != nullptr) {
             *failureDetail = pump->failureDetail;
+        }
+        return false;
+    }
+    if (pump->enqueuedFrameCount != plannedFrameCount
+        || pump->writtenFrameCount != plannedFrameCount) {
+        if (failureDetail != nullptr) {
+            *failureDetail =
+                QStringLiteral("raw pipe frame conservation failed: planned=%1 enqueued=%2 written=%3")
+                    .arg(plannedFrameCount)
+                    .arg(pump->enqueuedFrameCount)
+                    .arg(pump->writtenFrameCount);
         }
         return false;
     }

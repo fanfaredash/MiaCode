@@ -1775,6 +1775,15 @@ VideoExportResult VideoExportController::exportPreparedTask(
                     &queuedFramesAfterEnqueue,
                     &ffmpegWriteFailure);
             }
+        } else {
+            // Nothing to send for this frame (an empty or zero-sized pack).
+            // Skipping it would hand this frame's slot in the rawvideo stream
+            // to the next frame instead of leaving a visible gap, so the export
+            // has to stop here. See the frame-number conservation note in
+            // RawVideoPipeTransport.h.
+            enqueueOk = false;
+            ffmpegWriteFailure =
+                QStringLiteral("frame %1 produced no pixel bytes to send").arg(frameIndex);
         }
         if (!enqueueOk) {
             const QString processSnapshot = describeProcessForLog(ffmpeg);
@@ -2091,7 +2100,16 @@ VideoExportResult VideoExportController::exportPreparedTask(
             ++diagObjectTraceLoggedLines;
         }
 
-        ReadyFramePayload readyFrame;
+        ExportFrameRenderParams renderParams;
+        renderParams.frameIndex = frameIndex;
+        renderParams.exportSecond = exportSecond;
+        renderParams.showTimestamp = showTimestampThisFrame;
+        renderParams.showObjectStatsHud = showObjectStatsThisFrame;
+        renderParams.hudPlayheadSecondsOverride = hudPlayheadSecondsOverride;
+        renderParams.introApplied = introEnabled;
+        renderParams.introAuthoringFrame = introAuthoringFrame;
+        renderParams.introActive = inIntroWindow;
+        std::vector<ReadyFramePayload> readyFrames;
         QString renderBackendFallbackDetail;
         const ExportFrameRenderStatus renderStatus = renderExportFrameWithConfiguredBackend(
             &exportCanvas,
@@ -2099,14 +2117,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
             &useOffscreenPboReadback,
             &pendingPboFrames,
             frameSize,
-            frameIndex,
-            exportSecond,
-            showTimestampThisFrame,
-            showObjectStatsThisFrame,
+            renderParams,
             std::move(traceItems),
-            &readyFrame,
-            &renderBackendFallbackDetail,
-            hudPlayheadSecondsOverride
+            &readyFrames,
+            &renderBackendFallbackDetail
         );
         if (!renderBackendFallbackDetail.isEmpty()) {
             appendVideoExportLog(QStringLiteral("render_backend_fallback"), renderBackendFallbackDetail);
@@ -2125,21 +2139,29 @@ VideoExportResult VideoExportController::exportPreparedTask(
         if (renderStatus == ExportFrameRenderStatus::Deferred) {
             continue;
         }
-        if (!processReadyFrame(readyFrame)) {
+        // Usually a single frame; a readback-pipeline failure also hands back
+        // the frames that were still in flight, and every one of them has to
+        // reach the pipe or the stream silently loses its frame alignment.
+        bool readyFramesConsumed = true;
+        for (ReadyFramePayload& readyFrame : readyFrames) {
+            if (!processReadyFrame(readyFrame)) {
+                readyFramesConsumed = false;
+                break;
+            }
+        }
+        if (!readyFramesConsumed) {
             return result;
         }
     }
 
     while (useOffscreenPboReadback && !pendingPboFrames.empty()) {
-        const int drainFrameIndex = pendingPboFrames.front().frameIndex;
+        const int drainFrameIndex = pendingPboFrames.front().params.frameIndex;
         ReadyFramePayload readyFrame;
         QString drainError;
         if (!drainPendingExportFrame(
                 &exportCanvas,
                 &pendingPboFrames,
                 frameSize,
-                task.showTimestamp,
-                task.showObjectStatsHud,
                 &readyFrame,
                 &drainError)) {
             ffmpeg.kill();
@@ -2305,7 +2327,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         );
     }
 
-    if (!finishRawVideoPipePump(&rawVideoPipePump, &rawVideoPipeFailure)) {
+    if (!finishRawVideoPipePump(&rawVideoPipePump, frameCount, &rawVideoPipeFailure)) {
         const QString processSnapshot = describeProcessForLog(ffmpeg);
         ffmpeg.kill();
         ffmpeg.waitForFinished(2000);
@@ -2329,6 +2351,17 @@ VideoExportResult VideoExportController::exportPreparedTask(
         );
         return result;
     }
+    // Frame-number conservation, verified rather than assumed: the container's
+    // frame count cannot show a mid-stream loss (the final overlay's framesync
+    // repeats the chart layer's last frame), so the only trustworthy check is
+    // that every planned frame was both produced and written.
+    appendVideoExportLog(
+        QStringLiteral("frame_conservation"),
+        QStringLiteral("planned=%1 enqueued=%2 written=%3")
+            .arg(frameCount)
+            .arg(rawVideoPipePump.enqueuedFrameCount)
+            .arg(rawVideoPipePump.writtenFrameCount)
+    );
     if (!waitForProcessWithProgress(
             ffmpeg,
             QStringLiteral("ffmpeg_encode_finalize_wait_begin"),
