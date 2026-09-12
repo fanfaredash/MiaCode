@@ -8,7 +8,7 @@ This directory keeps only public, repeatable build, release, asset, and diagnost
 
 | Directory | Contents |
 |---|---|
-| `build/` | Windows/macOS build and packaging entry points |
+| `build/` | Windows/macOS build, packaging and package verification entry points |
 | `debug/` | Windows/macOS debug and diagnostic launchers |
 | `ffmpeg/` | FFmpeg runtime/dev-SDK provisioning plus the decode-only trim toolchain |
 | `assets/` | Asset generation and font-subsetting helpers |
@@ -18,14 +18,43 @@ This directory keeps only public, repeatable build, release, asset, and diagnost
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1
+# MSVC: the generator is resolved through vswhere (Visual Studio + Windows SDK required)
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildDir build-msvc
+
+# MinGW + Ninja: Qt's mingw_64 build
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain mingw -BuildDir build
+
+# Package an existing build
+powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot> -BuildDir <BuildDir>
+
+# Verify a package
+powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v<version>-win64
 ```
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot>
-```
+`build-win.ps1` runs, in order: Python dependencies (py7zr only), the export `ffmpeg.exe`, the
+preview FFmpeg dev SDK, Qt resolution, CMake configure and build, then `package-win.ps1`.
 
-`package-win.ps1` defaults to `build/` and checks whether the generated version header and `MiaCode.exe` need refreshing. If the executable is missing, version-stale, or older than the generated version header, it rebuilds `MiaCode` automatically.
+Qt resolution order: `-QtRoot` → `C:\Qt\<version>\<arch dir>` → `.qt\<version>\<arch dir>` →
+`QT_ROOT_DIR`/`Qt6_DIR` → otherwise `build/provision-qt.ps1` downloads it from the Qt repository.
+That script handles both upstream repository layouts (the flat pre-6.11 folders and the
+per-architecture folders 6.11 uses), verifies every archive against the published `.sha1`, and
+needs no aqtinstall.
+
+`package-win.ps1` rebuilds `MiaCode` and `MiaCodeLauncher` when needed, places the selected
+toolchain's C++ runtime and the trimmed FFmpeg runtimes into `app/`, asserts the package contents
+contract, and writes a 7z archive. With a single-config generator it also checks that
+`CMAKE_BUILD_TYPE` matches `-Config`.
+
+`verify-win-package.ps1` checks the contents contract, that the packaged FFmpeg DLLs match the dev
+SDK byte for byte, that every non-system import resolves inside the package, a smoke launch, and the
+archive; it exits 1 on any failure.
+
+The preview FFmpeg SDK can come from `ffmpeg/trim/build-trimmed-ffmpeg.ps1` instead of the full SDK
+that `ffmpeg/ensure-windows-ffmpeg-dev.ps1` downloads.
+
+Qt version and modules, both toolchain definitions, the package contents lists and the archive
+format live in `build/windows-toolchain.psd1`. Give each toolchain its own build directory —
+generators cannot share one.
 
 macOS:
 

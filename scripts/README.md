@@ -8,7 +8,7 @@
 
 | 目录 | 内容 |
 |---|---|
-| `build/` | Windows/macOS 构建与打包入口 |
+| `build/` | Windows/macOS 构建、打包与出包校验入口 |
 | `debug/` | Windows/macOS 调试/诊断启动入口 |
 | `ffmpeg/` | FFmpeg 运行时、开发 SDK 获取脚本，以及 decode-only 裁剪工具链 |
 | `assets/` | 资产生成和字体裁剪辅助脚本 |
@@ -18,14 +18,39 @@
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1
+# MSVC：生成器由 vswhere 解析，需已装 Visual Studio 与 Windows SDK
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildDir build-msvc
+
+# MinGW + Ninja：Qt 用 mingw_64 版
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain mingw -BuildDir build
+
+# 构建已完成时单独打包
+powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot> -BuildDir <BuildDir>
+
+# 出包后校验
+powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v<version>-win64
 ```
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot>
-```
+`build-win.ps1` 依次执行：Python 依赖（仅 py7zr）、导出用 `ffmpeg.exe`、预览用 FFmpeg
+dev SDK、Qt 定位、CMake 配置与构建、调用 `package-win.ps1` 打包。
 
-`package-win.ps1` 默认使用 `build/`，会检查版本头和 `MiaCode.exe` 是否需要刷新；若可执行文件缺失、版本过期或时间戳落后，会自动构建 `MiaCode`。
+Qt 定位顺序：`-QtRoot` → `C:\Qt\<版本>\<架构目录>` → `.qt\<版本>\<架构目录>` →
+`QT_ROOT_DIR`/`Qt6_DIR` 环境变量 → 都未命中时由 `build/provision-qt.ps1` 从 Qt 仓库下载。
+后者自适应上游两种仓库目录布局（6.11 前的扁平目录与 6.11 起的按架构分目录），每个归档按
+发布方 `.sha1` 校验，不依赖 aqtinstall。
+
+`package-win.ps1` 在需要时自动重建 `MiaCode` 与 `MiaCodeLauncher`，把当前工具链的 C++
+运行库与裁切后的 FFmpeg 运行库放入 `app/`，按内容契约断言必需项与禁止项，产出 7z 归档；
+单配置生成器下还会校验 `CMAKE_BUILD_TYPE` 与 `-Config` 一致。
+
+`verify-win-package.ps1` 校验内容契约、FFmpeg 裁切一致性（包内 av*.dll 与 dev SDK 逐字节
+哈希比对）、全包导入解析、启动冒烟与归档，任一失败退出码为 1。
+
+预览用 FFmpeg SDK 可由 `ffmpeg/trim/build-trimmed-ffmpeg.ps1` 产出裁切版，替代
+`ffmpeg/ensure-windows-ffmpeg-dev.ps1` 下载的全量 SDK。
+
+Qt 版本与模块、两套工具链定义、包内容清单、归档格式都在 `build/windows-toolchain.psd1`，
+调整这些行为改该文件。不同工具链使用各自的构建目录，生成器不同无法共用。
 
 macOS:
 

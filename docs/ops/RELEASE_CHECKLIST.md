@@ -17,11 +17,16 @@ This checklist documents the current local-release flow. GitHub Actions were rem
 ## Windows Package
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain mingw   # or: -Toolchain msvc
+powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v<version>-win64
 ```
 
+- [ ] Confirm the toolchain data file (`scripts/build/windows-toolchain.psd1`) still
+      points at the intended Qt version, FFmpeg component versions and package contents.
 - [ ] Verify `dist/MiaCode-v<version>-win64`.
 - [ ] Verify `dist/MiaCode-v<version>-win64.zip`.
+- [ ] Verify the package against the contents/dependency/smoke checks
+      (`verify-win-package.ps1` exits non-zero on any failure).
 - [ ] Launch the packaged app from `dist/`, not from the build tree.
 - [ ] Test opening a sample chart, preview playback, video background decode, SFX playback, and export.
 
