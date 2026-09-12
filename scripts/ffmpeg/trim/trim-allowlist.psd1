@@ -97,7 +97,7 @@
         #    trips, add '--pkg-config-flags=--static' here and rebuild.
         ExtraConfigureArgs = @(
             '--enable-d3d11va', '--enable-dxva2', '--disable-iconv',
-            '--enable-libdav1d', '--pkg-config-flags=--static', '--extra-ldflags=-static',
+            '--enable-libdav1d', '--pkg-config-flags=--static', '--extra-ldflags=-static-libgcc',
             '--disable-autodetect', '--enable-small', '--enable-ffmpeg',
             '--disable-ffplay', '--disable-ffprobe', '--disable-avdevice'
         )
