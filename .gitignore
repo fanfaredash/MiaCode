@@ -1,4 +1,5 @@
 build/
+build-*/
 build-mingw*/
 Build-Mingw*/
 build-macos*/
@@ -131,6 +132,9 @@ scripts/build/*
 !scripts/build/build-win.ps1
 !scripts/build/package-mac.sh
 !scripts/build/package-win.ps1
+!scripts/build/provision-qt.ps1
+!scripts/build/verify-win-package.ps1
+!scripts/build/windows-toolchain.psd1
 !scripts/build/test-package-mac-contract.sh
 !scripts/build/thin-macos-app.sh
 !scripts/debug/
