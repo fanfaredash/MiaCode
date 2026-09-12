@@ -153,18 +153,22 @@ $trimPreviewSdk = ($toolchainData.FFmpeg.TrimByArch.$targetArch) -and !$SkipTrim
 if ($trimPreviewSdk) {
     $devSdkDir = Join-Path $repoRoot $toolchainData.FFmpeg.DevDirByArch.$targetArch
     $exportFfmpeg = Join-Path (Split-Path $devSdkDir -Parent) "ffmpeg.exe"
-    $previewSdkReady = (Test-Path (Join-Path $devSdkDir "include\libavcodec\avcodec.h")) -and
-        (Test-Path $exportFfmpeg) -and ((Get-Item $exportFfmpeg).Length -lt 48MB)
+    $previewSdkReady = Test-Path (Join-Path $devSdkDir "include\libavcodec\avcodec.h")
     foreach ($runtimeDll in $toolchainData.FFmpeg.RuntimeDllsByArch.$targetArch) {
         $previewSdkReady = $previewSdkReady -and (Test-Path (Join-Path $devSdkDir "bin\$runtimeDll"))
     }
-    if ($previewSdkReady) {
+    $exportReady = (Test-Path $exportFfmpeg) -and ((Get-Item $exportFfmpeg).Length -lt 48MB)
+    if ($previewSdkReady -and $exportReady) {
         Write-Host "FFmpeg: using cached preview SDK at $devSdkDir"
     } else {
-        Write-Host "FFmpeg: building the decode-only preview SDK into $devSdkDir"
-        & (Join-Path $repoRoot "scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1") `
-            -OutputDir $devSdkDir `
-            -Jobs $BuildJobs
+        $trimArgs = @{ OutputDir = $devSdkDir; Jobs = $BuildJobs }
+        if ($previewSdkReady) {
+            $trimArgs.ExportOnly = $true
+            Write-Host "FFmpeg: keeping cached preview SDK and building the compact export program"
+        } else {
+            Write-Host "FFmpeg: building the preview SDK and compact export program"
+        }
+        & (Join-Path $repoRoot "scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1") @trimArgs
         if ($LASTEXITCODE -ne 0) {
             throw "Windows FFmpeg trim build failed."
         }

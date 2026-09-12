@@ -58,9 +58,7 @@
         # transitive dependency.
         Filters = @(
             'format', 'scale', 'fps', 'setpts', 'null', 'copy',
-            'aformat', 'aresample', 'asetpts', 'anull',
-            'color', 'split', 'crop', 'pad', 'alphamerge', 'overlay', 'fade',
-            'trim', 'tpad', 'atrim', 'volume', 'amix'
+            'aformat', 'aresample', 'asetpts', 'anull'
         )
         # Without 'file' nothing local opens — every PV fails to load.
         Protocols = @('file')
@@ -100,7 +98,8 @@
         ExtraConfigureArgs = @(
             '--enable-d3d11va', '--enable-dxva2', '--disable-iconv',
             '--enable-libdav1d', '--pkg-config-flags=--static', '--extra-ldflags=-static',
-            '--enable-small', '--enable-ffmpeg', '--disable-ffplay', '--disable-ffprobe', '--disable-avdevice'
+            '--disable-autodetect', '--enable-small', '--enable-ffmpeg',
+            '--disable-ffplay', '--disable-ffprobe', '--disable-avdevice'
         )
     }
 
@@ -149,6 +148,10 @@
         'h264_amf', 'hevc_amf'
     )
     Muxers = @('mov')
+    ExportFilters = @(
+        'color', 'split', 'crop', 'pad', 'alphamerge', 'overlay', 'fade',
+        'trim', 'tpad', 'atrim', 'volume', 'amix'
+    )
 
     # Parsers — paired with the decoders above. A decoder without its parser
     # can still fail; configure auto-pulls most, but list the common ones.

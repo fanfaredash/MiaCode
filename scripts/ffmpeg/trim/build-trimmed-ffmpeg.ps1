@@ -49,6 +49,7 @@ param(
     [string[]]$FfmpegGitUrl = @(),
     [switch]$SkipToolchainInstall,
     [switch]$SkipSourceFetch,
+    [switch]$ExportOnly,
     [switch]$PrintPlanOnly
 )
 
@@ -281,6 +282,7 @@ $demuxers = Select-Available $plannedDemuxers (Get-ValidComponents $srcMsys 'dem
 $encoders = Select-Available $plannedEncoders (Get-ValidComponents $srcMsys 'encoders') 'encoders'
 $muxers = Select-Available $plannedMuxers (Get-ValidComponents $srcMsys 'muxers') 'muxers'
 $filters  = Select-Available $plannedFilters  (Get-ValidComponents $srcMsys 'filters')  'filters'
+$exportFilters = Select-Available @($plannedFilters + @($allow.ExportFilters) | Select-Object -Unique) (Get-ValidComponents $srcMsys 'filters') 'export filters'
 $bsfs     = Select-Available $plannedBsfs     (Get-ValidComponents $srcMsys 'bsfs')     'bsfs'
 $hwaccels = Select-Available $plannedHwaccels (Get-ValidComponents $srcMsys 'hwaccels') 'hwaccels'
 $protocols = Select-Available $plannedProtocols (Get-ValidComponents $srcMsys 'protocols') 'protocols'
@@ -294,6 +296,42 @@ $protocols = Select-Available $plannedProtocols (Get-ValidComponents $srcMsys 'p
 $cfgText = Get-Content -Raw -LiteralPath (Join-Path $ffmpegSrcWin 'configure')
 if ($cfgText -notmatch 'asrc_abuffer\s+vsrc_buffer\s+asink_abuffer\s+vsink_buffer') {
     throw "This FFmpeg's configure no longer auto-includes the buffer/buffersink filtergraph endpoints unconditionally; the trim allowlist + this guard need review before building (would risk breaking ALL playback)."
+}
+
+function Build-ExportFfmpeg {
+    $exportPrefix = Join-Path $SourceDir 'export-install'
+    $exportPrefixMsys = To-Msys2Path $exportPrefix
+    $exportCfg = @(
+        "./configure",
+        "--prefix='$exportPrefixMsys'",
+        "--arch=x86_64", "--target-os=mingw32",
+        "--enable-static", "--disable-shared",
+        "--disable-everything", "--disable-autodetect", "--disable-doc", "--disable-debug", "--enable-small",
+        "--enable-gpl", "--enable-libx264", "--enable-ffnvcodec", "--enable-libvpl",
+        "--enable-amf", "--enable-mediafoundation", "--pkg-config-flags=--static", "--extra-ldflags=-static",
+        "--enable-ffmpeg", "--disable-ffplay", "--disable-ffprobe", "--disable-avdevice",
+        "--enable-decoder=$($decoders -join ',')",
+        "--enable-parser=$($parsers -join ',')",
+        "--enable-demuxer=$($demuxers -join ',')",
+        "--enable-encoder=$($encoders -join ',')",
+        "--enable-muxer=$($muxers -join ',')",
+        "--enable-protocol=$($protocols -join ',')",
+        "--enable-filter=$($exportFilters -join ',')",
+        "--enable-bsf=$($bsfs -join ',')"
+    )
+    $exportCfgLine = $exportCfg -join ' '
+    Write-Host "== Build compact static export ffmpeg =="
+    Invoke-Msys2Bash "cd '$srcMsys' && make distclean >/dev/null 2>&1 || true; $exportCfgLine && make -j$Jobs"
+    Invoke-Msys2Bash "strip '$srcMsys/ffmpeg.exe'"
+    $exportPath = Join-Path (Split-Path $OutputDir -Parent) 'ffmpeg.exe'
+    Copy-Item (Join-Path $ffmpegSrcWin 'ffmpeg.exe') $exportPath -Force
+    $exportSize = [math]::Round((Get-Item $exportPath).Length / 1MB, 1)
+    Write-Host "  export ffmpeg.exe: $exportSize MB"
+}
+
+if ($ExportOnly) {
+    Build-ExportFfmpeg
+    return
 }
 
 # ---- 4 + 5. configure + build ----------------------------------------------
@@ -399,36 +437,7 @@ if ($selfFail.Count -gt 0) {
 }
 Write-Host "  OK - all av*.dll are self-contained (no external MinGW runtime DLL deps)."
 
-# Build the standalone export process from the same source and allowlist. Its
-# static linkage keeps GPL libx264 outside the libraries loaded by MiaCode.
-$exportPrefix = Join-Path $SourceDir 'export-install'
-$exportPrefixMsys = To-Msys2Path $exportPrefix
-$exportCfg = @(
-    "./configure",
-    "--prefix='$exportPrefixMsys'",
-    "--arch=x86_64", "--target-os=mingw32",
-    "--enable-static", "--disable-shared",
-    "--disable-everything", "--disable-autodetect", "--disable-doc", "--disable-debug", "--enable-small",
-    "--enable-gpl", "--enable-libx264", "--enable-ffnvcodec", "--enable-libvpl",
-    "--enable-amf", "--enable-mediafoundation", "--pkg-config-flags=--static", "--extra-ldflags=-static",
-    "--enable-ffmpeg", "--disable-ffplay", "--disable-ffprobe", "--disable-avdevice",
-    "--enable-decoder=$($decoders -join ',')",
-    "--enable-parser=$($parsers -join ',')",
-    "--enable-demuxer=$($demuxers -join ',')",
-    "--enable-encoder=$($encoders -join ',')",
-    "--enable-muxer=$($muxers -join ',')",
-    "--enable-protocol=$($protocols -join ',')",
-    "--enable-filter=$($filters -join ',')",
-    "--enable-bsf=$($bsfs -join ',')"
-)
-$exportCfgLine = $exportCfg -join ' '
-Write-Host "== Build compact static export ffmpeg =="
-Invoke-Msys2Bash "cd '$srcMsys' && make distclean && $exportCfgLine && make -j$Jobs"
-Invoke-Msys2Bash "strip '$srcMsys/ffmpeg.exe'"
-$exportPath = Join-Path (Split-Path $OutputDir -Parent) 'ffmpeg.exe'
-Copy-Item (Join-Path $ffmpegSrcWin 'ffmpeg.exe') $exportPath -Force
-$exportSize = [math]::Round((Get-Item $exportPath).Length / 1MB, 1)
-Write-Host "  export ffmpeg.exe: $exportSize MB"
+Build-ExportFfmpeg
 
 $newSize = Get-DirSizeMB (Join-Path $OutputDir 'bin')
 $backupDir = "$OutputDir.full.bak"
