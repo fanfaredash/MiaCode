@@ -69,7 +69,8 @@
         RuntimeDllsByArch = @{
             x64 = @(
                 'avcodec-62.dll', 'avformat-62.dll', 'avutil-60.dll',
-                'swresample-6.dll', 'swscale-9.dll', 'avfilter-11.dll'
+                'swresample-6.dll', 'swscale-9.dll', 'avfilter-11.dll',
+                'libwinpthread-1.dll'
             )
             arm64 = @(
                 'avcodec-62.dll', 'avformat-62.dll', 'avutil-60.dll',
@@ -200,7 +201,8 @@
             x64 = @(
                 'app\bass_aac.dll',
                 'app\avcodec-62.dll', 'app\avformat-62.dll', 'app\avutil-60.dll',
-                'app\swresample-6.dll', 'app\swscale-9.dll', 'app\avfilter-11.dll'
+                'app\swresample-6.dll', 'app\swscale-9.dll', 'app\avfilter-11.dll',
+                'app\libwinpthread-1.dll'
             )
             arm64 = @(
                 'app\avcodec-62.dll', 'app\avformat-62.dll', 'app\avutil-60.dll',

@@ -40,7 +40,8 @@ jobs:
           key: qt-6.11.1-windows-x64
 
       - name: Restore media kit
-        uses: actions/cache@v6
+        id: media-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             third_party/ffmpeg/windows/win64/dev
@@ -49,7 +50,8 @@ jobs:
           restore-keys: media-windows-x64-
 
       - name: Restore compiled objects
-        uses: actions/cache@v6
+        id: build-cache
+        uses: actions/cache/restore@v6
         with:
           path: build-msvc
           key: build-windows-x64-qt6.11.1-${{ github.sha }}
@@ -61,6 +63,22 @@ jobs:
           $ErrorActionPreference = "Stop"
           $jobs = [int]$env:NUMBER_OF_PROCESSORS
           ./scripts/build/build-win.ps1 -Toolchain msvc -BuildDir build-msvc -BuildJobs $jobs
+
+      - name: Save media kit
+        if: always() && steps.media-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            third_party/ffmpeg/windows/win64/dev
+            third_party/ffmpeg/windows/win64/ffmpeg.exe
+          key: ${{ steps.media-cache.outputs.cache-primary-key }}
+
+      - name: Save compiled objects
+        if: always() && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: build-msvc
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
       - name: Resolve artifact name
         id: package

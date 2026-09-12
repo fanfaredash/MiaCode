@@ -361,6 +361,9 @@ Invoke-Msys2Bash "strip '$prefixMsys/bin/ffmpeg.exe' '$prefixMsys/bin/'*.dll"
 Write-Host "== Generate MSVC import libs (dumpbin -> .def -> lib) =="
 $stageBin = Join-Path $prefix 'bin'
 $stageLib = Join-Path $prefix 'lib'
+$mingwRuntime = Join-Path $Msys2Root 'mingw64\bin\libwinpthread-1.dll'
+if (!(Test-Path $mingwRuntime)) { throw "Missing MinGW runtime: $mingwRuntime" }
+Copy-Item $mingwRuntime $stageBin -Force
 foreach ($base in $allow.ExpectedDlls) {
     $dll = Join-Path $stageBin "$base.dll"
     if (!(Test-Path $dll)) { throw "Expected DLL not produced: $dll (check the allowlist / configure output)" }
@@ -394,6 +397,7 @@ foreach ($base in $allow.ExpectedDlls) {
     $libBase = ($base -replace '-\d+$', '')
     Copy-Item (Join-Path $stageLib "$libBase.lib") (Join-Path $OutputDir 'lib') -Force
 }
+Copy-Item (Join-Path $stageBin 'libwinpthread-1.dll') (Join-Path $OutputDir 'bin') -Force
 
 # ---- 8. verify -------------------------------------------------------------
 Write-Host "== Verify =="
@@ -424,7 +428,7 @@ if (Test-Path $ffmpegExe) {
 # these. Verify with objdump so a regression fails the build instead of shipping a
 # DLL that crashes the app on a clean machine.
 Write-Host "== Verify self-containment (no external MinGW runtime deps) =="
-$forbidden = 'libwinpthread|zlib1\.dll|libiconv|libgcc_s|libstdc\+\+|libssp'
+$forbidden = 'zlib1\.dll|libiconv|libgcc_s|libstdc\+\+|libssp'
 $selfFail = @()
 foreach ($base in $allow.ExpectedDlls) {
     $dllMsys = To-Msys2Path (Join-Path $OutputDir "bin\$base.dll")
