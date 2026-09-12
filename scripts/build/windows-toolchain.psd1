@@ -282,6 +282,9 @@
         # Windows 10 1703+ ships ICU and UI Automation as OS components; Qt 6.11
         # MSVC builds import them (Qt6Core -> icuuc.dll, qwindows -> UIAutomationCore).
         'icu.dll', 'icuuc.dll', 'icuin.dll', 'icudt.dll', 'uiautomationcore.dll',
-        'd3dcompiler_47.dll'
+        'd3dcompiler_47.dll',
+        # Windows 10 1809+ system component used by process-wide PRNG seeding;
+        # the BtbN FFmpeg n8.1 DLLs and its static ffmpeg.exe import it.
+        'bcryptprimitives.dll'
     )
 }

@@ -1,10 +1,10 @@
 # Provisions the standalone `ffmpeg.exe` used by video export.
 #
-# Source: BtbN FFmpeg-Builds n8.1 *GPL* static build (the GPL variant is the one
-# with libx264; the LGPL build disables it, and MiaCode's encoder probe falls
-# back to libx264 for software H.264 export). Pinned to one immutable autobuild
-# tag so the binary hash stays valid - the rolling `latest` tag is replaced
-# daily.
+# x64 keeps the Gyan.dev 7.1.1 essentials build this repository has shipped: a
+# static GPL build (libx264 included) at 87 MB, against 163 MB for the BtbN n8.1
+# GPL static build of the same content.
+# arm64 has no Gyan build, so it uses the BtbN n8.1 GPL static build pinned to
+# one immutable autobuild tag (the rolling `latest` tag is replaced daily).
 #
 # The binary lands in third_party/ffmpeg/windows/<win64|winarm64>/ffmpeg.exe and
 # is gitignored. package-win.ps1 ships it as app/ffmpeg/ffmpeg.exe.
@@ -124,14 +124,17 @@ $ffmpegDir = Join-Path $RepoRoot "third_party\ffmpeg\windows\$archSuffix"
 $ffmpegPath = Join-Path $ffmpegDir "ffmpeg.exe"
 $ffprobePath = Join-Path $ffmpegDir "ffprobe.exe"
 
-$ffmpegReleaseTag = "autobuild-2026-09-12-13-12"
-$ffmpegBuildVersion = "n8.1.2-52-g5a03dfa0f6"
-$ffmpegAssetName = "ffmpeg-$ffmpegBuildVersion-$archSuffix-gpl-8.1.zip"
-$defaultUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$ffmpegReleaseTag/$ffmpegAssetName"
-$defaultSha256 = if ($Arch -eq "arm64") {
-    "22E1BB241B8747ED5EA5ECE8DE64AFCC8720F4550ED35ED24657D00C2BADBA5E"
+if ($Arch -eq "arm64") {
+    $ffmpegReleaseTag = "autobuild-2026-09-12-13-12"
+    $ffmpegBuildVersion = "n8.1.2-52-g5a03dfa0f6"
+    $ffmpegAssetName = "ffmpeg-$ffmpegBuildVersion-winarm64-gpl-8.1.zip"
+    $defaultUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$ffmpegReleaseTag/$ffmpegAssetName"
+    $defaultSha256 = "22E1BB241B8747ED5EA5ECE8DE64AFCC8720F4550ED35ED24657D00C2BADBA5E"
+    $defaultVersionPattern = 'ffmpeg version n8\.1\.\d+'
 } else {
-    "7B25E8C22217CCFC608BD609530620CCAD0F8A0F9D1A6BF4CA3B09B46E9E1A66"
+    $defaultUrl = "https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z"
+    $defaultSha256 = "B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997"
+    $defaultVersionPattern = '^ffmpeg version 7\.1\.1-essentials_build-www\.gyan\.dev'
 }
 
 $ffmpegUrl = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_URL)) {
@@ -144,10 +147,11 @@ $expectedSha256 = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_S
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_SHA256.ToUpperInvariant()
 }
-# BtbN keeps the release tag stable but the version suffix inside the binary is
-# tied to that build, so match the major/minor only.
+# The Gyan build carries a release tag in its version banner; the BtbN tag is
+# stable while the version suffix inside the binary is tied to that build, so
+# its pattern matches the major/minor only.
 $expectedVersionPattern = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_VERSION_PATTERN)) {
-    'ffmpeg version n8\.1\.\d+'
+    $defaultVersionPattern
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_VERSION_PATTERN
 }

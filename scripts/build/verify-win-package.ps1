@@ -232,3 +232,7 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 Write-Host "All checks passed."
+# Exit explicitly: the import scan shells out to objdump, and a non-zero
+# $LASTEXITCODE from any native tool would otherwise become this script's exit
+# code even though every check passed.
+exit 0

@@ -59,7 +59,9 @@ jobs:
           if ($distDirs.Count -ne 1) {
             throw "Expected one MiaCode-*-${{ matrix.distSuffix }} directory under dist, found: $($distDirs.Name -join ', ')"
           }
-          ./scripts/build/verify-win-package.ps1 -DistDir $distDirs[0].FullName -Arch ${{ matrix.arch }}
+          # Headless runner: no display session, so the launcher smoke test is a
+          # local-machine check (see docs/ops/RELEASE_CHECKLIST.md), not a CI one.
+          ./scripts/build/verify-win-package.ps1 -DistDir $distDirs[0].FullName -Arch ${{ matrix.arch }} -SkipLaunch
 
       - name: Read package name
         id: package

@@ -6,13 +6,14 @@ This directory stores prebuilt `ffmpeg` executables used by MiaCode video export
 
 - Windows
   - Binaries: `windows/win64/ffmpeg.exe` (x64) and `windows/winarm64/ffmpeg.exe` (arm64)
-  - Source package: BtbN FFmpeg-Builds n8.1 **GPL** static build, pinned to the
+  - x64 source package: `https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z`
+    (Gyan.dev `essentials_build`, 87 MB static GPL binary)
+  - arm64 source package: BtbN FFmpeg-Builds n8.1 **GPL** static build pinned to the
     immutable tag `autobuild-2026-09-12-13-12`
-    (`.../releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-<win64|winarm64>-gpl-8.1.zip`)
-  - The GPL variant is the one that carries libx264, which the export encoder probe
-    needs for software H.264.
-  - Runtime version pattern: `ffmpeg version n8.1.x-...`
-  - SHA256 (`ffmpeg.exe`): pinned per architecture in
+    (`.../releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-gpl-8.1.zip`)
+  - Both are static GPL builds carrying libx264, which the export encoder probe needs
+    for software H.264 export.
+  - Runtime version patterns and SHA256 values live in
     `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`
 
 - macOS

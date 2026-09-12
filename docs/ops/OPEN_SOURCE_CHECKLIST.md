@@ -89,13 +89,13 @@ Clean-clone verification:
 
 ## Third-Party Download Verification
 
-- Windows export FFmpeg (both architectures, BtbN n8.1 **GPL** static, pinned tag
-  `autobuild-2026-09-12-13-12`):
-  - x64: `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-win64-gpl-8.1.zip`
-    - Expected `ffmpeg.exe` SHA256: `7B25E8C22217CCFC608BD609530620CCAD0F8A0F9D1A6BF4CA3B09B46E9E1A66`.
-  - arm64: `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-gpl-8.1.zip`
+- Windows export FFmpeg:
+  - x64 (Gyan.dev 7.1.1 essentials, 87 MB static GPL): `https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z`
+    - Expected `ffmpeg.exe` SHA256: `B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997`.
+  - arm64 (BtbN n8.1 **GPL** static, pinned tag `autobuild-2026-09-12-13-12`):
+    `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-gpl-8.1.zip`
     - Expected `ffmpeg.exe` SHA256: `22E1BB241B8747ED5EA5ECE8DE64AFCC8720F4550ED35ED24657D00C2BADBA5E`.
-  - Checked: both archives reachable, both `ffmpeg.exe` hashes reproduced from the extracted binaries.
+  - Checked: both archives reachable; the arm64 `ffmpeg.exe` hash reproduced from the extracted binary.
 - Windows QtAVPlayer FFmpeg dev SDK (BtbN n8.1 LGPL **shared**, same pinned tag):
   - x64: `.../autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-win64-lgpl-shared-8.1.zip`
     - Expected archive SHA256: `D04C1D0866D0F0E23FE9C8C4B07CFAA0B0DFE39B704CFF22667DDB0A5006FF3A`.
