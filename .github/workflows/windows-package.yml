@@ -1,5 +1,8 @@
 name: Windows package
 
+# Run list title: nightly · <branch> · <commit sha>.
+run-name: nightly · ${{ github.ref_name }} · ${{ github.sha }}
+
 on:
   push:
     branches:
@@ -11,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dev-windows-${{ github.ref }}
+  group: windows-package-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
