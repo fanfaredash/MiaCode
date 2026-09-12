@@ -123,7 +123,7 @@
         # each; added per this list's conservative-superset rule so a stray PV
         # in one of these formats doesn't silently fail.
         'vc1', 'wmv1', 'wmv2', 'wmv3', 'msmpeg4v2', 'msmpeg4v3',
-        'theora', 'flv1', 'vp6', 'vp6f',
+        'theora', 'flv', 'vp6', 'vp6f',
         'mpeg4', 'mpeg2video', 'mpeg1video', 'mjpeg', 'prores', 'rawvideo',
         'png', 'gif',
         # audio
