@@ -150,6 +150,7 @@
         RemovedAppFiles = @(
             'opengl32sw.dll',
             'dxcompiler.dll', 'dxil.dll',
+            'vc_redist.x64.exe', 'vc_redist.arm64.exe',
             'multimedia\ffmpegmediaplugin.dll',
             'avcodec-61.dll', 'avformat-61.dll', 'avutil-59.dll',
             'swresample-5.dll', 'swscale-8.dll', 'avfilter-10.dll'

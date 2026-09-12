@@ -139,17 +139,22 @@ $BuildDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $BuildDir
 
 $buildDevTools = if ($Config -eq "Debug") { "ON" } else { "OFF" }
 
-# 1. Export ffmpeg binary.
-& (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg.ps1") -RepoRoot $repoRoot -Arch $targetArch
-if ($LASTEXITCODE -ne 0) {
-    throw "Windows ffmpeg preparation failed."
+# arm64 keeps its pinned static export binary. The x64 trim build produces a
+# shared ffmpeg.exe beside the preview DLLs.
+if ($targetArch -eq "arm64") {
+    & (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg.ps1") -RepoRoot $repoRoot -Arch $targetArch
+    if ($LASTEXITCODE -ne 0) {
+        throw "Windows ffmpeg preparation failed."
+    }
 }
 
 # 2. Preview FFmpeg dev SDK. A restored media cache is consumed as-is.
 $trimPreviewSdk = ($toolchainData.FFmpeg.TrimByArch.$targetArch) -and !$SkipTrim
 if ($trimPreviewSdk) {
     $devSdkDir = Join-Path $repoRoot $toolchainData.FFmpeg.DevDirByArch.$targetArch
-    $previewSdkReady = Test-Path (Join-Path $devSdkDir "include\libavcodec\avcodec.h")
+    $exportFfmpeg = Join-Path (Split-Path $devSdkDir -Parent) "ffmpeg.exe"
+    $previewSdkReady = (Test-Path (Join-Path $devSdkDir "include\libavcodec\avcodec.h")) -and
+        (Test-Path $exportFfmpeg) -and ((Get-Item $exportFfmpeg).Length -lt 48MB)
     foreach ($runtimeDll in $toolchainData.FFmpeg.RuntimeDllsByArch.$targetArch) {
         $previewSdkReady = $previewSdkReady -and (Test-Path (Join-Path $devSdkDir "bin\$runtimeDll"))
     }

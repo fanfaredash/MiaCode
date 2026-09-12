@@ -16,36 +16,16 @@ permissions:
 
 concurrency:
   group: windows-package-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   package:
-    name: ${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
+    name: x64
+    runs-on: windows-2022
     timeout-minutes: 180
     env:
       # Release artifact marker: MiaCode_<version>_nightly_win_<arch>.
       MIACODE_PACKAGE_CHANNEL: nightly
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            runner: windows-2022
-            toolchain: msvc
-            buildDir: build-msvc
-            qtArchDir: msvc2022_64
-            # x64 builds the decode-only preview FFmpeg SDK by default; MSYS2
-            # and MSVC are preinstalled on this image, so the trim toolchain
-            # runs as-is.
-          - arch: arm64
-            runner: windows-11-arm
-            toolchain: msvc-arm64
-            buildDir: build-msvc-arm64
-            qtArchDir: msvc2022_arm64
-            # arm64 ships the full BtbN n8.1 LGPL SDK (the trim toolchain covers
-            # x64 only, so no trim runs here).
-
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -56,22 +36,31 @@ jobs:
       - name: Restore Qt
         uses: actions/cache@v6
         with:
-          path: .qt/6.11.1/${{ matrix.qtArchDir }}
-          key: qt-6.11.1-windows-${{ matrix.arch }}
+          path: .qt/6.11.1/msvc2022_64
+          key: qt-6.11.1-windows-x64
 
       - name: Restore media kit
         uses: actions/cache@v6
         with:
-          path: third_party/ffmpeg/windows/${{ matrix.arch == 'arm64' && 'winarm64' || 'win64' }}
-          key: media-windows-${{ matrix.arch }}-${{ hashFiles('scripts/ffmpeg/ensure-windows-ffmpeg.ps1', 'scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1', 'scripts/ffmpeg/trim/**') }}
-          restore-keys: media-windows-${{ matrix.arch }}-
+          path: |
+            third_party/ffmpeg/windows/win64/dev
+            third_party/ffmpeg/windows/win64/ffmpeg.exe
+          key: media-windows-x64-${{ hashFiles('scripts/ffmpeg/trim/**') }}
+          restore-keys: media-windows-x64-
+
+      - name: Restore compiled objects
+        uses: actions/cache@v6
+        with:
+          path: build-msvc
+          key: build-windows-x64-qt6.11.1-${{ github.sha }}
+          restore-keys: build-windows-x64-qt6.11.1-
 
       - name: Build and package
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $jobs = [int]$env:NUMBER_OF_PROCESSORS
-          ./scripts/build/build-win.ps1 -Toolchain ${{ matrix.toolchain }} -BuildDir ${{ matrix.buildDir }} -BuildJobs $jobs
+          ./scripts/build/build-win.ps1 -Toolchain msvc -BuildDir build-msvc -BuildJobs $jobs
 
       - name: Resolve artifact name
         id: package

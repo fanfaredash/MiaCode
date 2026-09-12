@@ -692,17 +692,13 @@ $ffmpegExportDir = Join-Path $repoRoot $toolchainData.FFmpeg.ExportDirByArch.$Ar
 $ffmpegSrc = Join-Path $ffmpegExportDir $toolchainData.FFmpeg.ExportBinary
 if (Test-Path $ffmpegSrc) {
     $ffmpegSize = (Get-Item $ffmpegSrc).Length
-    if ($ffmpegSize -lt 1MB) {
+    if ($ffmpegSize -lt 128KB) {
         throw "Invalid ffmpeg binary (too small): $ffmpegSrc ($ffmpegSize bytes)"
     }
-    # ffmpeg lives under app/ alongside the real exe so that
-    # resolveFfmpegExecutable() finds it via the appDir/ffmpeg/
-    # candidate (the real exe's applicationDirPath = app/).
     $ffmpegDstDir = Join-Path $appDir "ffmpeg"
     New-Item -ItemType Directory -Path $ffmpegDstDir -Force | Out-Null
     Copy-Item $ffmpegSrc (Join-Path $ffmpegDstDir "ffmpeg.exe") -Force
 } else {
-    Write-Host "Run .\scripts\ffmpeg\ensure-windows-ffmpeg.ps1 to download the pinned Windows ffmpeg binary."
     throw "Missing required ffmpeg binary: $ffmpegSrc"
 }
 

@@ -58,7 +58,9 @@
         # transitive dependency.
         Filters = @(
             'format', 'scale', 'fps', 'setpts', 'null', 'copy',
-            'aformat', 'aresample', 'asetpts', 'anull'
+            'aformat', 'aresample', 'asetpts', 'anull',
+            'color', 'split', 'crop', 'pad', 'alphamerge', 'overlay', 'fade',
+            'trim', 'tpad', 'atrim', 'volume', 'amix'
         )
         # Without 'file' nothing local opens — every PV fails to load.
         Protocols = @('file')
@@ -95,7 +97,11 @@
         #    dav1d must link STATICALLY into avcodec-62.dll or the self-containment
         #    objdump assert (no external libdav1d.dll/libwinpthread) will fail; if it
         #    trips, add '--pkg-config-flags=--static' here and rebuild.
-        ExtraConfigureArgs = @('--enable-d3d11va', '--enable-dxva2', '--disable-iconv', '--enable-libdav1d', '--extra-ldflags=-static')
+        ExtraConfigureArgs = @(
+            '--enable-d3d11va', '--enable-dxva2', '--disable-iconv',
+            '--enable-libdav1d', '--pkg-config-flags=--static', '--extra-ldflags=-static',
+            '--enable-small', '--enable-ffmpeg', '--disable-ffplay', '--disable-ffprobe', '--disable-avdevice'
+        )
     }
 
     # ---------------------------------------------------------------------
@@ -132,8 +138,17 @@
     # Container demuxers. mov = mp4/m4v/mov; matroska = mkv/webm.
     Demuxers = @(
         'mov', 'matroska', 'avi', 'flv', 'mpegts', 'mpegps', 'asf',
-        'mp3', 'wav', 'ogg', 'flac', 'aac', 'image2', 'gif'
+        'mp3', 'wav', 'ogg', 'flac', 'aac', 'image2', 'gif', 'rawvideo'
     )
+
+    Encoders = @(
+        'libx264', 'aac', 'mpeg4',
+        'h264_mf', 'hevc_mf',
+        'h264_nvenc', 'hevc_nvenc',
+        'h264_qsv', 'hevc_qsv',
+        'h264_amf', 'hevc_amf'
+    )
+    Muxers = @('mov')
 
     # Parsers — paired with the decoders above. A decoder without its parser
     # can still fail; configure auto-pulls most, but list the common ones.
