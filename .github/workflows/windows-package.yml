@@ -48,22 +48,23 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           lfs: true
           submodules: recursive
 
       - name: Restore Qt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .qt/6.11.1/${{ matrix.qtArchDir }}
           key: qt-6.11.1-windows-${{ matrix.arch }}
 
       - name: Restore media kit
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: third_party/ffmpeg/windows/${{ matrix.arch == 'arm64' && 'winarm64' || 'win64' }}
-          key: media-windows-${{ matrix.arch }}-${{ hashFiles('scripts/ffmpeg/**') }}
+          key: media-windows-${{ matrix.arch }}-${{ hashFiles('scripts/ffmpeg/ensure-windows-ffmpeg.ps1', 'scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1', 'scripts/ffmpeg/trim/**') }}
+          restore-keys: media-windows-${{ matrix.arch }}-
 
       - name: Build and package
         shell: pwsh
@@ -84,7 +85,7 @@ jobs:
           "archive_name=$($archives[0].Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.package.outputs.archive_name }}
           path: dist/*.7z

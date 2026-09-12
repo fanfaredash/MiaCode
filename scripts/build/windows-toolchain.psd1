@@ -145,8 +145,15 @@
             'qml\Qt\labs\folderlistmodel',
             'qmltooling'
         )
-        # Also removed from app\ after deployment.
-        RemovedAppFiles = @('opengl32sw.dll')
+        # Also removed from app\ after deployment. Preview uses QtAVPlayer with
+        # the project FFmpeg 8 runtime, and the renderer uses D3D11.
+        RemovedAppFiles = @(
+            'opengl32sw.dll',
+            'dxcompiler.dll', 'dxil.dll',
+            'multimedia\ffmpegmediaplugin.dll',
+            'avcodec-61.dll', 'avformat-61.dll', 'avutil-59.dll',
+            'swresample-5.dll', 'swscale-8.dll', 'avfilter-10.dll'
+        )
         # assets\ subtrees that are embedded in MiaCode.exe via qrc and must not
         # be shipped loose as well.
         RedundantAssetPaths = @('reference', 'fonts')

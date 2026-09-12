@@ -127,6 +127,7 @@ echo "[ffmpeg-sdk] Configuring arm64 shared libraries for macOS $MACOS_DEPLOYMEN
   cd "$source_dir"
   MACOSX_DEPLOYMENT_TARGET="$MACOS_DEPLOYMENT_TARGET" ./configure \
     --prefix="$staging_dir" --target-os=darwin --arch=arm64 --cc="$cc_path" --cxx="$cxx_path" \
+    --host-cc="$cc_path" --host-cflags="$common_flags" \
     --enable-shared --disable-static --disable-programs --disable-doc --disable-debug \
     --disable-autodetect --disable-gpl --disable-nonfree --disable-avdevice \
     --enable-videotoolbox --install-name-dir='@rpath' \

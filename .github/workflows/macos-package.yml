@@ -30,27 +30,28 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           lfs: true
           submodules: recursive
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Restore Qt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .qt/6.11.1
           key: qt-6.11.1-macos-arm64
 
       - name: Restore media kit
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: third_party/ffmpeg/macos
-          key: media-macos-arm64-${{ hashFiles('scripts/ffmpeg/**') }}
+          key: media-macos-arm64-${{ hashFiles('scripts/ffmpeg/ensure-macos-ffmpeg.sh', 'scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh') }}
+          restore-keys: media-macos-arm64-
 
       - name: Build and package
         run: bash scripts/build/build-macos-ci.sh
@@ -68,7 +69,7 @@ jobs:
           printf 'archive_name=%s\n' "$(basename "${packages[0]}")" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.package.outputs.archive_name }}
           path: dist/*.7z
