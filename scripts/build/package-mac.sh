@@ -447,10 +447,10 @@ fi
 
 package_step "Staging app bundle, documentation, assets, and runtime tools"
 rm -rf "$DIST_DIR"
-mkdir -p "$DIST_DIR/docs"
+mkdir -p "$DIST_DIR"
 cp -R "$APP_PATH" "$DIST_DIR/"
 
-for release_doc in LICENSE LICENSE_SCOPE.md THIRD_PARTY_NOTICES.md README.md README_EN.md; do
+for release_doc in LICENSE LICENSE_SCOPE.md THIRD_PARTY_NOTICES.md; do
   if [[ ! -f "$ROOT_DIR/$release_doc" ]]; then
     echo "Missing release documentation file: $ROOT_DIR/$release_doc" >&2
     exit 1
@@ -540,41 +540,23 @@ else
   exit 1
 fi
 
-for doc in docs/ops/DEBUG_INDEX.md docs/specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md; do
-  if [[ -f "$ROOT_DIR/$doc" ]]; then
-    cp "$ROOT_DIR/$doc" "$DIST_DIR/docs/$(basename "$doc")"
-  fi
-done
+cat >"$DIST_DIR/README.md" <<'EOF'
+# MiaCode
 
-cat >"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
-MiaCode release package (macOS)
+## 启动
 
-Run:
-  Open MiaCode.app
+打开 `MiaCode.app`。
 
-Included:
-  - MiaCode.app
-  - Start_MiaCode_Debug.command (runs MiaCode in debug mode; logs go to ./logs/)
-  - Qt frameworks/plugins deployed by macdeployqt
-  - BASS, BASSmix, BASS FX, and BASSOPUS arm64 runtime libraries
-  - MiaCode.app/Contents/MacOS/ffmpeg/ffmpeg
-  - assets (inside MiaCode.app/Contents/Resources/assets)
-  - docs/
+## 调试启动
+
+打开 `Start_MiaCode_Debug.command`，应用将以诊断模式启动，日志保存在包目录的 `logs/` 中。
+
+## 包内容
+
+- `MiaCode.app`：应用程序
+- `Start_MiaCode_Debug.command`：诊断启动器
+- `LICENSE`、`LICENSE_SCOPE.md`、`THIRD_PARTY_NOTICES.md` 和 `licenses/`：许可证与第三方声明
 EOF
-
-if [[ "$BUILD_DEV_TOOLS" != "ON" ]]; then
-  cat >>"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
-
-Not included on purpose:
-  - simai_native_dump
-  - soundtouch_probe
-EOF
-else
-  cat >>"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
-  - simai_native_dump
-  - soundtouch_probe
-EOF
-fi
 
 debug_launcher_source="$ROOT_DIR/scripts/debug/Start_MiaCode_Debug.command"
 debug_launcher_path="$DIST_DIR/Start_MiaCode_Debug.command"
