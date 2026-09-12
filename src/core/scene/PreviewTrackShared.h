@@ -10,20 +10,19 @@ namespace miacode::preview::scene {
 enum class PreviewSlideTrackTrimMode {
     UniformTime = 0,
     AreaImmediate = 1,
-    VanillaAutoplay = 2,
+    EraseByArea = 2,
 };
 
 inline constexpr PreviewSlideTrackTrimMode kPreviewSlideTrackTrimMode = PreviewSlideTrackTrimMode::UniformTime;
 
 // ---------------------------------------------------------------------------
-// Vanilla autoplay track erasure
+// Erase-by-area track erasure
 // ---------------------------------------------------------------------------
 //
-// Simulates how the arcade game clears slide-track arrows while autoplaying,
-// which differs in shape from both existing trim modes: the arcade advances a
-// hit-area index at even fractions of the trace window and erases up to the
-// point where the star left that hit area, so the track clears in a few large
-// steps and the tail arrows stay lit until the whole track disappears.
+// Clears slide-track arrows in whole hit-area steps. For standalone slides,
+// the timing follows the arcade autoplay calculation: a hit-area index advances
+// at even fractions of the trace window and erases up to the point where the
+// star left that hit area, leaving the tail lit until the track disappears.
 //
 // Arcade form (SlideRoot.NoteCheck / GetDeleteArrowDistance):
 //
@@ -31,28 +30,40 @@ inline constexpr PreviewSlideTrackTrimMode kPreviewSlideTrackTrimMode = PreviewS
 //   hitIndex = clamp((int)(areaCount * num6), 0, areaCount - 1)
 //   hidden   = (int)(arrowCount * deleteDistance(hitIndex))
 //
-// Expressed against the star's own progress `p` along the whole slide, this is
+// Expressed against the star's progress `p` along one segment, this is
 // `num6 == p / criticalProportion`, because the arcade star advances linearly
 // with time and `criticalProportion == 1 - lastWaitTime / (arrive - launch)`.
-// Driving it from `p` rather than from a raw time window is what keeps the
-// erasure under the star for connected slides, whose segments MiaCode times
-// separately.
+// A standalone slide therefore follows the arcade formula exactly. Connected
+// slides deliberately restart this clock for each segment: intermediate
+// segments use their whole local duration, while the final segment keeps its
+// standalone critical proportion. This avoids the arcade's merged-list quirk
+// erasing arrows from the next segment before the star reaches the join.
 //
 // `deleteDistance(hitIndex)` reduces to "the position at which the star left
 // hit area hitIndex - 1", which `track_checkpoints` / `track_cut_indices`
 // already record as an arrow index, so no additional shape data is needed.
-struct PreviewSlideAutoplayAreas {
-    // Total arrows hidden once the star has moved past merged hit area k.
+struct PreviewSlideEraseByAreaSegment {
+    // Arrows hidden within this segment once the star has moved past area k.
     QVector<int> hiddenArrowCountAfterArea;
-    // 1 - lastWaitTime / traceDuration, weighted across a connected chain.
-    double criticalProportion = 1.0;
+    // Global arrow offset of this segment in the rendered connected track.
+    int arrowOffset = 0;
     int totalArrowCount = 0;
+    // Final segment: the shape's standalone arcade value. Intermediate
+    // segments: 1.0, so their equal-area clock spans the whole segment.
+    double criticalProportion = 1.0;
 
     int areaCount() const { return hiddenArrowCountAfterArea.size(); }
     bool isValid() const { return areaCount() > 0 && criticalProportion > 0.0; }
 };
 
-PreviewSlideAutoplayAreas buildPreviewSlideAutoplayAreas(const TimelineNoteMarker& marker);
+struct PreviewSlideEraseByAreaData {
+    QVector<PreviewSlideEraseByAreaSegment> segments;
+    int totalArrowCount = 0;
+
+    bool isValid() const { return !segments.isEmpty() && totalArrowCount > 0; }
+};
+
+PreviewSlideEraseByAreaData buildPreviewSlideEraseByAreaData(const TimelineNoteMarker& marker);
 
 // Locates the star the way PreviewSlideMotionLayerState draws it: the segment
 // whose shoot time has passed, plus the proportion travelled within it. Shared
@@ -65,11 +76,14 @@ void previewSlideStarSegment(
     qreal* outSegmentProportion
 );
 
-// Star progress over the whole slide, weighting segments by their parsed trace
-// durations (arrow counts when durations are unavailable).
-qreal previewSlideStarProgress(const TimelineNoteMarker& marker, double playheadSeconds);
-
-int previewSlideVanillaHiddenArrowCount(const PreviewSlideAutoplayAreas& areas, qreal starProgress);
+// Returns a global hidden-arrow count. `segmentProportion` is local to the
+// selected segment; all arrows belonging to earlier segments are considered
+// hidden once the star reaches this segment.
+int previewSlideEraseByAreaHiddenArrowCount(
+    const PreviewSlideEraseByAreaData& data,
+    int segmentIndex,
+    qreal segmentProportion
+);
 
 // The wifi counterpart. `wifiTrackAreaPoints` groups the eleven rows into the
 // same four judge areas as `tri_judge_sequence`, so the rows clear area by area

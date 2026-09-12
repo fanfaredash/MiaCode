@@ -99,11 +99,11 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
         );
     }
 
-    // Preview Mode: Erase by Area selects the arcade autoplay clear; otherwise the
+    // Preview Mode: Erase by Area selects the area-stepped clear; otherwise the
     // build's default trim mode applies.
     const PreviewSlideTrackTrimMode trimMode =
         state.muriRenderOptions.renderMode == RenderMode::EraseByArea
-        ? PreviewSlideTrackTrimMode::VanillaAutoplay
+        ? PreviewSlideTrackTrimMode::EraseByArea
         : kPreviewSlideTrackTrimMode;
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
@@ -394,10 +394,20 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                         startProportion
                     );
                 }
-            } else if (trimMode == PreviewSlideTrackTrimMode::VanillaAutoplay) {
-                removedArrowCount = previewSlideVanillaHiddenArrowCount(
-                    buildPreviewSlideAutoplayAreas(marker),
-                    previewSlideStarProgress(marker, state.playheadSeconds)
+            } else if (trimMode == PreviewSlideTrackTrimMode::EraseByArea) {
+                int eraseSegment = 0;
+                qreal eraseSegmentProportion = 0.0;
+                previewSlideStarSegment(
+                    marker,
+                    state.playheadSeconds,
+                    marker.slideTrackAreaPoints.size(),
+                    &eraseSegment,
+                    &eraseSegmentProportion
+                );
+                removedArrowCount = previewSlideEraseByAreaHiddenArrowCount(
+                    buildPreviewSlideEraseByAreaData(marker),
+                    eraseSegment,
+                    eraseSegmentProportion
                 );
             } else {
                 const qreal totalDuration = qMax<qreal>(0.001, static_cast<qreal>(marker.endSecond - marker.slideTraceSecond));
@@ -567,7 +577,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                     startProportion,
                     marker.wifiTrackAreaPoints.size()
                 );
-            } else if (trimMode == PreviewSlideTrackTrimMode::VanillaAutoplay) {
+            } else if (trimMode == PreviewSlideTrackTrimMode::EraseByArea) {
                 QVector<int> areaRowCounts;
                 areaRowCounts.reserve(marker.wifiTrackAreaPoints.size());
                 for (const QVector<QPointF>& areaPoints : marker.wifiTrackAreaPoints) {
