@@ -43,6 +43,8 @@ Qt frameworks/plugins after `macdeployqt` and verifies that every bundled
 Mach-O contains only the target architecture before re-signing. Set
 `MIACODE_THIN_MACOS_APP=OFF` to produce a comparison package that keeps Qt's
 universal binaries.
+Set `MIACODE_PACKAGE_CHANNEL=nightly` to name the directory and ZIP
+`MiaCode-v<version>-nightly-macos-apple-silicon`.
 
 `build-macos.sh` provisions the macOS QtAVPlayer preview decoder FFmpeg development SDK,
 creating the pinned,

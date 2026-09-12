@@ -74,6 +74,9 @@ Rules going forward:
   version freshness against `CMakeLists.txt` + generated `AppVersion.h`, auto-rebuilds MiaCode,
   runs windeployqt with `--qmldir src`, keeps the Qt Quick DLL set, copies repo-local BASS DLLs).
 - macOS build/package: `scripts/build/build-macos.sh`, `scripts/build/package-mac.sh`.
+  The wrapper prepares the pinned macOS FFmpeg dev SDK before packaging; the package script
+  derives `MiaCode-v<version>-macos-apple-silicon` from `CMakeLists.txt`, with an optional
+  `MIACODE_PACKAGE_CHANNEL` suffix such as `-nightly`.
 - Linux build/package: `scripts/build/build-linux.sh`, `scripts/build/package-linux.sh`. The wrapper
   builds with 8 jobs by default in a fixed Ubuntu 22.04 / Qt 6.11.1 Docker or Podman image and
   clears `dist/`, then emits `MiaCode-v<version>-linux-x86_64/` plus a matching `tar.gz`.

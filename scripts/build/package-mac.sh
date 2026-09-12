@@ -13,6 +13,7 @@ MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
 PACKAGE_ARCHITECTURES="${CMAKE_OSX_ARCHITECTURES:-arm64}"
 THIN_SINGLE_ARCH_PACKAGE="${MIACODE_THIN_MACOS_APP:-ON}"
 MIACODE_FFMPEG_DEV_DIR="${MIACODE_FFMPEG_DEV_DIR:-}"
+PACKAGE_CHANNEL="${MIACODE_PACKAGE_CHANNEL:-}"
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
   QT_ROOT="$QT_ROOT_DIR"
 fi
@@ -26,6 +27,10 @@ case "$THIN_SINGLE_ARCH_PACKAGE" in
 esac
 if [[ "$PACKAGE_ARCHITECTURES" != "arm64" ]]; then
   echo "MiaCode for macOS is arm64-only (got CMAKE_OSX_ARCHITECTURES=$PACKAGE_ARCHITECTURES)." >&2
+  exit 2
+fi
+if [[ -n "$PACKAGE_CHANNEL" && ! "$PACKAGE_CHANNEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "MIACODE_PACKAGE_CHANNEL must start with an alphanumeric character and contain only letters, digits, dots, underscores, or hyphens (got: $PACKAGE_CHANNEL)" >&2
   exit 2
 fi
 
@@ -53,7 +58,12 @@ package_step() {
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
 MACOS_PACKAGE_SUFFIX="macos-apple-silicon"
-DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-${MACOS_PACKAGE_SUFFIX}}"
+PACKAGE_NAME="MiaCode-v${VERSION}"
+if [[ -n "$PACKAGE_CHANNEL" ]]; then
+  PACKAGE_NAME+="-${PACKAGE_CHANNEL}"
+fi
+PACKAGE_NAME+="-${MACOS_PACKAGE_SUFFIX}"
+DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/$PACKAGE_NAME}"
 
 version_gt() {
   local i

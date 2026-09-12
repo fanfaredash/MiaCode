@@ -41,6 +41,8 @@ QT_ROOT="$HOME/Qt/6.10.2/macos" CMAKE_OSX_ARCHITECTURES=arm64 bash scripts/build
 `macdeployqt` 后裁掉 Qt Framework/插件中的另一架构切片，并在重新签名前验证
 包内所有 Mach-O 均包含且只包含目标架构。可设置
 `MIACODE_THIN_MACOS_APP=OFF` 生成保留 Qt universal 二进制的对照包。
+设置 `MIACODE_PACKAGE_CHANNEL=nightly` 后，目录和 ZIP 使用
+`MiaCode-v<version>-nightly-macos-apple-silicon` 名称。
 
 `build-macos.sh` 会准备 macOS 的 QtAVPlayer 预览解码 FFmpeg dev SDK，生成仓库本地的
 `third_party/ffmpeg/macos/dev/` 固定 FFmpeg 6 SDK；打包仅复制其中必需的六个 dylib，
