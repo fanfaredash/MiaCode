@@ -1277,6 +1277,15 @@ if (WIN32)
         # which encodes correctly regardless of compiler defaults.
         target_compile_options(MiaCodeLauncher PRIVATE /utf-8)
     endif()
+    if (MINGW)
+        # MinGW counterpart of MSVC_RUNTIME_LIBRARY MultiThreaded above: the
+        # launcher sits at the dist root while the packaged libstdc++-6 /
+        # libgcc_s_seh-1 / libwinpthread-1 DLLs live in app/, so the launcher
+        # has to carry no MinGW runtime dependency of its own. -municode
+        # selects the wWinMain entry point the source defines; MinGW's default
+        # crt startup looks for WinMain and fails to link without it.
+        target_link_options(MiaCodeLauncher PRIVATE -municode -static -static-libgcc -static-libstdc++)
+    endif()
     # Shared app icon — the wrapper exe lives at the dist root and is the
     # user-clickable face of MiaCode in File Explorer, so it must show
     # the same icon as the real binary inside app/. Reuses the generated
