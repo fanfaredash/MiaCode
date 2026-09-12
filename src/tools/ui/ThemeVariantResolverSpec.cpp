@@ -29,7 +29,16 @@ bool testDeterministicMappings(QTextStream& out)
                    QStringLiteral("system dark"), out)
         && require(ThemeVariantResolver::resolve(PreferenceDocument::ThemePreference::System, Qt::ColorScheme::Unknown)
                        == ThemeVariant::Dark,
-                   QStringLiteral("unknown system scheme falls back to dark"), out);
+                   QStringLiteral("unknown system scheme falls back to dark"), out)
+        && require(ThemeVariantResolver::resolve(PreferenceDocument::ThemePreference::Legacy, Qt::ColorScheme::Light)
+                       == ThemeVariant::Dark,
+                   QStringLiteral("legacy stays dark against a light system scheme"), out)
+        && require(ThemeVariantResolver::resolve(PreferenceDocument::ThemePreference::Legacy, Qt::ColorScheme::Dark)
+                       == ThemeVariant::Dark,
+                   QStringLiteral("legacy stays dark against a dark system scheme"), out)
+        && require(ThemeVariantResolver::resolve(PreferenceDocument::ThemePreference::Legacy, Qt::ColorScheme::Unknown)
+                       == ThemeVariant::Dark,
+                   QStringLiteral("legacy stays dark when the system scheme is unknown"), out);
 }
 
 } // namespace

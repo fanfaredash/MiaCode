@@ -236,7 +236,240 @@ QtObject {
         }
     })
 
-    readonly property var colors: darkTheme ? darkColors : lightColors
+    // MiaCode 1.x light palette mapped onto the v2 semantic roles. Surface
+    // opacity remains a runtime concern, so palette authors only provide
+    // opaque surface tones and translucent content overlays.
+    readonly property var legacyLightColors: ({
+        background: {
+            surface: "#F8FAFD",
+            panel: "#F5F7FA",
+            elevated: "#FFFFFF",
+            control: "#FFFFFF",
+            controlDisabled: "#F2F5F9",
+            titleBar: "#F7F9FC",
+            activityBar: "#F7F9FC",
+            statusBar: "#F7F9FC"
+        },
+        border: {
+            normal: "#D5E0EC",
+            control: "#B8C7DA",
+            status: "#D5E0EC"
+        },
+        text: {
+            active: "#203040",
+            primary: "#203040",
+            secondary: "#5F6B7A",
+            disabled: "#9AA5B4",
+            editor: "#203040",
+            lineNumber: "#7A8796",
+            heading: "#203040",
+            onAccent: "#FFFFFF",
+            status: "#5F6B7A",
+            chrome: "#5F6B7A"
+        },
+        previewHud: {
+            text: "#203040",
+            shadow: Qt.rgba(1, 1, 1, 210 / 255)
+        },
+        accent: {
+            primary: "#2E77D0",
+            badge: "#2E77D0",
+            soft: "#B8CCE5",
+            focus: Qt.rgba(0x2E / 255, 0x77 / 255, 0xD0 / 255, 0xB3 / 255)
+        },
+        scroll: {
+            handle: "#9CB5CE",
+            handleHover: "#81A2C3"
+        },
+        state: {
+            hover: "#EEF5FF",
+            pressed: "#DCE9F8",
+            selected: "#DDEBFA",
+            menuSelection: "#DDEBFA",
+            textSelection: "#B8CCE5",
+            followHighlight: "#5A86D8",
+            lineHighlight: "#EDF2F8",
+            focusLine: "#EEF5FF",
+            selectionHighlight: "#DDEBFA"
+        },
+        listState: {
+            hover: "#EEF5FF",
+            pressed: "#DCE9F8",
+            selected: "#DDEBFA"
+        },
+        activityState: {
+            hover: "#E7F0FB",
+            pressed: "#D8E7F8",
+            selected: "#FFFFFF"
+        },
+        activityIcon: {
+            active: "#2B3C4E",
+            hover: "#2E77D0",
+            idle: "#5D6E83"
+        },
+        popupState: {
+            hover: "#EEF5FF",
+            pressed: "#DCE9F8",
+            selected: "#DDEBFA"
+        },
+        buttonState: {
+            hover: "#EEF5FF",
+            pressed: "#DCE9F8",
+            selected: "#DDEBFA"
+        },
+        accentState: {
+            hover: "#3A86E8",
+            pressed: "#2668B9",
+            selected: "#2E77D0"
+        },
+        syntax: {
+            keyword: "#4B69C6",
+            comment: "#448C27",
+            duration: "#9C5D27",
+            error: "#CD3131",
+            warning: "#9C5D27"
+        },
+        timeline: {
+            window: "#F5F5F5",
+            header: "#F3F5F8",
+            sidebar: "#E8E8E8",
+            base: "#F7F8FA",
+            border: "#C7D2DF",
+            axis: "#9AA7B6",
+            gridMajor: "#5A86D8",
+            gridSubdivision: Qt.rgba(122 / 255, 154 / 255, 204 / 255, 165 / 255),
+            gridMinor: Qt.rgba(174 / 255, 188 / 255, 204 / 255, 110 / 255),
+            laneEven: Qt.rgba(1, 1, 1, 30 / 255),
+            laneOdd: Qt.rgba(208 / 255, 212 / 255, 216 / 255, 30 / 255),
+            label: "#4D5C6D",
+            textSecondary: "#5F6B7A",
+            waveStroke: Qt.rgba(44 / 255, 156 / 255, 130 / 255, 135 / 255)
+        }
+    })
+
+    // MiaCode 1.x dark palette mapped onto the same semantic roles.
+    readonly property var legacyDarkColors: ({
+        background: {
+            surface: "#151A20",
+            panel: "#1B2129",
+            elevated: "#232B35",
+            control: "#171D24",
+            controlDisabled: "#202833",
+            titleBar: "#171C23",
+            activityBar: "#171C23",
+            statusBar: "#171C23"
+        },
+        border: {
+            normal: "#384656",
+            control: "#546679",
+            status: "#384656"
+        },
+        text: {
+            active: "#E6EEF8",
+            primary: "#E6EEF8",
+            secondary: "#A9B6C6",
+            disabled: "#7B8798",
+            editor: "#E6EEF8",
+            lineNumber: "#8091A5",
+            heading: "#E6EEF8",
+            onAccent: "#F7FBFF",
+            status: "#A9B6C6",
+            chrome: "#A9B6C6"
+        },
+        previewHud: {
+            text: "#F7FBFF",
+            shadow: Qt.rgba(0, 0, 0, 190 / 255)
+        },
+        accent: {
+            primary: "#4F8FEC",
+            badge: "#4F8FEC",
+            soft: "#A8C8F8",
+            focus: Qt.rgba(0x4F / 255, 0x8F / 255, 0xEC / 255, 0xB3 / 255)
+        },
+        scroll: {
+            handle: "#5A6A7B",
+            handleHover: "#70849A"
+        },
+        state: {
+            hover: "#2C3846",
+            pressed: "#232C38",
+            selected: "#263344",
+            menuSelection: "#263344",
+            textSelection: Qt.rgba(0x31 / 255, 0x5D / 255, 0x9E / 255, 0xDD / 255),
+            followHighlight: "#67A1F1",
+            lineHighlight: "#1F2630",
+            focusLine: "#232B35",
+            selectionHighlight: "#263344"
+        },
+        listState: {
+            hover: "#2C3846",
+            pressed: "#232C38",
+            selected: "#263344"
+        },
+        activityState: {
+            hover: "#2C3846",
+            pressed: "#232C38",
+            selected: "#232B35"
+        },
+        activityIcon: {
+            active: "#D8E2EE",
+            hover: "#E6EEF8",
+            idle: "#95A4B7"
+        },
+        popupState: {
+            hover: "#2C3846",
+            pressed: "#384656",
+            selected: "#263344"
+        },
+        buttonState: {
+            hover: "#2C3846",
+            pressed: "#232C38",
+            selected: "#263344"
+        },
+        accentState: {
+            hover: "#67A1F1",
+            pressed: "#3E79D0",
+            selected: "#4F8FEC"
+        },
+        syntax: {
+            keyword: "#F29A83",
+            comment: "#71B77A",
+            duration: "#88A4FF",
+            error: "#E35C50",
+            warning: "#FF9B4A"
+        },
+        timeline: {
+            window: "#1A2027",
+            header: "#1D232B",
+            sidebar: "#171D24",
+            base: "#202833",
+            border: "#4A5C70",
+            axis: "#8091A5",
+            gridMajor: "#7FA5D8",
+            gridSubdivision: Qt.rgba(120 / 255, 152 / 255, 198 / 255, 140 / 255),
+            gridMinor: Qt.rgba(95 / 255, 120 / 255, 155 / 255, 80 / 255),
+            // Lane bands are content overlays. Keeping them neutral and light
+            // preserves the selected surface (including wallpaper) underneath.
+            laneEven: Qt.rgba(113 / 255, 130 / 255, 148 / 255, 30 / 255),
+            laneOdd: Qt.rgba(79 / 255, 101 / 255, 124 / 255, 30 / 255),
+            label: "#C8D5E5",
+            textSecondary: "#A9B6C6",
+            waveStroke: Qt.rgba(95 / 255, 214 / 255, 180 / 255, 160 / 255)
+        }
+    })
+
+    // Every entry is an independent theme. Appearance mode only decides which
+    // user-selected slot supplies activeThemeToken; it never constrains the
+    // theme stored in either slot.
+    readonly property var themeCatalog: ({
+        "light": { id: "light", dark: false, colors: lightColors },
+        "dark": { id: "dark", dark: true, colors: darkColors },
+        "legacy": { id: "legacy", dark: true, colors: legacyDarkColors },
+        "legacy_light": { id: "legacy_light", dark: false, colors: legacyLightColors }
+    })
+    readonly property string activeThemeToken: preferences ? preferences.activeThemeToken : "dark"
+    readonly property var activeTheme: themeCatalog[activeThemeToken] || themeCatalog.dark
+    readonly property var colors: activeTheme.colors
 
     readonly property string uiFont: preferences ? preferences.uiFontFamily : ""
     readonly property font codeFont: preferences ? preferences.codeFont : Qt.font({})
@@ -278,6 +511,14 @@ QtObject {
             return baseColor
         const c = Qt.color(baseColor)
         return Qt.rgba(c.r, c.g, c.b, c.a * opacity)
+    }
+
+    // Content decoration may tint a surface, while surface ownership stays
+    // with the surrounding panel. The cap makes that contract hold even when
+    // a future palette accidentally supplies an opaque lane/stripe color.
+    function contentOverlayColor(baseColor, maxOpacity = 0.12) {
+        const c = Qt.color(baseColor)
+        return Qt.rgba(c.r, c.g, c.b, Math.min(c.a, maxOpacity))
     }
 
     function surfaceColor(baseColor) {

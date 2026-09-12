@@ -23,6 +23,8 @@ constexpr auto kAppSectionKey = "app";
 constexpr auto kPreviewSectionKey = "preview";
 constexpr auto kLanguageKey = "language";
 constexpr auto kThemeKey = "theme";
+constexpr auto kLightThemeKey = "light_theme";
+constexpr auto kDarkThemeKey = "dark_theme";
 
 QString preferencesPath()
 {
@@ -104,6 +106,29 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
         // Default theme for fresh installs is dark (user-voted default). Existing
         // users keep whatever they explicitly stored (incl. "system"/"light").
         ui.insert(kThemeKey, "dark");
+    }
+    // The short-lived single "legacy" option represented the old dark
+    // palette and appearance mode in one value. Split it into the durable
+    // mode + per-appearance palette model while retaining that selection.
+    if (ui.value(kThemeKey).toString().trimmed().compare(
+            QStringLiteral("legacy"), Qt::CaseInsensitive) == 0) {
+        ui.insert(kThemeKey, QStringLiteral("dark"));
+        ui.insert(kDarkThemeKey, QStringLiteral("legacy"));
+    }
+    // Normalize the paired-palette draft to four independent theme ids.
+    if (ui.value(kLightThemeKey).toString().compare(
+            QStringLiteral("v2"), Qt::CaseInsensitive) == 0) {
+        ui.insert(kLightThemeKey, QStringLiteral("light"));
+    }
+    if (ui.value(kDarkThemeKey).toString().compare(
+            QStringLiteral("v2"), Qt::CaseInsensitive) == 0) {
+        ui.insert(kDarkThemeKey, QStringLiteral("dark"));
+    }
+    if (!ui.contains(kLightThemeKey)) {
+        ui.insert(kLightThemeKey, QStringLiteral("light"));
+    }
+    if (!ui.contains(kDarkThemeKey)) {
+        ui.insert(kDarkThemeKey, QStringLiteral("dark"));
     }
     normalized.insert(kUiSectionKey, ui);
 
@@ -288,19 +313,6 @@ QString languagePreferenceToken(PreferenceDocument::LanguagePreference preferenc
     }
 }
 
-QString themePreferenceToken(PreferenceDocument::ThemePreference preference)
-{
-    switch (preference) {
-    case PreferenceDocument::ThemePreference::Light:
-        return "light";
-    case PreferenceDocument::ThemePreference::Dark:
-        return "dark";
-    case PreferenceDocument::ThemePreference::System:
-    default:
-        return "system";
-    }
-}
-
 PreferenceDocument::LanguagePreference loadStoredLanguagePreference()
 {
     const bool hasMergedPreferences = QFile::exists(preferencesPath());
@@ -320,14 +332,19 @@ PreferenceDocument::ThemePreference loadStoredThemePreference()
         PreferenceDocument::savePreferencesObject(root);
     }
 
-    const QString raw = root.value(kUiSectionKey).toObject().value(kThemeKey).toString("system").trimmed().toLower();
-    if (raw == "light") {
-        return PreferenceDocument::ThemePreference::Light;
-    }
-    if (raw == "dark") {
-        return PreferenceDocument::ThemePreference::Dark;
-    }
-    return PreferenceDocument::ThemePreference::System;
+    const QString raw = root.value(kUiSectionKey).toObject().value(kThemeKey).toString("system");
+    return PreferenceDocument::themePreferenceFromToken(raw);
+}
+
+PreferenceDocument::ThemePalette loadStoredThemePalette(const char* key)
+{
+    const QJsonObject ui = PreferenceDocument::loadPreferencesObject()
+                               .value(kUiSectionKey).toObject();
+    return PreferenceDocument::themePaletteFromToken(
+        ui.value(QLatin1String(key)).toString(
+            QLatin1String(key) == QLatin1String(kLightThemeKey)
+                ? QStringLiteral("light")
+                : QStringLiteral("dark")));
 }
 
 void saveStoredLanguagePreference(PreferenceDocument::LanguagePreference preference)
@@ -344,7 +361,17 @@ void saveStoredThemePreference(PreferenceDocument::ThemePreference preference)
 {
     QJsonObject root = PreferenceDocument::loadPreferencesObject();
     QJsonObject ui = root.value(kUiSectionKey).toObject();
-    ui.insert(kThemeKey, themePreferenceToken(preference));
+    ui.insert(kThemeKey, PreferenceDocument::themePreferenceToken(preference));
+    root.insert(kUiSectionKey, ui);
+    root.insert("schema", kPreferencesSchema);
+    PreferenceDocument::savePreferencesObject(root);
+}
+
+void saveStoredThemePalette(const char* key, PreferenceDocument::ThemePalette palette)
+{
+    QJsonObject root = PreferenceDocument::loadPreferencesObject();
+    QJsonObject ui = root.value(kUiSectionKey).toObject();
+    ui.insert(QLatin1String(key), PreferenceDocument::themePaletteToken(palette));
     root.insert(kUiSectionKey, ui);
     root.insert("schema", kPreferencesSchema);
     PreferenceDocument::savePreferencesObject(root);
@@ -469,7 +496,86 @@ PreferenceDocument::ThemePreference& preferredThemeStorage()
     return preference;
 }
 
+
+PreferenceDocument::ThemePalette& preferredLightThemeStorage()
+{
+    static PreferenceDocument::ThemePalette palette = loadStoredThemePalette(kLightThemeKey);
+    return palette;
+}
+
+PreferenceDocument::ThemePalette& preferredDarkThemeStorage()
+{
+    static PreferenceDocument::ThemePalette palette = loadStoredThemePalette(kDarkThemeKey);
+    return palette;
+}
+
 }  // namespace
+
+QString PreferenceDocument::themePreferenceToken(ThemePreference preference)
+{
+    switch (preference) {
+    case ThemePreference::Light:
+        return QStringLiteral("light");
+    case ThemePreference::Dark:
+        return QStringLiteral("dark");
+    case ThemePreference::Legacy:
+        return QStringLiteral("legacy");
+    case ThemePreference::System:
+    default:
+        return QStringLiteral("system");
+    }
+}
+
+PreferenceDocument::ThemePreference PreferenceDocument::themePreferenceFromToken(const QString& token)
+{
+    const QString raw = token.trimmed().toLower();
+    if (raw == QLatin1String("light")) {
+        return ThemePreference::Light;
+    }
+    if (raw == QLatin1String("dark")) {
+        return ThemePreference::Dark;
+    }
+    if (raw == QLatin1String("legacy")) {
+        return ThemePreference::Legacy;
+    }
+    return ThemePreference::System;
+}
+
+QString PreferenceDocument::themePaletteToken(ThemePalette palette)
+{
+    switch (palette) {
+    case ThemePalette::Light:
+        return QStringLiteral("light");
+    case ThemePalette::Dark:
+        return QStringLiteral("dark");
+    case ThemePalette::Legacy:
+        return QStringLiteral("legacy");
+    case ThemePalette::LegacyLight:
+        return QStringLiteral("legacy_light");
+    default:
+        return QStringLiteral("dark");
+    }
+}
+
+PreferenceDocument::ThemePalette PreferenceDocument::themePaletteFromToken(const QString& token)
+{
+    const QString normalized = token.trimmed().toLower();
+    if (normalized == QLatin1String("light")) {
+        return ThemePalette::Light;
+    }
+    if (normalized == QLatin1String("legacy")) {
+        return ThemePalette::Legacy;
+    }
+    if (normalized == QLatin1String("legacy_light")) {
+        return ThemePalette::LegacyLight;
+    }
+    return ThemePalette::Dark;
+}
+
+bool PreferenceDocument::themePaletteIsDark(ThemePalette palette)
+{
+    return palette == ThemePalette::Dark || palette == ThemePalette::Legacy;
+}
 
 PreferenceDocument::LanguagePreference PreferenceDocument::preferredLanguage()
 {
@@ -544,6 +650,29 @@ void PreferenceDocument::setPreferredTheme(ThemePreference preference)
 {
     preferredThemeStorage() = preference;
     saveStoredThemePreference(preference);
+}
+
+
+PreferenceDocument::ThemePalette PreferenceDocument::preferredLightTheme()
+{
+    return preferredLightThemeStorage();
+}
+
+void PreferenceDocument::setPreferredLightTheme(ThemePalette palette)
+{
+    preferredLightThemeStorage() = palette;
+    saveStoredThemePalette(kLightThemeKey, palette);
+}
+
+PreferenceDocument::ThemePalette PreferenceDocument::preferredDarkTheme()
+{
+    return preferredDarkThemeStorage();
+}
+
+void PreferenceDocument::setPreferredDarkTheme(ThemePalette palette)
+{
+    preferredDarkThemeStorage() = palette;
+    saveStoredThemePalette(kDarkThemeKey, palette);
 }
 
 PreferenceDocument::LanguagePreference PreferenceDocument::resolvedLanguage()

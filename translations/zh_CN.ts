@@ -1365,9 +1365,29 @@ Failed: %2</source>
         <source>Theme</source>
         <translation>主题</translation>
     </message>
+    <message id="dialog.preferences.theme.mode">
+        <source>Appearance</source>
+        <translation>外观模式</translation>
+    </message>
+    <message id="dialog.preferences.theme.light_palette">
+        <source>Light theme</source>
+        <translation>浅色主题</translation>
+    </message>
+    <message id="dialog.preferences.theme.dark_palette">
+        <source>Dark theme</source>
+        <translation>深色主题</translation>
+    </message>
     <message id="dialog.preferences.theme.dark">
         <source>Dark</source>
         <translation>深色</translation>
+    </message>
+    <message id="dialog.preferences.theme.legacy">
+        <source>Legacy</source>
+        <translation>深色（旧）</translation>
+    </message>
+    <message id="dialog.preferences.theme.legacy_light">
+        <source>Legacy Light</source>
+        <translation>浅色（旧）</translation>
     </message>
     <message id="dialog.preferences.theme.light">
         <source>Light</source>

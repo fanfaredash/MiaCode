@@ -69,9 +69,12 @@ int main(int argc, char** argv)
     QTextStream err(stderr);
 
     const QString settings = readFile(QStringLiteral("src/app/ui/layout/WorkbenchSettings.cpp"));
+    const QString settingsHeader = readFile(QStringLiteral("src/app/ui/layout/WorkbenchSettings.h"));
+    const QString themeQml = readFile(QStringLiteral("src/app/ui/theme/Theme.qml"));
     const QString preferencesStore = readFile(QStringLiteral("src/app/ui/preferences/PreferenceDocument.cpp"));
-    bool ok = require(!settings.isEmpty() && !preferencesStore.isEmpty(),
-                      QStringLiteral("the settings and PreferenceDocument sources are readable"), err);
+    bool ok = require(!settings.isEmpty() && !settingsHeader.isEmpty() && !themeQml.isEmpty()
+                          && !preferencesStore.isEmpty(),
+                      QStringLiteral("the settings, Theme.qml and PreferenceDocument sources are readable"), err);
     if (!ok) {
         return 1;
     }
@@ -94,8 +97,21 @@ int main(int argc, char** argv)
     const QString reloadTheme =
         functionBody(settings, QStringLiteral("void WorkbenchSettings::reloadTheme()"));
     ok &= require(reloadTheme.contains(QStringLiteral("darkTheme_ = next"))
+                      && reloadTheme.contains(QStringLiteral("publishedThemeToken_ = nextToken"))
                       && reloadTheme.contains(QStringLiteral("emit themeChanged()")),
                   QStringLiteral("reloadTheme updates the bound value and publishes it"), err);
+
+    // Dark and 旧版 are both dark appearances. The boolean alone cannot tell
+    // QML to rebind palettes, so the stored token must be part of the publish.
+    ok &= require(reloadTheme.contains(QStringLiteral("publishedThemeToken_ == nextToken")),
+                  QStringLiteral("reloadTheme also publishes when the palette token changes "
+                                 "without flipping darkTheme"), err);
+    ok &= require(settingsHeader.contains(QStringLiteral("themeToken READ themeToken NOTIFY themeChanged")),
+                  QStringLiteral("themeToken is bindable so QML can select the 旧版 palette live"), err);
+
+    ok &= require(themeQml.contains(QStringLiteral("legacyColors"))
+                      && themeQml.contains(QStringLiteral("themeToken === \"legacy\"")),
+                  QStringLiteral("Theme.qml keeps 旧版 as a standalone palette, not a dark/light alias"), err);
 
     // The user-initiated path has to end in the same place. Without this the
     // preference is stored, the timeline repaints from it, and every QML

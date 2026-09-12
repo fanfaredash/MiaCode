@@ -14,7 +14,7 @@ Rectangle {
     property string selectionBeatTooltip: ""
 
     implicitHeight: 23
-    color: Theme.colors.background.statusBar
+    color: Theme.surfaceColor(Theme.colors.background.statusBar)
 
     Rectangle {
         anchors.left: parent.left

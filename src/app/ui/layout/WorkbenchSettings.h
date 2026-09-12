@@ -30,7 +30,10 @@ class WorkbenchSettings final : public QObject
     Q_PROPERTY(double previewMaximumWidthRatio READ previewMaximumWidthRatio CONSTANT)
     Q_PROPERTY(bool previewCanvasFreeAspect READ previewCanvasFreeAspect WRITE setPreviewCanvasFreeAspect NOTIFY previewCanvasFreeAspectChanged)
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily CONSTANT)
-    Q_PROPERTY(QString themeToken READ themeToken CONSTANT)
+    Q_PROPERTY(QString themeModeToken READ themeModeToken NOTIFY themeChanged)
+    Q_PROPERTY(QString lightThemeToken READ lightThemeToken NOTIFY themeChanged)
+    Q_PROPERTY(QString darkThemeToken READ darkThemeToken NOTIFY themeChanged)
+    Q_PROPERTY(QString activeThemeToken READ activeThemeToken NOTIFY themeChanged)
     Q_PROPERTY(bool darkTheme READ darkTheme NOTIFY themeChanged)
     Q_PROPERTY(QFont codeFont READ codeFont NOTIFY editorSettingsChanged)
     Q_PROPERTY(int editorBlockSpacing READ editorBlockSpacing NOTIFY editorSettingsChanged)
@@ -61,7 +64,10 @@ public:
     double previewMaximumWidthRatio() const;
     bool previewCanvasFreeAspect() const;
     QString uiFontFamily() const;
-    QString themeToken() const;
+    QString themeModeToken() const;
+    QString lightThemeToken() const;
+    QString darkThemeToken() const;
+    QString activeThemeToken() const;
     bool darkTheme() const;
     QFont codeFont() const;
     int editorBlockSpacing() const;
@@ -82,7 +88,9 @@ public:
     void setFontSize(int value);
     void reloadEditorSettings();
     void reloadTheme();
-    void setThemeToken(const QString& token);
+    void setThemeModeToken(const QString& token);
+    void setLightThemeToken(const QString& token);
+    void setDarkThemeToken(const QString& token);
     void setEditorAppearance(int pointSize, double lineSpacingFactor);
     void setEditorScrollPastEnd(bool enabled);
     void setEditorSelectionBeatDisplay(bool enabled);
@@ -123,5 +131,8 @@ private:
     bool editorScrollPastEnd_ = true;
     bool editorSelectionBeatDisplay_ = true;
     bool darkTheme_ = true;
+    QString publishedThemeModeToken_;
+    QString publishedLightThemeToken_;
+    QString publishedDarkThemeToken_;
 };
 } // namespace miacode::ui

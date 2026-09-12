@@ -4,10 +4,9 @@
 #include <QObject>
 #include <QtQmlIntegration>
 
-// Carries the timeline chrome colours from Theme.qml (the single source of
-// truth) into the C++ snapshot the native timeline paints from. Theme.qml's
-// `colors.timeline` group is bound onto this object's properties in
-// BottomPanel.qml; every setter writes the snapshot via
+// Carries the timeline surfaces and content colours from Theme.qml into the
+// C++ snapshot the native timeline paints from. BottomPanel binds shared
+// surface roles and palette timeline roles onto this object; every setter writes the snapshot via
 // miacode::timeline::setTimelineChromeColors() so scene builders and the
 // texture-cache signature pick the values up on their next build.
 namespace miacode::ui {

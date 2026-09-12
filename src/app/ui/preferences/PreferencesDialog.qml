@@ -102,11 +102,27 @@ AppDialog {
                 onPicked: function(value) { root.preferencesModel.languageToken = value }
             }
             LabeledCombo {
-                objectName: "preferencesThemeCombo"
-                label: qsTrId("dialog.preferences.theme")
-                options: root.preferencesModel.themeOptions
-                currentValue: root.preferencesModel.themeToken
-                onPicked: function(value) { root.preferencesModel.themeToken = value }
+                objectName: "preferencesThemeModeCombo"
+                label: qsTrId("dialog.preferences.theme.mode")
+                options: root.preferencesModel.themeModeOptions
+                currentValue: root.preferencesModel.themeModeToken
+                onPicked: function(value) { root.preferencesModel.themeModeToken = value }
+            }
+            LabeledCombo {
+                objectName: "preferencesLightThemeCombo"
+                visible: root.preferencesModel.themeModeToken !== "dark"
+                label: qsTrId("dialog.preferences.theme.light_palette")
+                options: root.preferencesModel.themePaletteOptions
+                currentValue: root.preferencesModel.lightThemeToken
+                onPicked: function(value) { root.preferencesModel.lightThemeToken = value }
+            }
+            LabeledCombo {
+                objectName: "preferencesDarkThemeCombo"
+                visible: root.preferencesModel.themeModeToken !== "light"
+                label: qsTrId("dialog.preferences.theme.dark_palette")
+                options: root.preferencesModel.themePaletteOptions
+                currentValue: root.preferencesModel.darkThemeToken
+                onPicked: function(value) { root.preferencesModel.darkThemeToken = value }
             }
             LabeledCombo {
                 objectName: "preferencesPreviewSideCombo"

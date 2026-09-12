@@ -1365,9 +1365,29 @@ Failed: %2</translation>
         <source>Theme</source>
         <translation>Theme</translation>
     </message>
+    <message id="dialog.preferences.theme.mode">
+        <source>Appearance</source>
+        <translation>Appearance</translation>
+    </message>
+    <message id="dialog.preferences.theme.light_palette">
+        <source>Light theme</source>
+        <translation>Light theme</translation>
+    </message>
+    <message id="dialog.preferences.theme.dark_palette">
+        <source>Dark theme</source>
+        <translation>Dark theme</translation>
+    </message>
     <message id="dialog.preferences.theme.dark">
         <source>Dark</source>
         <translation>Dark</translation>
+    </message>
+    <message id="dialog.preferences.theme.legacy">
+        <source>Legacy</source>
+        <translation>Dark (Legacy)</translation>
+    </message>
+    <message id="dialog.preferences.theme.legacy_light">
+        <source>Legacy Light</source>
+        <translation>Light (Legacy)</translation>
     </message>
     <message id="dialog.preferences.theme.light">
         <source>Light</source>

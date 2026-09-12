@@ -36,6 +36,12 @@ Item {
     readonly property int muriWarningCount: countMuriRows("warning")
     readonly property int muriIssueCount: countMuriRows("muri")
 
+    Timer {
+        id: timelineThemeRefresh
+        interval: 0
+        onTriggered: timelineItem.refreshTheme()
+    }
+
     function countMuriRows(alert) {
         const rows = analysisSession.muriRows
         let count = 0
@@ -92,26 +98,39 @@ Item {
         }
     }
 
-    // 时间轴外壳颜色的唯一来源是 Theme.qml 的 colors.timeline 分组。
-    // 桥接对象必须先于 TimelineQuickItem 创建，颜色才会在首次绘制前进入
-    // C++ 快照；后续若给该分组换值，这里会随绑定自动重新推送。
+    // Theme owns timeline surfaces; the palette's timeline group only supplies
+    // content colors. The bridge exists before TimelineQuickItem so both sets
+    // reach the C++ scene snapshot before its first frame.
     TimelineThemeBridge {
         id: timelineTheme
-        windowColor: Theme.colors.timeline.window
+        windowColor: Theme.surfaceColor(Theme.colors.background.surface)
         headerColor: Theme.surfaceColor(Theme.colors.background.panel)
         sidebarColor: Theme.surfaceColor(Theme.colors.background.panel)
         baseColor: Theme.surfaceColor(Theme.colors.background.surface)
-        onBaseColorChanged: Qt.callLater(() => timelineItem.refreshTheme())
         borderColor: Theme.colors.timeline.border
         axisColor: Theme.colors.timeline.axis
         gridMajorColor: Theme.colors.timeline.gridMajor
         gridSubdivisionColor: Theme.colors.timeline.gridSubdivision
         gridMinorColor: Theme.colors.timeline.gridMinor
-        laneEvenColor: Theme.colors.timeline.laneEven
-        laneOddColor: Theme.colors.timeline.laneOdd
+        laneEvenColor: Theme.contentOverlayColor(Theme.colors.timeline.laneEven)
+        laneOddColor: Theme.contentOverlayColor(Theme.colors.timeline.laneOdd)
         labelColor: Theme.colors.timeline.label
         textSecondaryColor: Theme.colors.timeline.textSecondary
         waveStrokeColor: Theme.colors.timeline.waveStroke
+        onWindowColorChanged: timelineThemeRefresh.restart()
+        onHeaderColorChanged: timelineThemeRefresh.restart()
+        onSidebarColorChanged: timelineThemeRefresh.restart()
+        onBaseColorChanged: timelineThemeRefresh.restart()
+        onBorderColorChanged: timelineThemeRefresh.restart()
+        onAxisColorChanged: timelineThemeRefresh.restart()
+        onGridMajorColorChanged: timelineThemeRefresh.restart()
+        onGridSubdivisionColorChanged: timelineThemeRefresh.restart()
+        onGridMinorColorChanged: timelineThemeRefresh.restart()
+        onLaneEvenColorChanged: timelineThemeRefresh.restart()
+        onLaneOddColorChanged: timelineThemeRefresh.restart()
+        onLabelColorChanged: timelineThemeRefresh.restart()
+        onTextSecondaryColorChanged: timelineThemeRefresh.restart()
+        onWaveStrokeColorChanged: timelineThemeRefresh.restart()
     }
 
     BottomTabBar {
