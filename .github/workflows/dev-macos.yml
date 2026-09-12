@@ -22,7 +22,6 @@ jobs:
     env:
       CMAKE_OSX_ARCHITECTURES: arm64
       CMAKE_OSX_DEPLOYMENT_TARGET: "13.0"
-      MIACODE_FFMPEG_BUILD_JOBS: "4"
       MIACODE_PACKAGE_CHANNEL: nightly
 
     steps:
@@ -45,9 +44,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          packages=(dist/*.zip)
+          packages=(dist/*.7z)
           if [[ ${#packages[@]} -ne 1 || ! -f "${packages[0]}" ]]; then
-            echo "Expected one macOS package ZIP under dist/, found: ${packages[*]}" >&2
+            echo "Expected one macOS package archive under dist/, found: ${packages[*]}" >&2
             exit 1
           fi
           printf 'archive_name=%s\n' "$(basename "${packages[0]}")" >> "$GITHUB_OUTPUT"
@@ -56,6 +55,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.archive_name }}
-          path: dist/*.zip
+          path: dist/*.7z
           if-no-files-found: error
           retention-days: 14

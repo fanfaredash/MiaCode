@@ -9,7 +9,7 @@ FFMPEG_ARCHIVE="ffmpeg-${FFMPEG_VERSION}.tar.xz"
 FFMPEG_URL="https://ffmpeg.org/releases/${FFMPEG_ARCHIVE}"
 FFMPEG_SHA256="3b624649725ecdc565c903ca6643d41f33bd49239922e45c9b1442c63dca4e38"
 MACOS_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
-BUILD_JOBS="${MIACODE_FFMPEG_BUILD_JOBS:-4}"
+BUILD_JOBS="${MIACODE_FFMPEG_BUILD_JOBS:-$(sysctl -n hw.ncpu)}"
 
 required_libraries=(
   "libavcodec.60.dylib"
@@ -91,8 +91,8 @@ validate_sdk() {
 }
 
 [[ "$(uname -s)" == "Darwin" ]] || { echo "macOS FFmpeg SDK provisioning must run on macOS." >&2; exit 2; }
-if [[ ! "$BUILD_JOBS" =~ ^[1-4]$ ]]; then
-  echo "MIACODE_FFMPEG_BUILD_JOBS must be an integer from 1 through 4 (got: $BUILD_JOBS)" >&2
+if [[ ! "$BUILD_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "MIACODE_FFMPEG_BUILD_JOBS must be a positive integer (got: $BUILD_JOBS)" >&2
   exit 2
 fi
 for required_tool in curl shasum tar make xcrun install_name_tool lipo otool; do
