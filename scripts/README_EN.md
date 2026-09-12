@@ -19,7 +19,9 @@ Windows:
 
 ```powershell
 # MSVC x64: the generator is resolved through vswhere (Visual Studio + Windows SDK required)
-powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildDir build-msvc
+# -TrimFfmpeg builds the decode-only preview SDK with ffmpeg/trim (~150 MB -> ~20 MB, needs
+# MSYS2); the CI x64 job passes it.
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildDir build-msvc -TrimFfmpeg
 
 # MSVC arm64: native arm64 host, ARM64 generator platform and Qt's arm64 package
 powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc-arm64 -BuildDir build-msvc-arm64
@@ -35,7 +37,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 
 ```
 
 `build-win.ps1` runs, in order: Python dependencies (py7zr only), the export `ffmpeg.exe`, the
-preview FFmpeg dev SDK, Qt resolution, CMake configure and build, then `package-win.ps1`. Both
+preview FFmpeg dev SDK (a trim build when `-TrimFfmpeg` is set), Qt resolution, CMake configure and
+build, then `package-win.ps1`. Both
 FFmpeg chains and the packaging chain pick their directories from the architecture the selected
 toolchain targets: `third_party\ffmpeg\windows\<win64|winarm64>\` and
 `third_party\bass\bin\<win64|winarm64>\`, producing `MiaCode-v<version>-win64` or

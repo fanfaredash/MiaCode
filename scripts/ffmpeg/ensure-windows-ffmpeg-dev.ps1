@@ -12,14 +12,17 @@
 # The whole dev/ tree is gitignored - never committed. CMake discovers it via
 # the MIACODE_FFMPEG_DEV_DIR cache variable (built from the target architecture).
 #
-# Default source: BtbN FFmpeg-Builds n8.1 LGPL *shared* build, pinned to one
-# immutable autobuild tag so the archive hash stays valid. LGPL (decode-only, no
-# --enable-gpl/--enable-nonfree) matches the existing redistribution terms.
-# Major versions MUST stay avcodec-62 / avformat-62 / avutil-60 / swresample-6 /
-# swscale-9 / avfilter-11 to match the packaged runtime + the hard-coded DLL
-# names in CMakeLists.txt and scripts/build/package-win.ps1. (avdevice is
-# dropped - capture-device only, see third_party/ffmpeg/README.md -> Size
-# trimming.)
+# Default source per architecture:
+#   x64   BtbN FFmpeg-Builds n7.1 LGPL *shared* (the pre-trim baseline; CI then
+#         replaces it with the decode-only build from scripts/ffmpeg/trim/)
+#   arm64 BtbN FFmpeg-Builds n8.1 LGPL *shared*, pinned to one immutable
+#         autobuild tag so the archive hash stays valid. arm64 ships this full
+#         SDK — the trim toolchain covers x64 only.
+# LGPL (decode-only, no --enable-gpl/--enable-nonfree) matches the existing
+# redistribution terms. Major versions must stay avcodec-61/62, avformat-61/62,
+# avutil-59/60, swresample-5/6, swscale-8/9, avfilter-10/11 respectively, to
+# match scripts/build/windows-toolchain.psd1. (avdevice is dropped -
+# capture-device only, see third_party/ffmpeg/README.md -> Size trimming.)
 #
 # The GPL variant is used only for the standalone export binary
 # (ensure-windows-ffmpeg.ps1), which needs libx264.
@@ -56,25 +59,35 @@ $binDir = Join-Path $devDir "bin"
 # Runtime DLLs the build + package require (names are major-version pinned).
 # avdevice is intentionally excluded - it's capture-device-only and dropped to
 # trim package size (QtAVPlayer is patched not to link/use it).
-$requiredDlls = @(
-    "avcodec-62.dll", "avformat-62.dll", "avutil-60.dll",
-    "swresample-6.dll", "swscale-9.dll", "avfilter-11.dll"
-)
+$requiredDlls = if ($Arch -eq "arm64") {
+    @(
+        "avcodec-62.dll", "avformat-62.dll", "avutil-60.dll",
+        "swresample-6.dll", "swscale-9.dll", "avfilter-11.dll"
+    )
+} else {
+    @(
+        "avcodec-61.dll", "avformat-61.dll", "avutil-59.dll",
+        "swresample-5.dll", "swscale-8.dll", "avfilter-10.dll"
+    )
+}
 $requiredLibs = @(
     "avcodec.lib", "avformat.lib", "avutil.lib",
     "swresample.lib", "swscale.lib", "avfilter.lib"
 )
 
-# Pinned immutable BtbN autobuild release. The rolling `latest` tag is replaced
-# daily, so its archives cannot be hash-pinned.
-$ffmpegReleaseTag = "autobuild-2026-09-12-13-12"
-$ffmpegBuildVersion = "n8.1.2-52-g5a03dfa0f6"
-$ffmpegAssetName = "ffmpeg-$ffmpegBuildVersion-$archSuffix-lgpl-shared-8.1.zip"
-$defaultUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$ffmpegReleaseTag/$ffmpegAssetName"
-$defaultSha256 = if ($Arch -eq "arm64") {
-    "DFB3F394B316F91CC2C399BBAA38A280F81E523E150A20F7DDD477843AA70608"
+if ($Arch -eq "arm64") {
+    # Pinned immutable BtbN autobuild release. The rolling `latest` tag is
+    # replaced daily, so an archive from it cannot be hash-pinned; this one can.
+    $ffmpegReleaseTag = "autobuild-2026-09-12-13-12"
+    $ffmpegBuildVersion = "n8.1.2-52-g5a03dfa0f6"
+    $defaultUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$ffmpegReleaseTag/ffmpeg-$ffmpegBuildVersion-winarm64-lgpl-shared-8.1.zip"
+    $defaultSha256 = "DFB3F394B316F91CC2C399BBAA38A280F81E523E150A20F7DDD477843AA70608"
 } else {
-    "D04C1D0866D0F0E23FE9C8C4B07CFAA0B0DFE39B704CFF22667DDB0A5006FF3A"
+    # x64 baseline: the n7.1 rolling asset the repository has always used, and
+    # the exact SDK the trim allowlist targets. The trim toolchain replaces this
+    # tree before packaging, so the archive is not hash-pinned.
+    $defaultUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1.zip"
+    $defaultSha256 = ""
 }
 
 function Test-DevSdkPresent {
@@ -175,7 +188,7 @@ try {
     foreach ($dll in $requiredDlls) {
         $src = Join-Path (Join-Path $srcRoot "bin") $dll
         if (!(Test-Path $src)) {
-            throw "Downloaded FFmpeg dev SDK is missing runtime DLL '$dll' - wrong build/major version? Expected an n8.1 $archSuffix lgpl *shared* build."
+            throw "Downloaded FFmpeg dev SDK is missing runtime DLL '$dll' - wrong build/major version? Expected an n7.1 win64 / n8.1 winarm64 lgpl *shared* build."
         }
         Copy-Item $src (Join-Path $binDir $dll) -Force
     }

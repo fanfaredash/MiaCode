@@ -43,16 +43,27 @@ needs the FFmpeg **shared dev SDK** — headers + import libs + runtime DLLs —
 third_party/ffmpeg/windows/<win64|winarm64>/dev/
   include/   libav*/ headers
   lib/       av*.lib import libs
-  bin/       av*.dll runtime (avcodec-62, avformat-62, avutil-60, swresample-6,
-             swscale-9, avfilter-11)   # avdevice intentionally dropped — see Size trimming
+  bin/       av*.dll runtime
+             x64   (trimmed, n7.1):  avcodec-61, avformat-61, avutil-59,
+                                       swresample-5, swscale-8, avfilter-10
+             arm64 (full, n8.1):     avcodec-62, avformat-62, avutil-60,
+                                       swresample-6, swscale-9, avfilter-11
+             # avdevice intentionally dropped — see Size trimming
 ```
 
-- Provision: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` (downloads the pinned BtbN n8.1 LGPL **shared** build per target architecture;
-  override URL via `MIACODE_WINDOWS_FFMPEG_DEV_URL`). The recommended Windows entry point
-  `scripts/build/build-win.ps1` runs this automatically on a clean clone.
-- CMake finds it via the `MIACODE_FFMPEG_DEV_DIR` cache variable (defaults to `windows/<win64|winarm64>/dev/`).
-- Major versions must match the packaged runtime: avcodec-62 / avformat-62 / avutil-60 /
-  swresample-6 / swscale-9 / avfilter-11 (avdevice dropped).
+- Provision:
+  - x64: `scripts/ffmpeg/trim/build-trimmed-ffmpeg.ps1` builds the decode-only n7.1 SDK
+    (thin package). `scripts/build/build-win.ps1 -TrimFfmpeg` runs it; without the switch the
+    x64 SDK comes from `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`, which downloads the
+    BtbN n7.1 LGPL **shared** build as the pre-trim baseline.
+  - arm64: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1 -Arch arm64` downloads the pinned
+    BtbN n8.1 LGPL **shared** build; the trim toolchain covers x64 only, so the arm64 package
+    ships that full SDK.
+  - Both honour `MIACODE_WINDOWS_FFMPEG_DEV_URL` as a URL override.
+- CMake finds the SDK via the `MIACODE_FFMPEG_DEV_DIR` cache variable (defaults to the
+  architecture's `windows/<win64|winarm64>/dev/`).
+- Major versions must match the packaged runtime per architecture; the package contract in
+  `scripts/build/windows-toolchain.psd1` pins both sets (avdevice dropped).
 - License: LGPL v2.1+ (decode-only, **no** `--enable-gpl` / `--enable-nonfree`) — same obligations as
   the FFmpeg already shipped; no new exposure. `avfilter` is a net-new DLL (`avdevice` is dropped,
   see below).

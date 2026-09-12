@@ -1218,16 +1218,25 @@ if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     endif()
 
     if (WIN32)
-        # Runtime: the preview backend loads these next to MiaCode.exe. The
-        # Windows package script stages the same pinned majors.
+        # Runtime: the preview backend loads these next to MiaCode.exe. Resolve
+        # the six families from the dev SDK so x64 (n7.1, avcodec-61) and arm64
+        # (n8.1, avcodec-62) each stage their own majors; the package contract in
+        # scripts/build/windows-toolchain.psd1 pins the exact names per arch.
+        file(GLOB MIACODE_FFMPEG_WINDOWS_RUNTIME_DLLS
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avcodec-*.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avformat-*.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avutil-*.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/swresample-*.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/swscale-*.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avfilter-*.dll"
+        )
+        if (NOT MIACODE_FFMPEG_WINDOWS_RUNTIME_DLLS)
+            message(FATAL_ERROR
+                "No FFmpeg preview runtime DLLs found under '${MIACODE_FFMPEG_DEV_DIR}/bin'.")
+        endif()
         add_custom_command(TARGET MiaCode POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avcodec-62.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avformat-62.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avutil-60.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/swresample-6.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/swscale-9.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avfilter-11.dll"
+                ${MIACODE_FFMPEG_WINDOWS_RUNTIME_DLLS}
                 $<TARGET_FILE_DIR:MiaCode>
             VERBATIM
         )

@@ -649,7 +649,7 @@ foreach ($runtimeDll in $requiredBassRuntimeDlls) {
 # (-Force overwrite) to keep the runtime matched to the import libs MiaCode
 # linked against.
 $ffmpegDevBin = Join-Path $repoRoot (Join-Path $toolchainData.FFmpeg.DevDirByArch.$Arch "bin")
-$requiredFfmpegRuntimeDlls = $toolchainData.FFmpeg.RuntimeDlls
+$requiredFfmpegRuntimeDlls = $toolchainData.FFmpeg.RuntimeDllsByArch.$Arch
 foreach ($runtimeDll in $requiredFfmpegRuntimeDlls) {
     $srcDll = Join-Path $ffmpegDevBin $runtimeDll
     if (!(Test-Path $srcDll)) {

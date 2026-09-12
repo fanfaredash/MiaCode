@@ -96,12 +96,25 @@
             x64   = 'third_party\ffmpeg\windows\win64'
             arm64 = 'third_party\ffmpeg\windows\winarm64'
         }
-        # Major-version-pinned runtime DLLs; must match the trim allowlist
-        # (scripts/ffmpeg/trim/trim-allowlist.psd1 -> ExpectedDlls).
-        RuntimeDlls = @(
-            'avcodec-62.dll', 'avformat-62.dll', 'avutil-60.dll',
-            'swresample-6.dll', 'swscale-9.dll', 'avfilter-11.dll'
-        )
+        # Major-version-pinned runtime DLLs per architecture. x64 runs the
+        # decode-only trim toolchain on the n7.1 series (allowlist pins
+        # avcodec-61 in scripts/ffmpeg/trim/trim-allowlist.psd1); arm64 ships the
+        # full BtbN n8.1 LGPL SDK untrimmed.
+        RuntimeDllsByArch = @{
+            x64 = @(
+                'avcodec-61.dll', 'avformat-61.dll', 'avutil-59.dll',
+                'swresample-5.dll', 'swscale-8.dll', 'avfilter-10.dll'
+            )
+            arm64 = @(
+                'avcodec-62.dll', 'avformat-62.dll', 'avutil-60.dll',
+                'swresample-6.dll', 'swscale-9.dll', 'avfilter-11.dll'
+            )
+        }
+        # Architectures the decode-only trim toolchain covers.
+        TrimByArch = @{
+            x64   = $true
+            arm64 = $false
+        }
         # Standalone export binary shipped under app\ffmpeg\.
         ExportBinary = 'ffmpeg.exe'
     }
@@ -194,8 +207,6 @@
             'app-qt:Qt6QuickControls2', 'app-qt:Qt6Svg',
             'app\bass.dll', 'app\bassmix.dll', 'app\bass_fx.dll',
             'app\bassopus.dll',
-            'app\avcodec-62.dll', 'app\avformat-62.dll', 'app\avutil-60.dll',
-            'app\swresample-6.dll', 'app\swscale-9.dll', 'app\avfilter-11.dll',
             'app\platforms\qwindows.dll',
             'app\qml\QtQuick\qtquick2plugin.dll',
             'app\qml\QtQuick\Controls\qtquickcontrols2plugin.dll',
@@ -253,10 +264,18 @@
             'app\qml\QtQuick\Controls\Windows'
         )
         # Extra required entries beyond RequiredRelativePaths, per target
-        # architecture. bass_aac ships for x86/x64 only.
+        # architecture: the architecture's FFmpeg runtime majors, plus bass_aac
+        # (x86/x64 only upstream).
         AdditionalRequiredRelativePathsByArch = @{
-            x64   = @('app\bass_aac.dll')
-            arm64 = @()
+            x64 = @(
+                'app\bass_aac.dll',
+                'app\avcodec-61.dll', 'app\avformat-61.dll', 'app\avutil-59.dll',
+                'app\swresample-5.dll', 'app\swscale-8.dll', 'app\avfilter-10.dll'
+            )
+            arm64 = @(
+                'app\avcodec-62.dll', 'app\avformat-62.dll', 'app\avutil-60.dll',
+                'app\swresample-6.dll', 'app\swscale-9.dll', 'app\avfilter-11.dll'
+            )
         }
     }
 

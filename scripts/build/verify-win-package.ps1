@@ -95,7 +95,7 @@ if ($IncludeDevTools) {
 # --- 2. FFmpeg trim match ----------------------------------------------------
 Write-Host "== FFmpeg runtime matches the provisioned dev SDK =="
 $ffmpegBinDir = Join-Path $repoRoot (Join-Path $toolchainData.FFmpeg.DevDirByArch.$Arch "bin")
-foreach ($dll in $toolchainData.FFmpeg.RuntimeDlls) {
+foreach ($dll in $toolchainData.FFmpeg.RuntimeDllsByArch.$Arch) {
     $packaged = Join-Path $appDir $dll
     $provisioned = Join-Path $ffmpegBinDir $dll
     if (!(Test-Path -LiteralPath $packaged)) {

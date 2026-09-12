@@ -39,7 +39,12 @@ param(
     [ValidateSet("Release", "Debug")]
     [string]$Config = "Release",
     [ValidateRange(1, 64)]
-    [int]$BuildJobs = 4
+    [int]$BuildJobs = 4,
+    # Build the decode-only preview FFmpeg SDK with scripts/ffmpeg/trim/ instead
+    # of downloading the full BtbN LGPL SDK. Cuts the packaged av*.dll set from
+    # ~150 MB to ~20 MB. Covers x64 only (FFmpeg.TrimByArch in
+    # windows-toolchain.psd1); arm64 ships the full n8.1 SDK.
+    [switch]$TrimFfmpeg
 )
 
 $ErrorActionPreference = "Stop"
@@ -184,14 +189,31 @@ $buildDevTools = if ($Config -eq "Debug") { "ON" } else { "OFF" }
 #    provision-qt.ps1 and package-win.ps1 (7z.exe is preferred when present).
 Invoke-Python -PythonCommand $pythonCommand -Arguments @("-m", "pip", "install", "--user", "py7zr==1.0.*")
 
-# 2. Export ffmpeg binary + 3. preview FFmpeg dev SDK (or its trimmed replacement).
+# 2. Export ffmpeg binary.
 & (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg.ps1") -RepoRoot $repoRoot -Arch $targetArch
 if ($LASTEXITCODE -ne 0) {
     throw "Windows ffmpeg preparation failed."
 }
-& (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1") -RepoRoot $repoRoot -Arch $targetArch
-if ($LASTEXITCODE -ne 0) {
-    throw "Windows FFmpeg dev SDK preparation failed."
+
+# 3. Preview FFmpeg dev SDK: the decode-only trim build, or the downloaded SDK.
+$trimSupported = $toolchainData.FFmpeg.TrimByArch.$targetArch
+if ($TrimFfmpeg) {
+    if (!$trimSupported) {
+        throw "The decode-only FFmpeg trim toolchain covers x64 only (FFmpeg.TrimByArch.$targetArch is false); arm64 uses the full BtbN n8.1 LGPL SDK. Drop -TrimFfmpeg for this toolchain."
+    }
+    $devSdkDir = Join-Path $repoRoot $toolchainData.FFmpeg.DevDirByArch.$targetArch
+    Write-Host "FFmpeg: building the decode-only preview SDK into $devSdkDir"
+    & (Join-Path $repoRoot "scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1") `
+        -OutputDir $devSdkDir `
+        -Jobs $BuildJobs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Windows FFmpeg trim build failed."
+    }
+} else {
+    & (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1") -RepoRoot $repoRoot -Arch $targetArch
+    if ($LASTEXITCODE -ne 0) {
+        throw "Windows FFmpeg dev SDK preparation failed."
+    }
 }
 
 # 4. Qt: an existing install wins over downloading a new one.

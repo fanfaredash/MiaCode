@@ -96,20 +96,25 @@ Clean-clone verification:
     `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-gpl-8.1.zip`
     - Expected `ffmpeg.exe` SHA256: `22E1BB241B8747ED5EA5ECE8DE64AFCC8720F4550ED35ED24657D00C2BADBA5E`.
   - Checked: both archives reachable; the arm64 `ffmpeg.exe` hash reproduced from the extracted binary.
-- Windows QtAVPlayer FFmpeg dev SDK (BtbN n8.1 LGPL **shared**, same pinned tag):
-  - x64: `.../autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-win64-lgpl-shared-8.1.zip`
-    - Expected archive SHA256: `D04C1D0866D0F0E23FE9C8C4B07CFAA0B0DFE39B704CFF22667DDB0A5006FF3A`.
-  - arm64: `.../autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-lgpl-shared-8.1.zip`
+- Windows QtAVPlayer FFmpeg dev SDK:
+  - x64 pre-trim baseline (BtbN n7.1 LGPL **shared**, rolling `latest` asset, no hash pin — the
+    decode-only trim build replaces this tree before packaging):
+    `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1.zip`
+    - Provisioned by `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1 -Arch x64`, then replaced by
+      `scripts/ffmpeg/trim/build-trimmed-ffmpeg.ps1` (driven by `build-win.ps1 -TrimFfmpeg`).
+  - arm64 (BtbN n8.1 LGPL **shared**, pinned immutable tag):
+    `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-lgpl-shared-8.1.zip`
     - Expected archive SHA256: `DFB3F394B316F91CC2C399BBAA38A280F81E523E150A20F7DDD477843AA70608`.
-  - Checked: both archives reachable; payloads byte-identical to the rolling `latest` tag of the same day, while the archive hashes differ (the embedded top-level directory name differs, so the hash is tag-bound).
-  - Installed by: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1 -Arch <x64|arm64>`.
+  - Checked: both archives reachable. The n8.1 win64/winarm64 payloads are byte-identical to the
+    rolling `latest` tag of the same day, while the archive hashes differ (the embedded top-level
+    directory name differs, so the hash is tag-bound).
 - macOS export FFmpeg: `https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip`
   - Checked: reachable via redirect to `200 OK`.
   - Expected SHA256: `430D60FBF419DAB28DAEE9B679E7929A31EE9BAE53F6E42E8AE26B725584290F`.
-- FFmpeg trim source mirrors for tag `n8.1`:
+- FFmpeg trim source mirrors for tag `n7.1`:
   - `https://gitee.com/mirrors/ffmpeg.git`
   - `https://github.com/FFmpeg/FFmpeg.git`
   - `https://git.ffmpeg.org/ffmpeg.git`
-  - Checked: `github.com` and `git.ffmpeg.org` both returned `refs/tags/n8.1` at
-    `a65b3bfe9dacc3b20597ef199d0afdd8bc8128e2`; the Gitee mirror could not be reached from the
-    checking host (TLS failure), so it is unverified for this tag.
+  - Checked: all returned `refs/tags/n7.1` at `507a51fbe9732f0f6f12f43ce12431e8faa834b7`.
+    Re-checked while moving the chain: `github.com` and `git.ffmpeg.org` answer for `n7.1`; the Gitee
+    mirror was unreachable from the checking host (TLS failure) at that time.
