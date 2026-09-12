@@ -72,11 +72,12 @@ third_party/ffmpeg/**/ffprobe
 third_party/ffmpeg/**/ffprobe.exe
 
 # FFmpeg dev SDK (headers + import libs + runtime DLLs) for the QtAVPlayer
-# preview decode backend. Provisioned by scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1,
+# preview decode backend, one tree per Windows target architecture (win64,
+# winarm64). Provisioned by scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1,
 # never committed — the .dll are caught by the third_party/**/*.dll rule below,
 # this also keeps the headers + .lib import libraries out of version control.
-third_party/ffmpeg/windows/dev/
-third_party/ffmpeg/windows/dev.full.bak/
+third_party/ffmpeg/windows/*/dev/
+third_party/ffmpeg/windows/*/dev.full.bak/
 third_party/ffmpeg/windows/ffmpeg-dev.zip
 third_party/ffmpeg/macos/dev/
 third_party/ffmpeg/linux/dev/
@@ -109,6 +110,13 @@ third_party/**/*.a
 !third_party/bass/bin/win64/bass_fx.dll
 !third_party/bass/bin/win64/bass_aac.dll
 !third_party/bass/bin/win64/bassopus.dll
+# Windows arm64 carries no bass_aac: un4seen publishes that add-on for
+# x86/x64 only.
+!third_party/bass/bin/winarm64/
+!third_party/bass/bin/winarm64/bass.dll
+!third_party/bass/bin/winarm64/bassmix.dll
+!third_party/bass/bin/winarm64/bass_fx.dll
+!third_party/bass/bin/winarm64/bassopus.dll
 !third_party/bass/lib/macos/
 !third_party/bass/lib/macos/universal/
 !third_party/bass/lib/macos/universal/libbass.dylib

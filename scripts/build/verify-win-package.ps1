@@ -11,12 +11,18 @@
 .PARAMETER DistDir
     Package directory, e.g. dist\MiaCode-v2.0.0-alpha-win64.
 
+.PARAMETER Arch
+    Target architecture of the package: x64 or arm64. Selects the FFmpeg dev
+    SDK root and the architecture-specific contents contract entries.
+
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v2.0.0-alpha-win64
+    powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v2.0.0-alpha-win64 -Arch x64
 #>
 param(
     [Parameter(Mandatory = $true)]
     [string]$DistDir,
+    [ValidateSet("x64", "arm64")]
+    [string]$Arch = "x64",
     [string]$QtRoot = "",
     [int]$LaunchTimeoutSeconds = 25,
     [switch]$IncludeDevTools,
@@ -46,9 +52,15 @@ function Expand-PackagePathEntry {
     return $Entry
 }
 
+$archSpecificRequiredPaths = $toolchainData.Package.AdditionalRequiredRelativePathsByArch.$Arch
+
 # --- 1. contents contract ----------------------------------------------------
 Write-Host "== Contents contract =="
-foreach ($entry in $toolchainData.Package.RequiredRelativePaths) {
+$requiredEntries = @($toolchainData.Package.RequiredRelativePaths)
+if ($null -ne $archSpecificRequiredPaths) {
+    $requiredEntries += $archSpecificRequiredPaths
+}
+foreach ($entry in $requiredEntries) {
     $relativePath = Expand-PackagePathEntry -Entry $entry
     if (!(Test-Path -LiteralPath (Join-Path $DistDir $relativePath))) {
         $failures.Add("missing required path: $relativePath")
@@ -82,7 +94,7 @@ if ($IncludeDevTools) {
 
 # --- 2. FFmpeg trim match ----------------------------------------------------
 Write-Host "== FFmpeg runtime matches the provisioned dev SDK =="
-$ffmpegBinDir = Join-Path $repoRoot (Join-Path $toolchainData.FFmpeg.DevDir "bin")
+$ffmpegBinDir = Join-Path $repoRoot (Join-Path $toolchainData.FFmpeg.DevDirByArch.$Arch "bin")
 foreach ($dll in $toolchainData.FFmpeg.RuntimeDlls) {
     $packaged = Join-Path $appDir $dll
     $provisioned = Join-Path $ffmpegBinDir $dll

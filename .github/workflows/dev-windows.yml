@@ -1,0 +1,81 @@
+name: Build Windows Dev
+
+on:
+  push:
+    branches:
+      - dev
+      - feature/qml-ui
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package Windows ${{ matrix.arch }} dev build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-2022
+            toolchain: msvc
+            buildDir: build-msvc
+            distSuffix: win64
+          - arch: arm64
+            runner: windows-11-arm
+            toolchain: msvc-arm64
+            buildDir: build-msvc-arm64
+            distSuffix: winarm64
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: recursive
+
+      # The Windows runner images ship Python with pip, so the toolchain
+      # scripts use the image interpreter directly.
+
+      - name: Build and package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $jobs = [int]$env:NUMBER_OF_PROCESSORS
+          ./scripts/build/build-win.ps1 -Toolchain ${{ matrix.toolchain }} -BuildDir ${{ matrix.buildDir }} -BuildJobs $jobs
+
+      - name: Verify package contents and dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $distDirs = @(Get-ChildItem dist -Directory -Filter "MiaCode-*-${{ matrix.distSuffix }}")
+          if ($distDirs.Count -ne 1) {
+            throw "Expected one MiaCode-*-${{ matrix.distSuffix }} directory under dist, found: $($distDirs.Name -join ', ')"
+          }
+          ./scripts/build/verify-win-package.ps1 -DistDir $distDirs[0].FullName -Arch ${{ matrix.arch }}
+
+      - name: Read package name
+        id: package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $archives = @(Get-ChildItem dist -File -Filter "*.7z")
+          if ($archives.Count -ne 1) {
+            throw "Expected one Windows package archive under dist, found: $($archives.Name -join ', ')"
+          }
+          "archive_name=$($archives[0].Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.archive_name }}
+          path: dist/*.7z
+          if-no-files-found: error
+          retention-days: 14

@@ -18,21 +18,28 @@
 Windows:
 
 ```powershell
-# MSVC：生成器由 vswhere 解析，需已装 Visual Studio 与 Windows SDK
+# MSVC x64：生成器由 vswhere 解析，需已装 Visual Studio 与 Windows SDK
 powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildDir build-msvc
+
+# MSVC arm64：原生 arm64 主机，走 ARM64 平台参数与 Qt 的 arm64 包
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc-arm64 -BuildDir build-msvc-arm64
 
 # MinGW + Ninja：Qt 用 mingw_64 版
 powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain mingw -BuildDir build
 
-# 构建已完成时单独打包
-powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot> -BuildDir <BuildDir>
+# 构建已完成时单独打包（-Arch 与构建时一致）
+powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot> -BuildDir <BuildDir> -Arch x64
 
 # 出包后校验
-powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v<version>-win64
+powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v<version>-win64 -Arch x64
 ```
 
 `build-win.ps1` 依次执行：Python 依赖（仅 py7zr）、导出用 `ffmpeg.exe`、预览用 FFmpeg
-dev SDK、Qt 定位、CMake 配置与构建、调用 `package-win.ps1` 打包。
+dev SDK、Qt 定位、CMake 配置与构建、调用 `package-win.ps1` 打包。两条 FFmpeg 链与打包
+链都按 `-Toolchain` 推导出的目标架构选择各自的目录：`third_party\ffmpeg\windows\<win64|winarm64>\`
+与 `third_party\bass\bin\<win64|winarm64>\`，包名分别为 `MiaCode-v<version>-win64` 与
+`MiaCode-v<version>-winarm64`。arm64 不随包分发 `bass_aac.dll`（上游只提供 x86/x64 版本），
+音频后端对缺失插件已有存在性检查。
 
 Qt 定位顺序：`-QtRoot` → `C:\Qt\<版本>\<架构目录>` → `.qt\<版本>\<架构目录>` →
 `QT_ROOT_DIR`/`Qt6_DIR` 环境变量 → 都未命中时由 `build/provision-qt.ps1` 从 Qt 仓库下载。
@@ -49,8 +56,9 @@ Qt 定位顺序：`-QtRoot` → `C:\Qt\<版本>\<架构目录>` → `.qt\<版本
 预览用 FFmpeg SDK 可由 `ffmpeg/trim/build-trimmed-ffmpeg.ps1` 产出裁切版，替代
 `ffmpeg/ensure-windows-ffmpeg-dev.ps1` 下载的全量 SDK。
 
-Qt 版本与模块、两套工具链定义、包内容清单、归档格式都在 `build/windows-toolchain.psd1`，
-调整这些行为改该文件。不同工具链使用各自的构建目录，生成器不同无法共用。
+Qt 版本与模块、三套工具链定义（含各自的目标架构、Qt 主机仓库树、MSVC 运行库架构子目录）、
+包内容清单、归档格式都在 `build/windows-toolchain.psd1`，调整这些行为改该文件。不同工具链
+使用各自的构建目录，生成器与目标架构不同无法共用。
 
 macOS:
 

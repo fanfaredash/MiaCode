@@ -51,7 +51,7 @@ Current history scan result:
 
 - Current tracked tree has no secret/local-path hits from the open-source scan patterns.
 - Filtered history has no hits from the open-source secret/local-path scan patterns, excluding intentionally vendored third-party code.
-- Filtered history removed historical build artifacts under `build-mingw-ascii/` / `build-mingw/`, probe files under `_audio_probe/`, generated slide data under `assets/generated/`, Remotion prototype files under `tools/intro_remotion/`, old FFmpeg backup files under `third_party/ffmpeg/windows/dev.full.bak/`, old M PLUS font copies, and superseded private investigation docs/scripts.
+- Filtered history removed historical build artifacts under `build-mingw-ascii/` / `build-mingw/`, probe files under `_audio_probe/`, generated slide data under `assets/generated/`, Remotion prototype files under `tools/intro_remotion/`, old FFmpeg backup files under `third_party/ffmpeg/windows/win64/dev.full.bak/`, old M PLUS font copies, and superseded private investigation docs/scripts.
 - Largest remaining Git objects are current distribution assets and third-party/source files that are intentionally retained.
 - Filtered `main` and `test` were force-pushed to GitHub on 2026-06-24; both point to `e150dfcd94c20877a0f212164040e3979e05f1c0`.
 - A pre-filter bundle backup exists outside the repository; do not publish it.
@@ -89,17 +89,27 @@ Clean-clone verification:
 
 ## Third-Party Download Verification
 
-- Windows export FFmpeg: `https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z`
-  - Checked: reachable via redirect to `200 OK`.
-  - Expected `ffmpeg.exe` SHA256: `B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997`.
-- Windows QtAVPlayer FFmpeg dev SDK: `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1.zip`
-  - Checked: reachable via redirect to `200 OK`.
-  - Installed by: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`.
+- Windows export FFmpeg (both architectures, BtbN n8.1 **GPL** static, pinned tag
+  `autobuild-2026-09-12-13-12`):
+  - x64: `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-win64-gpl-8.1.zip`
+    - Expected `ffmpeg.exe` SHA256: `7B25E8C22217CCFC608BD609530620CCAD0F8A0F9D1A6BF4CA3B09B46E9E1A66`.
+  - arm64: `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-gpl-8.1.zip`
+    - Expected `ffmpeg.exe` SHA256: `22E1BB241B8747ED5EA5ECE8DE64AFCC8720F4550ED35ED24657D00C2BADBA5E`.
+  - Checked: both archives reachable, both `ffmpeg.exe` hashes reproduced from the extracted binaries.
+- Windows QtAVPlayer FFmpeg dev SDK (BtbN n8.1 LGPL **shared**, same pinned tag):
+  - x64: `.../autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-win64-lgpl-shared-8.1.zip`
+    - Expected archive SHA256: `D04C1D0866D0F0E23FE9C8C4B07CFAA0B0DFE39B704CFF22667DDB0A5006FF3A`.
+  - arm64: `.../autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-lgpl-shared-8.1.zip`
+    - Expected archive SHA256: `DFB3F394B316F91CC2C399BBAA38A280F81E523E150A20F7DDD477843AA70608`.
+  - Checked: both archives reachable; payloads byte-identical to the rolling `latest` tag of the same day, while the archive hashes differ (the embedded top-level directory name differs, so the hash is tag-bound).
+  - Installed by: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1 -Arch <x64|arm64>`.
 - macOS export FFmpeg: `https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip`
   - Checked: reachable via redirect to `200 OK`.
   - Expected SHA256: `430D60FBF419DAB28DAEE9B679E7929A31EE9BAE53F6E42E8AE26B725584290F`.
-- FFmpeg trim source mirrors for tag `n7.1`:
+- FFmpeg trim source mirrors for tag `n8.1`:
   - `https://gitee.com/mirrors/ffmpeg.git`
   - `https://github.com/FFmpeg/FFmpeg.git`
   - `https://git.ffmpeg.org/ffmpeg.git`
-  - Checked: all returned `refs/tags/n7.1` at `507a51fbe9732f0f6f12f43ce12431e8faa834b7`.
+  - Checked: `github.com` and `git.ffmpeg.org` both returned `refs/tags/n8.1` at
+    `a65b3bfe9dacc3b20597ef199d0afdd8bc8128e2`; the Gitee mirror could not be reached from the
+    checking host (TLS failure), so it is unverified for this tag.

@@ -63,7 +63,7 @@ cmake --build --preset release
 .\build\Release\MiaCode.exe
 ```
 
-The preset path expects Qt to be discoverable by CMake or `CMAKE_PREFIX_PATH`. On Windows, it also expects `third_party/ffmpeg/windows/ffmpeg.exe` and `third_party/ffmpeg/windows/dev/` to exist; the two FFmpeg scripts above download the pinned contents and validate the required files.
+The preset path expects Qt to be discoverable by CMake or `CMAKE_PREFIX_PATH`. On Windows, it also expects `third_party/ffmpeg/windows/win64/ffmpeg.exe` and `third_party/ffmpeg/windows/win64/dev/` to exist; the two FFmpeg scripts above download the pinned contents and validate the required files.
 
 To package an existing build:
 

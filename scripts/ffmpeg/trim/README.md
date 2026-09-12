@@ -1,12 +1,12 @@
 # FFmpeg decode-only trim toolchain
 
-Produces a **minimal, decode-only FFmpeg** (n7.1, LGPL, shared) for MiaCode's
+Produces a **minimal, decode-only FFmpeg** (n8.1, LGPL, shared) for MiaCode's
 QtAVPlayer preview backend, replacing the full ~110 MB BtbN DLL set with a
 trimmed build (~15–20 MB target) without breaking playback.
 
 This is the build-it-yourself counterpart to `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`
 (which just downloads the full upstream SDK). It installs into the same place —
-`third_party/ffmpeg/windows/dev/` — so the rest of the build (CMake + packaging)
+`third_party/ffmpeg/windows/win64/dev/` — so the rest of the build (CMake + packaging)
 consumes it unchanged.
 
 > **License:** decode-only ⇒ pure **LGPL v2.1+**, same obligations as the FFmpeg
@@ -71,10 +71,10 @@ needs and that video silently fails. Five guards, layered:
 - **MSYS2** at `C:\msys64` (the script installs the MinGW build deps via `pacman`:
   `make diffutils pkgconf git mingw-w64-x86_64-gcc mingw-w64-x86_64-nasm`).
 - **VS 2022 BuildTools** (for `dumpbin`/`lib` → MSVC import libs; auto-located, or `-VcvarsPath`).
-- Network (clone FFmpeg n7.1). The build tries a **CN-reachable Gitee mirror first**,
+- Network (clone FFmpeg n8.1). The build tries a **CN-reachable Gitee mirror first**,
   then GitHub, then `git.ffmpeg.org` — each with a retry — so a reset GitHub clone
   (common behind the GFW) falls through automatically. Force a remote with
-  `-FfmpegGitUrl 'https://gitee.com/mirrors/ffmpeg.git'`, or clone the `n7.1` tag
+  `-FfmpegGitUrl 'https://gitee.com/mirrors/ffmpeg.git'`, or clone the `n8.1` tag
   yourself into `build/ffmpeg-trim/FFmpeg` and pass `-SkipSourceFetch`.
 
 ## Usage
@@ -87,7 +87,7 @@ scripts\ffmpeg\trim\survey-chart-codecs.ps1 -ChartRoots '<chart-root-1>','<chart
 # 2. Review the build plan without building:
 scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1 -PrintPlanOnly
 
-# 3. Build + install into third_party/ffmpeg/windows/dev (~30–60 min):
+# 3. Build + install into third_party/ffmpeg/windows/win64/dev (~30–60 min):
 scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1
 
 # 4. Rebuild MiaCode against the trimmed SDK + re-verify:
@@ -96,7 +96,7 @@ cmake --build build --config Release --target MiaCode
 #    then launch + play a few real PVs (or re-run scripts\build\package-win.ps1 + smoke test).
 ```
 
-To revert to the full SDK: delete `third_party/ffmpeg/windows/dev`, restore
+To revert to the full SDK: delete `third_party/ffmpeg/windows/win64/dev`, restore
 `dev.full.bak`, or re-run `scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1`.
 
 ## Notes / limits

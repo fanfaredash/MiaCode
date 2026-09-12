@@ -5,12 +5,15 @@ This directory stores prebuilt `ffmpeg` executables used by MiaCode video export
 ## Fixed baseline (0.2.2-dev.1)
 
 - Windows
-  - Binary: `windows/ffmpeg.exe`
-  - Source package:
-    `https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z`
-  - Upstream build family: Gyan.dev `essentials_build`
-  - Runtime version pattern: `ffmpeg version 7.1.1-essentials_build-www.gyan.dev`
-  - SHA256 (`ffmpeg.exe`): `B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997`
+  - Binaries: `windows/win64/ffmpeg.exe` (x64) and `windows/winarm64/ffmpeg.exe` (arm64)
+  - Source package: BtbN FFmpeg-Builds n8.1 **GPL** static build, pinned to the
+    immutable tag `autobuild-2026-09-12-13-12`
+    (`.../releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-<win64|winarm64>-gpl-8.1.zip`)
+  - The GPL variant is the one that carries libx264, which the export encoder probe
+    needs for software H.264.
+  - Runtime version pattern: `ffmpeg version n8.1.x-...`
+  - SHA256 (`ffmpeg.exe`): pinned per architecture in
+    `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`
 
 - macOS
   - Binary: `macos/ffmpeg`
@@ -33,22 +36,22 @@ This directory stores prebuilt `ffmpeg` executables used by MiaCode video export
 Separate from the standalone `ffmpeg.exe` above (used by **export**), the **preview** background-video
 decode backend links FFmpeg directly via the vendored QtAVPlayer (`third_party/QtAVPlayer/`). That
 needs the FFmpeg **shared dev SDK** — headers + import libs + runtime DLLs — provisioned into
-`windows/dev/` (gitignored, never committed):
+`windows/<win64|winarm64>/dev/` (gitignored, never committed):
 
 ```
-third_party/ffmpeg/windows/dev/
+third_party/ffmpeg/windows/<win64|winarm64>/dev/
   include/   libav*/ headers
   lib/       av*.lib import libs
-  bin/       av*.dll runtime (avcodec-61, avformat-61, avutil-59, swresample-5,
-             swscale-8, avfilter-10)   # avdevice intentionally dropped — see Size trimming
+  bin/       av*.dll runtime (avcodec-62, avformat-62, avutil-60, swresample-6,
+             swscale-9, avfilter-11)   # avdevice intentionally dropped — see Size trimming
 ```
 
-- Provision: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` (downloads the BtbN n7.1 LGPL **shared** build;
+- Provision: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` (downloads the pinned BtbN n8.1 LGPL **shared** build per target architecture;
   override URL via `MIACODE_WINDOWS_FFMPEG_DEV_URL`). The recommended Windows entry point
   `scripts/build/build-win.ps1` runs this automatically on a clean clone.
-- CMake finds it via the `MIACODE_FFMPEG_DEV_DIR` cache variable (defaults to `windows/dev/`).
-- Major versions must match the packaged runtime: avcodec-61 / avformat-61 / avutil-59 /
-  swresample-5 / swscale-8 / avfilter-10 (avdevice dropped).
+- CMake finds it via the `MIACODE_FFMPEG_DEV_DIR` cache variable (defaults to `windows/<win64|winarm64>/dev/`).
+- Major versions must match the packaged runtime: avcodec-62 / avformat-62 / avutil-60 /
+  swresample-6 / swscale-9 / avfilter-11 (avdevice dropped).
 - License: LGPL v2.1+ (decode-only, **no** `--enable-gpl` / `--enable-nonfree`) — same obligations as
   the FFmpeg already shipped; no new exposure. `avfilter` is a net-new DLL (`avdevice` is dropped,
   see below).
@@ -62,19 +65,19 @@ Homebrew and rejects build-machine dylib references.
 
 ### Size trimming
 
-The default BtbN n7.1 LGPL *shared* build is full-featured and large (`avcodec-61` ≈63 MB,
-`avfilter-10` ≈24 MB, `avformat-61` ≈20 MB). Two levers:
+The default BtbN n8.1 LGPL *shared* build is full-featured and large (`avcodec-62` ≈63 MB,
+`avfilter-11` ≈24 MB, `avformat-62` ≈20 MB). Two levers:
 
 1. **Drop `avdevice` (done in-tree, ≈7 MB).** `avdevice` only provides capture-device I/O
    (cameras, screen-grab, `dshow`/`gdigrab`) — useless for file playback. The vendored QtAVPlayer
    is patched to compile out its single `avdevice_register_all()` call and not link the lib (CMake
-   define `QT_AVPLAYER_NO_AVDEVICE`), so `avdevice-61.dll` is neither built-against nor shipped.
+   define `QT_AVPLAYER_NO_AVDEVICE`), so `avdevice-62.dll` is neither built-against nor shipped.
 
 2. **Minimal decode-only `avcodec`/`avfilter` (the big lever, ~70 MB → ~15–20 MB).** Automated by
    the **`scripts/ffmpeg/trim/`** toolchain — see its [README](../../scripts/ffmpeg/trim/README.md).
-   It builds a decode-only LGPL n7.1 *shared* FFmpeg from a reviewed allowlist
+   It builds a decode-only LGPL n8.1 *shared* FFmpeg from a reviewed allowlist
    (`scripts/ffmpeg/trim/trim-allowlist.psd1`), generates MSVC import libs, and installs into
-   `third_party/ffmpeg/windows/dev/` (backing up the full set to `dev.full.bak`):
+   `third_party/ffmpeg/windows/win64/dev/` (backing up the full set to `dev.full.bak`):
 
    ```powershell
    scripts\ffmpeg\trim\survey-chart-codecs.ps1 -ChartRoots <dirs>   # calibrate allowlist vs real PVs
@@ -82,10 +85,10 @@ The default BtbN n7.1 LGPL *shared* build is full-featured and large (`avcodec-6
    scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1                     # build + install (~30–60 min)
    ```
 
-   It keeps major versions pinned (avcodec-61 / avfilter-10 / …) to match CMakeLists.txt +
+   It keeps major versions pinned (avcodec-62 / avfilter-11 / …) to match CMakeLists.txt +
    `scripts/build/package-win.ps1`, keeps the mandatory QtAVPlayer filtergraph endpoints
    (`buffer`/`buffersink`/`abuffer`/`abuffersink`) + `scale`/`format`/`fps` + `protocol=file` +
    D3D11VA hwaccels, and validates the allowlist against `./configure --list-*` so a missing
    component is reported (not silently 误删'd). Alternatively, drop a pre-built trimmed
-   `include/ lib/ bin/` into `third_party/ffmpeg/windows/dev/`, or point
+   `include/ lib/ bin/` into `third_party/ffmpeg/windows/win64/dev/` (the trim toolchain covers the x64 SDK), or point
    `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` at it via `MIACODE_WINDOWS_FFMPEG_DEV_URL=<your-zip>`.

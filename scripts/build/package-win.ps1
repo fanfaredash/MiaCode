@@ -1,6 +1,8 @@
 ﻿param(
     [ValidateSet("Release", "Debug")]
     [string]$Config = "Release",
+    [ValidateSet("x64", "arm64")]
+    [string]$Arch = "x64",
     [string]$QtRoot = "",
     [string]$BuildDir = "build",
     [string]$DistDir = "",
@@ -365,8 +367,12 @@ if (![string]::IsNullOrWhiteSpace($QtRoot)) {
 }
 $versionInfo = Read-VersionInfoFromCMake -CMakeFilePath (Join-Path $repoRoot "CMakeLists.txt")
 $version = $versionInfo.PackageVersion
+$distNamePattern = $toolchainData.Package.DistNameByArch.$Arch
+if ([string]::IsNullOrWhiteSpace($distNamePattern)) {
+    throw "No package name pattern for architecture '$Arch' in windows-toolchain.psd1."
+}
 if ([string]::IsNullOrWhiteSpace($DistDir)) {
-    $DistDir = Join-Path (Join-Path $repoRoot "dist") "MiaCode-v$version-win64"
+    $DistDir = Join-Path (Join-Path $repoRoot "dist") $distNamePattern.Replace("{version}", $version)
 } else {
     $DistDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $DistDir
 }
@@ -421,11 +427,14 @@ if ($isMinGw) {
 } else {
     Write-Host "Compiler: MSVC ($compilerPath)"
 }
-$toolchainRuntimeDlls = if ($isMinGw) {
-    $toolchainData.Toolchains.mingw.RuntimeDlls
-} else {
-    $toolchainData.Toolchains.msvc.RuntimeDlls
+# The toolchain key decides which C++ runtime the package carries: arm64 always
+# comes from the MSVC toolchain, x64 from whichever compiler built the tree.
+$toolchainKey = if ($Arch -eq "arm64") { "msvc-arm64" } elseif ($isMinGw) { "mingw" } else { "msvc" }
+$toolchainSpec = $toolchainData.Toolchains.$toolchainKey
+if ($null -eq $toolchainSpec) {
+    throw "Unknown toolchain '$toolchainKey' in windows-toolchain.psd1."
 }
+$toolchainRuntimeDlls = $toolchainSpec.RuntimeDlls
 
 if (Test-Path $DistDir) {
     Remove-Item -Recurse -Force $DistDir
@@ -586,7 +595,8 @@ foreach ($installRoot in @(
 
 foreach ($root in ($vsRedistRoots | Select-Object -Unique)) {
     if (!(Test-Path $root)) { continue }
-    $crtDirs = Get-ChildItem -Path (Join-Path $root '*\x64\Microsoft.VC*.CRT') -Directory -ErrorAction SilentlyContinue |
+    $redistArch = if ([string]::IsNullOrWhiteSpace($toolchainSpec.MsvcRedistArch)) { "x64" } else { $toolchainSpec.MsvcRedistArch }
+    $crtDirs = Get-ChildItem -Path (Join-Path $root "*\$redistArch\Microsoft.VC*.CRT") -Directory -ErrorAction SilentlyContinue |
         Where-Object { $_.Parent.Parent.Name -match '^\d+\.\d+\.\d+$' }
     if ($crtDirs) {
         # Highest numeric version dir wins, so the bundled CRT matches the
@@ -616,12 +626,12 @@ if (!$isMinGw -and ![string]::IsNullOrWhiteSpace($vcRuntimeSrc) -and (Test-Path 
     }
 } elseif (!$isMinGw) {
     Write-Warning "VC++ runtime redist directory not found; app-local CRT bundling skipped."
-    Write-Warning "Expected: <VS install>\VC\Redist\MSVC\<version>\x64\Microsoft.VC14X.CRT/"
+    Write-Warning "Expected: <VS install>\VC\Redist\MSVC\<version>\$redistArch\Microsoft.VC14X.CRT/"
     Write-Warning "Set `$env:VCToolsRedistDir to the versioned redist root as a fallback."
 }
 
-$bassRuntimeDir = Join-Path $repoRoot $toolchainData.Bass.RuntimeDir
-$requiredBassRuntimeDlls = $toolchainData.Bass.RuntimeDlls
+$bassRuntimeDir = Join-Path $repoRoot $toolchainData.Bass.RuntimeDirByArch.$Arch
+$requiredBassRuntimeDlls = $toolchainData.Bass.RuntimeDllsByArch.$Arch
 foreach ($runtimeDll in $requiredBassRuntimeDlls) {
     $srcDll = Join-Path $bassRuntimeDir $runtimeDll
     if (!(Test-Path $srcDll)) {
@@ -631,14 +641,14 @@ foreach ($runtimeDll in $requiredBassRuntimeDlls) {
 }
 
 # FFmpeg shared runtime for the QtAVPlayer preview decode backend.
-# PreviewStageMediaHost decodes PV/BG via QtAVPlayer (FFmpeg n7.1 LGPL); these
-# av*.dll must sit next to MiaCode.exe. avfilter-10 is NET-NEW vs the previous
+# PreviewStageMediaHost decodes PV/BG via QtAVPlayer (FFmpeg n8.1 LGPL); these
+# av*.dll must sit next to MiaCode.exe. avfilter is NET-NEW vs the older
 # package (Qt never shipped it; avdevice is dropped — capture-device only); the
 # other five overlap with what windeployqt stages for Qt
 # Multimedia's ffmpeg plugin, so we copy our own build AFTER windeployqt
 # (-Force overwrite) to keep the runtime matched to the import libs MiaCode
 # linked against.
-$ffmpegDevBin = Join-Path $repoRoot (Join-Path $toolchainData.FFmpeg.DevDir "bin")
+$ffmpegDevBin = Join-Path $repoRoot (Join-Path $toolchainData.FFmpeg.DevDirByArch.$Arch "bin")
 $requiredFfmpegRuntimeDlls = $toolchainData.FFmpeg.RuntimeDlls
 foreach ($runtimeDll in $requiredFfmpegRuntimeDlls) {
     $srcDll = Join-Path $ffmpegDevBin $runtimeDll
@@ -705,7 +715,8 @@ foreach ($releaseDoc in $releaseDocs) {
     Copy-Item $releaseDocSrc (Join-Path $DistDir $releaseDoc) -Force
 }
 
-$ffmpegSrc = Join-Path $repoRoot "third_party\\ffmpeg\\windows\\ffmpeg.exe"
+$ffmpegExportDir = Join-Path $repoRoot $toolchainData.FFmpeg.ExportDirByArch.$Arch
+$ffmpegSrc = Join-Path $ffmpegExportDir $toolchainData.FFmpeg.ExportBinary
 if (Test-Path $ffmpegSrc) {
     $ffmpegSize = (Get-Item $ffmpegSrc).Length
     if ($ffmpegSize -lt 1MB) {
@@ -728,6 +739,12 @@ if (Test-Path $ffmpegSrc) {
 $requiredPackagePaths = @($toolchainData.Package.RequiredRelativePaths | ForEach-Object {
     Expand-PackagePathEntry -Entry $_ -Config $Config
 })
+$archSpecificRequiredPaths = $toolchainData.Package.AdditionalRequiredRelativePathsByArch.$Arch
+if ($null -ne $archSpecificRequiredPaths) {
+    foreach ($entry in $archSpecificRequiredPaths) {
+        $requiredPackagePaths += Expand-PackagePathEntry -Entry $entry -Config $Config
+    }
+}
 foreach ($runtimeDll in $toolchainRuntimeDlls) {
     $requiredPackagePaths += Join-Path "app" $runtimeDll
 }

@@ -960,9 +960,31 @@ if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 if (WIN32)
+    if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+        set(MIACODE_BASS_WINDOWS_ARCH "winarm64")
+    else()
+        set(MIACODE_BASS_WINDOWS_ARCH "win64")
+    endif()
+    set(MIACODE_BASS_WINDOWS_LIB_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/${MIACODE_BASS_WINDOWS_ARCH}")
+    set(MIACODE_BASS_WINDOWS_BIN_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/${MIACODE_BASS_WINDOWS_ARCH}")
+    # bass_aac ships for x86/x64 only; the arm64 runtime uses the remaining
+    # plugins and the audio backend already tolerates a missing add-on.
+    set(MIACODE_BASS_WINDOWS_DLLS bass.dll bassmix.dll bass_fx.dll bassopus.dll)
+    if (MIACODE_BASS_WINDOWS_ARCH STREQUAL "win64")
+        list(APPEND MIACODE_BASS_WINDOWS_DLLS bass_aac.dll)
+    endif()
+    foreach(MIACODE_BASS_DLL IN LISTS MIACODE_BASS_WINDOWS_DLLS)
+        if (NOT EXISTS "${MIACODE_BASS_WINDOWS_BIN_DIR}/${MIACODE_BASS_DLL}")
+            message(FATAL_ERROR
+                "Missing required Windows BASS runtime: ${MIACODE_BASS_WINDOWS_BIN_DIR}/${MIACODE_BASS_DLL}")
+        endif()
+    endforeach()
+
     target_link_libraries(MiaCode PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+        "${MIACODE_BASS_WINDOWS_LIB_DIR}/bass.lib"
+        "${MIACODE_BASS_WINDOWS_LIB_DIR}/bassmix.lib"
         winmm
         ole32       # Windows Core Audio endpoint notification COM API
         avrt  # Multimedia Class Scheduler Service (AvSetMmThreadCharacteristicsW)
@@ -980,12 +1002,9 @@ if (WIN32)
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_fx.dll"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_aac.dll"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
+            ${MIACODE_BASS_WINDOWS_DLLS}
             $<TARGET_FILE_DIR:MiaCode>
+        WORKING_DIRECTORY "${MIACODE_BASS_WINDOWS_BIN_DIR}"
     )
 elseif (APPLE)
     set(MIACODE_BASS_MACOS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/macos/universal")
@@ -1091,8 +1110,13 @@ target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 # ---------------------------------------------------------------------------
 if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     if (WIN32)
-        set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/dev")
+        if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+            set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/winarm64/dev")
+        else()
+            set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/win64/dev")
+        endif()
     elseif (APPLE)
         set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/macos/dev")
@@ -1198,12 +1222,12 @@ if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
         # Windows package script stages the same pinned majors.
         add_custom_command(TARGET MiaCode POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avcodec-61.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avformat-61.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avutil-59.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/swresample-5.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/swscale-8.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avfilter-10.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/avcodec-62.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/avformat-62.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/avutil-60.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/swresample-6.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/swscale-9.dll"
+                "${MIACODE_FFMPEG_DEV_DIR}/bin/avfilter-11.dll"
                 $<TARGET_FILE_DIR:MiaCode>
             VERBATIM
         )
@@ -1459,18 +1483,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         target_compile_definitions(soundtouch_probe PRIVATE MIACODE_HAS_BASS_AUDIO=1)
         target_include_directories(soundtouch_probe PRIVATE third_party/bass/include)
         target_link_libraries(soundtouch_probe PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+            "${MIACODE_BASS_WINDOWS_LIB_DIR}/bass.lib"
+            "${MIACODE_BASS_WINDOWS_LIB_DIR}/bassmix.lib"
             avrt
         )
         add_custom_command(TARGET soundtouch_probe POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_fx.dll"
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_aac.dll"
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
+                ${MIACODE_BASS_WINDOWS_DLLS}
                 $<TARGET_FILE_DIR:soundtouch_probe>
+            WORKING_DIRECTORY "${MIACODE_BASS_WINDOWS_BIN_DIR}"
         )
     endif()
 

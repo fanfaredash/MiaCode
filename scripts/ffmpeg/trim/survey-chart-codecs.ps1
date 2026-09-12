@@ -19,12 +19,12 @@
 
 .PARAMETER FfprobePath
     Path to ffprobe.exe. If omitted, searches PATH, the FFmpeg dev SDK
-    (third_party/ffmpeg/windows/dev/bin), then falls back to parsing
+    (third_party/ffmpeg/windows/win64/dev/bin), then falls back to parsing
     `ffmpeg -i` output via -FfmpegPath.
 
 .PARAMETER FfmpegPath
     Path to ffmpeg.exe used as a probe fallback when ffprobe isn't available.
-    Defaults to the repo's third_party/ffmpeg/windows/ffmpeg.exe.
+    Defaults to the repo's third_party/ffmpeg/windows/win64/ffmpeg.exe.
 
 .PARAMETER AllowlistPath
     Path to trim-allowlist.psd1 to cross-check observed codecs against.
@@ -74,7 +74,7 @@ function Resolve-Prober {
     }
     $onPath = Get-Command ffprobe -ErrorAction SilentlyContinue
     if ($onPath) { return @{ Tool = 'ffprobe'; Path = $onPath.Source } }
-    $devProbe = Join-Path $repoRoot 'third_party\ffmpeg\windows\dev\bin\ffprobe.exe'
+    $devProbe = Join-Path $repoRoot 'third_party\ffmpeg\windows\win64\dev\bin\ffprobe.exe'
     if (Test-Path $devProbe) { return @{ Tool = 'ffprobe'; Path = $devProbe } }
     foreach ($f in @((Join-Path $scriptDir 'ffmpeg.exe'), $FfmpegPath)) {
         if (![string]::IsNullOrWhiteSpace($f) -and (Test-Path $f)) { return @{ Tool = 'ffmpeg'; Path = $f } }

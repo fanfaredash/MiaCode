@@ -18,21 +18,29 @@ This directory keeps only public, repeatable build, release, asset, and diagnost
 Windows:
 
 ```powershell
-# MSVC: the generator is resolved through vswhere (Visual Studio + Windows SDK required)
+# MSVC x64: the generator is resolved through vswhere (Visual Studio + Windows SDK required)
 powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildDir build-msvc
+
+# MSVC arm64: native arm64 host, ARM64 generator platform and Qt's arm64 package
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc-arm64 -BuildDir build-msvc-arm64
 
 # MinGW + Ninja: Qt's mingw_64 build
 powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain mingw -BuildDir build
 
-# Package an existing build
-powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot> -BuildDir <BuildDir>
+# Package an existing build (-Arch has to match the build)
+powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot> -BuildDir <BuildDir> -Arch x64
 
 # Verify a package
-powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v<version>-win64
+powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v<version>-win64 -Arch x64
 ```
 
 `build-win.ps1` runs, in order: Python dependencies (py7zr only), the export `ffmpeg.exe`, the
-preview FFmpeg dev SDK, Qt resolution, CMake configure and build, then `package-win.ps1`.
+preview FFmpeg dev SDK, Qt resolution, CMake configure and build, then `package-win.ps1`. Both
+FFmpeg chains and the packaging chain pick their directories from the architecture the selected
+toolchain targets: `third_party\ffmpeg\windows\<win64|winarm64>\` and
+`third_party\bass\bin\<win64|winarm64>\`, producing `MiaCode-v<version>-win64` or
+`MiaCode-v<version>-winarm64`. The arm64 package ships no `bass_aac.dll` (upstream publishes that
+add-on for x86/x64 only); the audio backend already tolerates a missing add-on.
 
 Qt resolution order: `-QtRoot` → `C:\Qt\<version>\<arch dir>` → `.qt\<version>\<arch dir>` →
 `QT_ROOT_DIR`/`Qt6_DIR` → otherwise `build/provision-qt.ps1` downloads it from the Qt repository.
@@ -52,9 +60,10 @@ archive; it exits 1 on any failure.
 The preview FFmpeg SDK can come from `ffmpeg/trim/build-trimmed-ffmpeg.ps1` instead of the full SDK
 that `ffmpeg/ensure-windows-ffmpeg-dev.ps1` downloads.
 
-Qt version and modules, both toolchain definitions, the package contents lists and the archive
-format live in `build/windows-toolchain.psd1`. Give each toolchain its own build directory —
-generators cannot share one.
+Qt version and modules, all three toolchain definitions (target architecture, Qt host repository
+tree, MSVC redistributable subdirectory), the package contents lists and the archive format live in
+`build/windows-toolchain.psd1`. Give each toolchain its own build directory — generators and target
+architectures cannot share one.
 
 macOS:
 

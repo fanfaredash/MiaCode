@@ -13,10 +13,10 @@
     # needs makes that video silently fail. When unsure, keep it.
     # =====================================================================
 
-    # FFmpeg source tag to build. MUST stay on the n7.1 series so the produced
+    # FFmpeg source tag to build. MUST stay on the n8.1 series so the produced
     # DLL/import-lib basenames keep the major versions the rest of the build
     # is pinned to (CMakeLists.txt + scripts/build/package-win.ps1).
-    FFmpegVersion = 'n7.1'
+    FFmpegVersion = 'n8.1'
 
     # ABI-pinned outputs this build must produce (major-version-locked).
     # The build script asserts each of these DLLs + a matching import lib
@@ -24,8 +24,8 @@
     # absent (dropped — capture-device only; QtAVPlayer is patched not to use
     # it, see QT_AVPLAYER_NO_AVDEVICE).
     ExpectedDlls = @(
-        'avcodec-61', 'avformat-61', 'avutil-59',
-        'swresample-5', 'swscale-8', 'avfilter-10'
+        'avcodec-62', 'avformat-62', 'avutil-60',
+        'swresample-6', 'swscale-9', 'avfilter-11'
     )
 
     # ---------------------------------------------------------------------
@@ -94,7 +94,7 @@
         #    no such external dep remains (objdump assert).
         #  --enable-libdav1d: software AV1 decoder (see the 'libdav1d' decoder note
         #    below). Needs mingw-w64-x86_64-dav1d installed in the toolchain step.
-        #    dav1d must link STATICALLY into avcodec-61.dll or the self-containment
+        #    dav1d must link STATICALLY into avcodec-62.dll or the self-containment
         #    objdump assert (no external libdav1d.dll/libwinpthread) will fail; if it
         #    trips, add '--pkg-config-flags=--static' here and rebuild.
         ExtraConfigureArgs = @('--enable-d3d11va', '--enable-dxva2', '--disable-iconv', '--enable-libdav1d', '--extra-ldflags=-static')

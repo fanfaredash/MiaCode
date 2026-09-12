@@ -15,17 +15,20 @@
     scripts/build/windows-toolchain.psd1.
 
 .PARAMETER Toolchain
-    mingw or msvc. Selects the generator, the compiler, the Qt architecture
-    directory and the C++ runtime that ends up in the package.
+    mingw, msvc or msvc-arm64. Selects the generator, the compiler, the Qt
+    architecture directory and the C++ runtime that ends up in the package.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain mingw
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildJobs 8
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc-arm64 -BuildDir build-msvc-arm64
 #>
 param(
-    [ValidateSet("mingw", "msvc")]
+    [ValidateSet("mingw", "msvc", "msvc-arm64")]
     [string]$Toolchain = "msvc",
     [string]$QtRoot = "",
     [string]$QtVersion = "",
@@ -48,6 +51,10 @@ if ($null -eq $toolchainSpec) {
 }
 if ([string]::IsNullOrWhiteSpace($QtVersion)) { $QtVersion = $toolchainData.Qt.Version }
 if ($QtModules.Count -eq 0) { $QtModules = $toolchainData.Qt.Modules }
+$targetArch = $toolchainSpec.Arch
+if ([string]::IsNullOrWhiteSpace($targetArch)) {
+    throw "Toolchain '$Toolchain' has no Arch entry in windows-toolchain.psd1."
+}
 
 function Resolve-RepoPath {
     param(
@@ -178,11 +185,11 @@ $buildDevTools = if ($Config -eq "Debug") { "ON" } else { "OFF" }
 Invoke-Python -PythonCommand $pythonCommand -Arguments @("-m", "pip", "install", "--user", "py7zr==1.0.*")
 
 # 2. Export ffmpeg binary + 3. preview FFmpeg dev SDK (or its trimmed replacement).
-& (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg.ps1") -RepoRoot $repoRoot
+& (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg.ps1") -RepoRoot $repoRoot -Arch $targetArch
 if ($LASTEXITCODE -ne 0) {
     throw "Windows ffmpeg preparation failed."
 }
-& (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1") -RepoRoot $repoRoot
+& (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1") -RepoRoot $repoRoot -Arch $targetArch
 if ($LASTEXITCODE -ne 0) {
     throw "Windows FFmpeg dev SDK preparation failed."
 }
@@ -218,6 +225,7 @@ if ([string]::IsNullOrWhiteSpace($QtRoot)) {
         -Version $QtVersion `
         -AqtArch $toolchainSpec.AqtArch `
         -ArchDir $toolchainSpec.ArchDir `
+        -HostPlatform $toolchainSpec.QtHostPlatform `
         -Modules $QtModules `
         -OutputDir $QtOutputDir
     if ($LASTEXITCODE -ne 0) {
@@ -249,6 +257,11 @@ Write-Host "Configure: generator '$generator', Qt '$QtRoot', config '$Config'"
 $configureArgs = @("-S", $repoRoot, "-B", $BuildDir, "-G", $generator,
     "-DCMAKE_PREFIX_PATH=$QtRoot",
     "-DMIACODE_BUILD_DEV_TOOLS=$buildDevTools")
+if (![string]::IsNullOrWhiteSpace($toolchainSpec.GeneratorPlatform)) {
+    # Visual Studio generators select the target architecture separately from
+    # the generator name; ARM64 is a cross/native platform argument.
+    $configureArgs += "-DCMAKE_GENERATOR_PLATFORM=$($toolchainSpec.GeneratorPlatform)"
+}
 if ($Toolchain -eq "mingw") {
     # Single-config generator: the configuration is a configure-time decision.
     $configureArgs += "-DCMAKE_BUILD_TYPE=$Config"
@@ -278,6 +291,7 @@ if ($LASTEXITCODE -ne 0) {
     -BuildDir $BuildDir `
     -Config $Config `
     -QtRoot $QtRoot `
+    -Arch $targetArch `
     -BuildJobs $BuildJobs `
     -IncludeDevTools:($buildDevTools -eq "ON")
 if ($LASTEXITCODE -ne 0) {

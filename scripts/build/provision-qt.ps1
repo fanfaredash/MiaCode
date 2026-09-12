@@ -20,6 +20,10 @@
 .PARAMETER ArchDir
     Target directory name under <OutputDir>/<version>/, e.g. mingw_64.
 
+.PARAMETER HostPlatform
+    Qt download repository host tree: windows_x86 for x64 hosts (including
+    cross-compiled arm64 packages), windows_arm64 for native arm64 hosts.
+
 .PARAMETER Modules
     Add-on modules to install alongside the base package, e.g. qtmultimedia.
 
@@ -34,6 +38,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Version,
     [Parameter(Mandatory = $true)][string]$AqtArch,
     [Parameter(Mandatory = $true)][string]$ArchDir,
+    [string]$HostPlatform = "windows_x86",
     [string[]]$Modules = @(),
     [string]$OutputDir = "",
     [string]$BaseUrl = "https://download.qt.io",
@@ -105,7 +110,7 @@ $majorVersion = ($Version -split "\.")[0]
 # The repository folder strips the host prefix from the aqt arch name:
 # win64_mingw -> mingw, win64_msvc2022_64 -> msvc2022_64.
 $repoArchSuffix = $AqtArch -replace '^win(64|32)_', ''
-$desktopBase = "$BaseUrl/online/qtsdkrepository/windows_x86/desktop"
+$desktopBase = "$BaseUrl/online/qtsdkrepository/$HostPlatform/desktop"
 # Qt < 6.11 keeps every architecture beside a flat version folder; Qt >= 6.11
 # uses one folder per architecture. Probe both and take whichever resolves.
 $layoutCandidates = @(
