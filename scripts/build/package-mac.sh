@@ -547,6 +547,17 @@ cat >"$DIST_DIR/README.md" <<'EOF'
 
 打开 `MiaCode.app`。
 
+## Gatekeeper 提示
+
+从下载渠道取得的应用可能显示 Gatekeeper 提示。可使用以下任一方式启动：
+
+1. 在 Finder 中按住 Control 点按 `MiaCode.app`，选择“打开”，随后在确认窗口中选择“打开”。
+2. 在此包目录打开终端，执行：
+
+   ```bash
+   xattr -dr com.apple.quarantine "MiaCode.app"
+   ```
+
 ## 调试启动
 
 打开 `Start_MiaCode_Debug.command`，应用将以诊断模式启动，日志保存在包目录的 `logs/` 中。
