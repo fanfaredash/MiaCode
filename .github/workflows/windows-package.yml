@@ -1,7 +1,7 @@
 name: Windows package
 
-# Run list title: nightly · <branch> · <commit sha>.
-run-name: nightly · ${{ github.ref_name }} · ${{ github.sha }}
+# Run list title: nightly · <branch> · <push timestamp>.
+run-name: nightly · ${{ github.ref_name }} · ${{ github.event.head_commit.timestamp || github.event.repository.pushed_at }}
 
 on:
   push:
