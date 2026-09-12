@@ -540,33 +540,48 @@ else
   exit 1
 fi
 
-cat >"$DIST_DIR/README.md" <<'EOF'
-# MiaCode
+cat >"$DIST_DIR/README.txt" <<'EOF'
+MiaCode macOS 包
 
-## 启动
+启动
+打开 MiaCode.app。
 
-打开 `MiaCode.app`。
-
-## Gatekeeper 提示
-
+Gatekeeper 提示
 从下载渠道取得的应用可能显示 Gatekeeper 提示。可使用以下任一方式启动：
 
-1. 在 Finder 中按住 Control 点按 `MiaCode.app`，选择“打开”，随后在确认窗口中选择“打开”。
+1. 在 Finder 中按住 Control 点按 MiaCode.app，选择“打开”，随后在确认窗口中选择“打开”。
 2. 在此包目录打开终端，执行：
-
-   ```bash
    xattr -dr com.apple.quarantine "MiaCode.app"
-   ```
 
-## 调试启动
+调试启动
+打开 Start_MiaCode_Debug.command，应用将以诊断模式启动，日志保存在包目录的 logs/ 中。
 
-打开 `Start_MiaCode_Debug.command`，应用将以诊断模式启动，日志保存在包目录的 `logs/` 中。
+包内容
+MiaCode.app：应用程序
+Start_MiaCode_Debug.command：诊断启动器
+LICENSE、LICENSE_SCOPE.md、THIRD_PARTY_NOTICES.md 和 licenses/：许可证与第三方声明
+EOF
 
-## 包内容
+cat >"$DIST_DIR/README_EN.txt" <<'EOF'
+MiaCode macOS Package
 
-- `MiaCode.app`：应用程序
-- `Start_MiaCode_Debug.command`：诊断启动器
-- `LICENSE`、`LICENSE_SCOPE.md`、`THIRD_PARTY_NOTICES.md` 和 `licenses/`：许可证与第三方声明
+Launch
+Open MiaCode.app.
+
+Gatekeeper Prompt
+Apps downloaded from the internet may show a Gatekeeper prompt. Use either method below:
+
+1. In Finder, Control-click MiaCode.app, choose Open, then choose Open in the confirmation dialog.
+2. Open Terminal in this package directory and run:
+   xattr -dr com.apple.quarantine "MiaCode.app"
+
+Debug Launch
+Open Start_MiaCode_Debug.command to start MiaCode in diagnostic mode. Logs are written to logs/ in this package directory.
+
+Package Contents
+MiaCode.app: application
+Start_MiaCode_Debug.command: diagnostic launcher
+LICENSE, LICENSE_SCOPE.md, THIRD_PARTY_NOTICES.md, and licenses/: license and third-party notices
 EOF
 
 debug_launcher_source="$ROOT_DIR/scripts/debug/Start_MiaCode_Debug.command"
