@@ -27,7 +27,7 @@ namespace miacode::app::entry {
 //      initialise the user can recover by relaunching with `--rhi=auto` (clears the file)
 //      or `--rhi=d3d11` (forces the safe Windows default).
 //
-// Recognised values: "auto" / "default" (no override), "d3d11", "d3d12", "opengl",
+// Recognised values: "auto" / "default" (no override), "d3d11", "opengl",
 // "vulkan", "metal", "software". Anything else is rejected and we fall through to auto.
 
 QString persistedGraphicsBackendFilePath()
@@ -87,10 +87,6 @@ QString canonicalRhiName(const QString& raw)
         || name == QStringLiteral("dx11")) {
         return QStringLiteral("d3d11");
     }
-    if (name == QStringLiteral("d3d12") || name == QStringLiteral("direct3d12")
-        || name == QStringLiteral("dx12")) {
-        return QStringLiteral("d3d12");
-    }
     if (name == QStringLiteral("opengl") || name == QStringLiteral("gl")) {
         return QStringLiteral("opengl");
     }
@@ -141,6 +137,12 @@ GraphicsBackendChoice resolveGraphicsBackendChoice(const QStringList& args)
         return choice;
     }
     choice.name = readPersistedGraphicsBackend();
+    if (!choice.name.isEmpty() && canonicalRhiName(choice.name).isEmpty()) {
+        // The record names a backend this build no longer offers. Drop it so
+        // every later launch stops carrying the stale choice.
+        writePersistedGraphicsBackend(QString());
+        choice.name.clear();
+    }
     return choice;
 }
 
@@ -151,8 +153,6 @@ QString applyGraphicsBackendChoice(const QString& backend)
 {
     if (backend == QStringLiteral("d3d11")) {
         QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
-    } else if (backend == QStringLiteral("d3d12")) {
-        QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D12);
     } else if (backend == QStringLiteral("opengl")) {
         QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
     } else if (backend == QStringLiteral("vulkan")) {
