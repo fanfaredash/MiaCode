@@ -1,4 +1,4 @@
-name: Build Windows Dev
+name: Windows package
 
 on:
   push:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   package:
-    name: Package Windows ${{ matrix.arch }} dev build
+    name: ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     env:
@@ -41,7 +41,7 @@ jobs:
             # x64 only, so no trim runs here).
 
     steps:
-      - name: Check out source
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           lfs: true
@@ -57,7 +57,7 @@ jobs:
           $jobs = [int]$env:NUMBER_OF_PROCESSORS
           ./scripts/build/build-win.ps1 -Toolchain ${{ matrix.toolchain }} -BuildDir ${{ matrix.buildDir }} -BuildJobs $jobs
 
-      - name: Verify package contents and dependencies
+      - name: Verify package
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -69,7 +69,7 @@ jobs:
           # local-machine check (see docs/ops/RELEASE_CHECKLIST.md), not a CI one.
           ./scripts/build/verify-win-package.ps1 -DistDir $distDirs[0].FullName -Arch ${{ matrix.arch }} -SkipLaunch
 
-      - name: Read package name
+      - name: Resolve artifact name
         id: package
         shell: pwsh
         run: |
@@ -80,7 +80,7 @@ jobs:
           }
           "archive_name=$($archives[0].Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - name: Upload package
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.archive_name }}

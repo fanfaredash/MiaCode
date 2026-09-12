@@ -1,4 +1,4 @@
-name: Build macOS Dev
+name: macOS package
 
 on:
   push:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   package:
-    name: Package Apple Silicon dev build
+    name: arm64
     runs-on: macos-14
     timeout-minutes: 90
     env:
@@ -25,7 +25,7 @@ jobs:
       MIACODE_PACKAGE_CHANNEL: nightly
 
     steps:
-      - name: Check out source
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           lfs: true
@@ -39,7 +39,7 @@ jobs:
       - name: Build and package
         run: bash scripts/build/build-macos-ci.sh
 
-      - name: Read package name
+      - name: Resolve artifact name
         id: package
         shell: bash
         run: |
@@ -51,7 +51,7 @@ jobs:
           fi
           printf 'archive_name=%s\n' "$(basename "${packages[0]}")" >> "$GITHUB_OUTPUT"
 
-      - name: Upload package
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.archive_name }}
