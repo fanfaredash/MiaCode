@@ -99,6 +99,11 @@ for required_tool in curl shasum tar make xcrun install_name_tool lipo otool; do
   command -v "$required_tool" >/dev/null 2>&1 || { echo "Missing required tool: $required_tool" >&2; exit 2; }
 done
 
+if [[ -d "$SDK_DIR" ]] && validate_sdk "$SDK_DIR"; then
+  echo "Using existing self-contained FFmpeg $FFMPEG_VERSION SDK: $SDK_DIR"
+  exit 0
+fi
+
 mkdir -p "$SDK_PARENT"
 temp_root="$(mktemp -d "${TMPDIR:-/tmp}/miacode-ffmpeg6.XXXXXX")"
 archive_path="$temp_root/$FFMPEG_ARCHIVE"

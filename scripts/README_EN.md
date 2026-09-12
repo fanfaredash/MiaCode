@@ -44,11 +44,12 @@ Mach-O contains only the target architecture before re-signing. Set
 `MIACODE_THIN_MACOS_APP=OFF` to produce a comparison package that keeps Qt's
 universal binaries.
 
-The macOS QtAVPlayer preview decoder also needs an FFmpeg development SDK. Run
-`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh` once to create the pinned,
+`build-macos.sh` provisions the macOS QtAVPlayer preview decoder FFmpeg development SDK,
+creating the pinned,
 repo-local FFmpeg 6 SDK under `third_party/ffmpeg/macos/dev/`. `package-mac.sh`
 uses that SDK (or an explicit compatible `MIACODE_FFMPEG_DEV_DIR`) and stages
-only its six required dylibs; it does not discover or copy Homebrew.
+only its six required dylibs; it does not discover or copy Homebrew. When calling
+`package-mac.sh` directly, run `bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh` first.
 
 Linux AppImage (x86_64, Release, 8 jobs by default; requires Docker or Podman):
 

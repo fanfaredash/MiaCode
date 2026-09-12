@@ -8,6 +8,7 @@ dist/
 /squashfs-root/
 font_candidates/
 .qt/
+.venv/
 .DS_Store
 .vs/
 .idea/

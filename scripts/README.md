@@ -42,10 +42,11 @@ QT_ROOT="$HOME/Qt/6.10.2/macos" CMAKE_OSX_ARCHITECTURES=arm64 bash scripts/build
 包内所有 Mach-O 均包含且只包含目标架构。可设置
 `MIACODE_THIN_MACOS_APP=OFF` 生成保留 Qt universal 二进制的对照包。
 
-macOS 的 QtAVPlayer 预览解码还需要 FFmpeg dev SDK。先运行
-`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`，以生成仓库本地的
+`build-macos.sh` 会准备 macOS 的 QtAVPlayer 预览解码 FFmpeg dev SDK，生成仓库本地的
 `third_party/ffmpeg/macos/dev/` 固定 FFmpeg 6 SDK；打包仅复制其中必需的六个 dylib，
 不会查找或复制 Homebrew 依赖。也可用 `MIACODE_FFMPEG_DEV_DIR` 显式指定兼容 SDK。
+单独调用 `package-mac.sh` 时，先运行
+`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`。
 
 Linux AppImage（x86_64、Release、默认并发 8，需要 Docker 或 Podman）：
 

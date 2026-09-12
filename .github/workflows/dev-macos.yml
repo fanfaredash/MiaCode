@@ -27,9 +27,14 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: recursive
 
-      - name: Prepare FFmpeg development SDK
-        run: bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Build and package
         run: bash scripts/build/build-macos.sh
