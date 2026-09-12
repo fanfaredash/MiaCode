@@ -13,6 +13,7 @@ MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
 PACKAGE_ARCHITECTURES="${CMAKE_OSX_ARCHITECTURES:-arm64}"
 THIN_SINGLE_ARCH_PACKAGE="${MIACODE_THIN_MACOS_APP:-ON}"
 MIACODE_FFMPEG_DEV_DIR="${MIACODE_FFMPEG_DEV_DIR:-}"
+PACKAGE_CHANNEL="${MIACODE_PACKAGE_CHANNEL:-}"
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
   QT_ROOT="$QT_ROOT_DIR"
 fi
@@ -26,6 +27,10 @@ case "$THIN_SINGLE_ARCH_PACKAGE" in
 esac
 if [[ "$PACKAGE_ARCHITECTURES" != "arm64" ]]; then
   echo "MiaCode for macOS is arm64-only (got CMAKE_OSX_ARCHITECTURES=$PACKAGE_ARCHITECTURES)." >&2
+  exit 2
+fi
+if [[ -n "$PACKAGE_CHANNEL" && ! "$PACKAGE_CHANNEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "MIACODE_PACKAGE_CHANNEL must start with an alphanumeric character and contain only letters, digits, dots, underscores, or hyphens (got: $PACKAGE_CHANNEL)" >&2
   exit 2
 fi
 
@@ -53,7 +58,12 @@ package_step() {
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
 MACOS_PACKAGE_SUFFIX="macos-apple-silicon"
-DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-${MACOS_PACKAGE_SUFFIX}}"
+PACKAGE_NAME="MiaCode-v${VERSION}"
+if [[ -n "$PACKAGE_CHANNEL" ]]; then
+  PACKAGE_NAME+="-${PACKAGE_CHANNEL}"
+fi
+PACKAGE_NAME+="-${MACOS_PACKAGE_SUFFIX}"
+DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/$PACKAGE_NAME}"
 
 version_gt() {
   local i
@@ -452,10 +462,10 @@ fi
 
 package_step "Staging app bundle, documentation, assets, and runtime tools"
 rm -rf "$DIST_DIR"
-mkdir -p "$DIST_DIR/docs"
+mkdir -p "$DIST_DIR"
 cp -R "$APP_PATH" "$DIST_DIR/"
 
-for release_doc in LICENSE LICENSE_SCOPE.md THIRD_PARTY_NOTICES.md README.md README_EN.md; do
+for release_doc in LICENSE LICENSE_SCOPE.md THIRD_PARTY_NOTICES.md; do
   if [[ ! -f "$ROOT_DIR/$release_doc" ]]; then
     echo "Missing release documentation file: $ROOT_DIR/$release_doc" >&2
     exit 1
@@ -545,41 +555,49 @@ else
   exit 1
 fi
 
-for doc in docs/ops/DEBUG_INDEX.md docs/specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md; do
-  if [[ -f "$ROOT_DIR/$doc" ]]; then
-    cp "$ROOT_DIR/$doc" "$DIST_DIR/docs/$(basename "$doc")"
-  fi
-done
+cat >"$DIST_DIR/README.txt" <<'EOF'
+MiaCode macOS 包
 
-cat >"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
-MiaCode release package (macOS)
+启动
+打开 MiaCode.app。
 
-Run:
-  Open MiaCode.app
+Gatekeeper 提示
+从下载渠道取得的应用可能显示 Gatekeeper 提示。可使用以下任一方式启动：
 
-Included:
-  - MiaCode.app
-  - Start_MiaCode_Debug.command (runs MiaCode in debug mode; logs go to ./logs/)
-  - Qt frameworks/plugins deployed by macdeployqt
-  - BASS, BASSmix, BASS FX, and BASSOPUS arm64 runtime libraries
-  - MiaCode.app/Contents/MacOS/ffmpeg/ffmpeg
-  - assets (inside MiaCode.app/Contents/Resources/assets)
-  - docs/
+1. 在 Finder 中按住 Control 点按 MiaCode.app，选择“打开”，随后在确认窗口中选择“打开”。
+2. 在此包目录打开终端，执行：
+   xattr -dr com.apple.quarantine "MiaCode.app"
+
+调试启动
+打开 Start_MiaCode_Debug.command，应用将以诊断模式启动，日志保存在包目录的 logs/ 中。
+
+包内容
+MiaCode.app：应用程序
+Start_MiaCode_Debug.command：诊断启动器
+LICENSE、LICENSE_SCOPE.md、THIRD_PARTY_NOTICES.md 和 licenses/：许可证与第三方声明
 EOF
 
-if [[ "$BUILD_DEV_TOOLS" != "ON" ]]; then
-  cat >>"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
+cat >"$DIST_DIR/README_EN.txt" <<'EOF'
+MiaCode macOS Package
 
-Not included on purpose:
-  - simai_native_dump
-  - soundtouch_probe
+Launch
+Open MiaCode.app.
+
+Gatekeeper Prompt
+Apps downloaded from the internet may show a Gatekeeper prompt. Use either method below:
+
+1. In Finder, Control-click MiaCode.app, choose Open, then choose Open in the confirmation dialog.
+2. Open Terminal in this package directory and run:
+   xattr -dr com.apple.quarantine "MiaCode.app"
+
+Debug Launch
+Open Start_MiaCode_Debug.command to start MiaCode in diagnostic mode. Logs are written to logs/ in this package directory.
+
+Package Contents
+MiaCode.app: application
+Start_MiaCode_Debug.command: diagnostic launcher
+LICENSE, LICENSE_SCOPE.md, THIRD_PARTY_NOTICES.md, and licenses/: license and third-party notices
 EOF
-else
-  cat >>"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
-  - simai_native_dump
-  - soundtouch_probe
-EOF
-fi
 
 debug_launcher_source="$ROOT_DIR/scripts/debug/Start_MiaCode_Debug.command"
 debug_launcher_path="$DIST_DIR/Start_MiaCode_Debug.command"

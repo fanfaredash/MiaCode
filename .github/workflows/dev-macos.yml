@@ -1,0 +1,61 @@
+name: Build macOS Dev
+
+on:
+  push:
+    branches:
+      - dev
+      - feature/qml-ui
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package Apple Silicon dev build
+    runs-on: macos-14
+    timeout-minutes: 90
+    env:
+      CMAKE_OSX_ARCHITECTURES: arm64
+      CMAKE_OSX_DEPLOYMENT_TARGET: "13.0"
+      MIACODE_FFMPEG_BUILD_JOBS: "4"
+      MIACODE_PACKAGE_CHANNEL: nightly
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build and package
+        run: bash scripts/build/build-macos-ci.sh
+
+      - name: Read package name
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=(dist/*.zip)
+          if [[ ${#packages[@]} -ne 1 || ! -f "${packages[0]}" ]]; then
+            echo "Expected one macOS package ZIP under dist/, found: ${packages[*]}" >&2
+            exit 1
+          fi
+          printf 'archive_name=%s\n' "$(basename "${packages[0]}")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.archive_name }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14

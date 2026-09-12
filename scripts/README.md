@@ -54,22 +54,32 @@ Qt 版本与模块、两套工具链定义、包内容清单、归档格式都�
 
 macOS:
 
-```bash
-bash scripts/build/build-macos.sh
-```
+本地出包，复用机器上已装的 Qt、FFmpeg dev SDK 与导出用 `ffmpeg`：
 
 ```bash
-QT_ROOT="$HOME/Qt/6.10.2/macos" CMAKE_OSX_ARCHITECTURES=arm64 bash scripts/build/package-mac.sh
+bash scripts/build/build-macos-local.sh
 ```
+
+CI 出包，先在干净环境安装 Qt 6.10.2 与两样 FFmpeg，再执行打包：
+
+```bash
+bash scripts/build/build-macos-ci.sh
+```
+
+两个入口都把 Release 构建与包装配交给 `package-mac.sh`；需要手工控制时可直接
+调用它，例如 `QT_ROOT="$HOME/Qt/6.10.2/macos" bash scripts/build/package-mac.sh`。
+CI 入口读 `QT_VERSION`、`QT_MODULES`、`MIACODE_PYTHON_VENV_DIR`；本地入口读
+`QT_ROOT`（按 `QT_VERSION` 依次探测 `.qt/` 与 `$HOME/Qt/`）、`BUILD_DIR` 与
+`MIACODE_FFMPEG_DEV_DIR`。设置 `MIACODE_PACKAGE_CHANNEL` 会在包名里插入渠道段。
 
 输出位于 `dist/`。指定单一 `arm64` 或 `x86_64` 架构时，打包流程会在
 `macdeployqt` 后裁掉 Qt Framework/插件中的另一架构切片，并在重新签名前验证
 包内所有 Mach-O 均包含且只包含目标架构。可设置
 `MIACODE_THIN_MACOS_APP=OFF` 生成保留 Qt universal 二进制的对照包。
 
-macOS 的 QtAVPlayer 预览解码还需要 FFmpeg dev SDK。先运行
-`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`，以生成仓库本地的
-`third_party/ffmpeg/macos/dev/` 固定 FFmpeg 6 SDK；打包仅复制其中必需的六个 dylib，
+macOS 的 QtAVPlayer 预览解码还需要 FFmpeg dev SDK，位于仓库本地的
+`third_party/ffmpeg/macos/dev/`，用 `bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh`
+生成（已存在且校验通过时直接复用）；打包仅复制其中必需的六个 dylib，
 不会查找或复制 Homebrew 依赖。也可用 `MIACODE_FFMPEG_DEV_DIR` 显式指定兼容 SDK。
 
 ## 其他脚本

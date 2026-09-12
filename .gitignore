@@ -6,6 +6,7 @@ build-macos*/
 dist/
 font_candidates/
 .qt/
+.venv/
 .DS_Store
 .vs/
 .idea/
@@ -128,7 +129,8 @@ third_party/**/*.a
 scripts/*
 !scripts/build/
 scripts/build/*
-!scripts/build/build-macos.sh
+!scripts/build/build-macos-ci.sh
+!scripts/build/build-macos-local.sh
 !scripts/build/build-win.ps1
 !scripts/build/package-mac.sh
 !scripts/build/package-win.ps1

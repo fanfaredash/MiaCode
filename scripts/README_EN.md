@@ -58,13 +58,27 @@ generators cannot share one.
 
 macOS:
 
-```bash
-bash scripts/build/build-macos.sh
-```
+Local packaging, reusing the Qt install, FFmpeg dev SDK, and export `ffmpeg`
+already present on the machine:
 
 ```bash
-QT_ROOT="$HOME/Qt/6.10.2/macos" CMAKE_OSX_ARCHITECTURES=arm64 bash scripts/build/package-mac.sh
+bash scripts/build/build-macos-local.sh
 ```
+
+CI packaging, installing Qt 6.10.2 and both FFmpeg pieces on a clean runner
+before assembling the package:
+
+```bash
+bash scripts/build/build-macos-ci.sh
+```
+
+Both entries hand the Release build and package assembly to `package-mac.sh`;
+call it directly for manual control, for example
+`QT_ROOT="$HOME/Qt/6.10.2/macos" bash scripts/build/package-mac.sh`. The CI
+entry reads `QT_VERSION`, `QT_MODULES`, and `MIACODE_PYTHON_VENV_DIR`; the local
+entry reads `QT_ROOT` (probing `.qt/` then `$HOME/Qt/` for `QT_VERSION`),
+`BUILD_DIR`, and `MIACODE_FFMPEG_DEV_DIR`. Setting `MIACODE_PACKAGE_CHANNEL`
+inserts a channel segment into the package name.
 
 Artifacts are written to `dist/`. When a single `arm64` or `x86_64`
 architecture is requested, packaging removes the other architecture slice from
@@ -73,11 +87,12 @@ Mach-O contains only the target architecture before re-signing. Set
 `MIACODE_THIN_MACOS_APP=OFF` to produce a comparison package that keeps Qt's
 universal binaries.
 
-The macOS QtAVPlayer preview decoder also needs an FFmpeg development SDK. Run
-`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh` once to create the pinned,
-repo-local FFmpeg 6 SDK under `third_party/ffmpeg/macos/dev/`. `package-mac.sh`
-uses that SDK (or an explicit compatible `MIACODE_FFMPEG_DEV_DIR`) and stages
-only its six required dylibs; it does not discover or copy Homebrew.
+The macOS QtAVPlayer preview decoder also needs an FFmpeg development SDK at the
+repo-local `third_party/ffmpeg/macos/dev/`, created by
+`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh` (an existing SDK that passes
+validation is reused). `package-mac.sh` uses that SDK (or an explicit compatible
+`MIACODE_FFMPEG_DEV_DIR`) and stages only its six required dylibs; it does not
+discover or copy Homebrew.
 
 ## Other Scripts
 
