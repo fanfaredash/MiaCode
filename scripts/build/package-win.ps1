@@ -614,7 +614,7 @@ foreach ($runtimeDll in $requiredBassRuntimeDlls) {
 }
 
 # FFmpeg shared runtime for the QtAVPlayer preview decode backend.
-# PreviewStageMediaHost decodes PV/BG via QtAVPlayer (FFmpeg n8.1 LGPL); these
+# PreviewStageMediaHost decodes PV/BG via QtAVPlayer; these
 # av*.dll must sit next to MiaCode.exe. avfilter is NET-NEW vs the older
 # package (Qt never shipped it; avdevice is dropped — capture-device only); the
 # other five overlap with what windeployqt stages for Qt

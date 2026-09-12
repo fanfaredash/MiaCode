@@ -33,31 +33,42 @@ jobs:
           lfs: true
           submodules: recursive
 
+      - name: Restore finished package
+        id: package-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: dist
+          key: package-windows-x64-v1-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'src/**', 'resources/**', 'assets/**', 'translations/**', 'templates/**', 'third_party/**', 'scripts/build/**', 'scripts/ffmpeg/**', 'LICENSE', 'LICENSE_SCOPE.md', 'THIRD_PARTY_NOTICES.md') }}
+
       - name: Restore Qt
+        if: steps.package-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v6
         with:
           path: .qt/6.11.1/msvc2022_64
           key: qt-6.11.1-windows-x64
 
       - name: Restore media kit
+        if: steps.package-cache.outputs.cache-hit != 'true'
         id: media-cache
         uses: actions/cache/restore@v6
         with:
           path: |
             third_party/ffmpeg/windows/win64/dev
             third_party/ffmpeg/windows/win64/ffmpeg.exe
-          key: media-windows-x64-${{ hashFiles('scripts/ffmpeg/trim/**') }}
-          restore-keys: media-windows-x64-
+          key: media-windows-x64-ffmpeg7.1-${{ hashFiles('scripts/ffmpeg/ensure-windows-ffmpeg.ps1', 'scripts/ffmpeg/trim/**') }}
+          restore-keys: media-windows-x64-ffmpeg7.1-
 
       - name: Restore compiled objects
+        if: steps.package-cache.outputs.cache-hit != 'true'
         id: build-cache
         uses: actions/cache/restore@v6
         with:
           path: build-msvc
-          key: build-windows-x64-qt6.11.1-${{ github.sha }}
-          restore-keys: build-windows-x64-qt6.11.1-
+          key: build-windows-x64-qt6.11.1-ffmpeg7.1-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'src/**', 'resources/**', 'translations/**', 'third_party/**') }}
+          restore-keys: build-windows-x64-qt6.11.1-ffmpeg7.1-
 
       - name: Build and package
+        if: steps.package-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -65,7 +76,7 @@ jobs:
           ./scripts/build/build-win.ps1 -Toolchain msvc -BuildDir build-msvc -BuildJobs $jobs
 
       - name: Save media kit
-        if: always() && steps.media-cache.outputs.cache-hit != 'true'
+        if: always() && steps.package-cache.outputs.cache-hit != 'true' && steps.media-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -74,11 +85,22 @@ jobs:
           key: ${{ steps.media-cache.outputs.cache-primary-key }}
 
       - name: Save compiled objects
-        if: always() && steps.build-cache.outputs.cache-hit != 'true'
+        if: always() && steps.package-cache.outputs.cache-hit != 'true' && steps.build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: build-msvc
           key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+      - name: Verify package
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $distDirs = @(Get-ChildItem dist -Directory -Filter "MiaCode_*_win_x64")
+          if ($distDirs.Count -ne 1) {
+            throw "Expected one Windows x64 package directory, found: $($distDirs.Name -join ', ')"
+          }
+          ./scripts/build/verify-win-package.ps1 -DistDir $distDirs[0].FullName -Arch x64 -SkipLaunch
 
       - name: Resolve artifact name
         id: package
@@ -90,6 +112,23 @@ jobs:
             throw "Expected one Windows package archive under dist, found: $($archives.Name -join ', ')"
           }
           "archive_name=$($archives[0].Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Enforce x64 package size
+        shell: pwsh
+        run: |
+          $archive = Get-Item "dist/${{ steps.package.outputs.archive_name }}"
+          $sizeMb = [math]::Round($archive.Length / 1MB, 2)
+          Write-Host "Windows x64 package: $sizeMb MB"
+          if ($archive.Length -ge 80MB) {
+            throw "Windows x64 package exceeds 80 MB: $sizeMb MB"
+          }
+
+      - name: Save finished package
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: dist
+          key: ${{ steps.package-cache.outputs.cache-primary-key }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

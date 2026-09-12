@@ -64,13 +64,11 @@
             x64   = 'third_party\ffmpeg\windows\win64'
             arm64 = 'third_party\ffmpeg\windows\winarm64'
         }
-        # Both architectures use the FFmpeg 8.1 ABI. x64 keeps the compact
-        # decode-only build; arm64 uses the matching upstream shared SDK.
+        # x64 uses the verified compact FFmpeg 7.1 preview SDK; arm64 keeps 8.1.
         RuntimeDllsByArch = @{
             x64 = @(
-                'avcodec-62.dll', 'avformat-62.dll', 'avutil-60.dll',
-                'swresample-6.dll', 'swscale-9.dll', 'avfilter-11.dll',
-                'libwinpthread-1.dll'
+                'avcodec-61.dll', 'avformat-61.dll', 'avutil-59.dll',
+                'swresample-5.dll', 'swscale-8.dll', 'avfilter-10.dll'
             )
             arm64 = @(
                 'avcodec-62.dll', 'avformat-62.dll', 'avutil-60.dll',
@@ -147,7 +145,7 @@
             'qmltooling'
         )
         # Also removed from app\ after deployment. Preview uses QtAVPlayer with
-        # the project FFmpeg 8 runtime, and the renderer uses D3D11.
+        # the project FFmpeg runtime, and the renderer uses D3D11.
         RemovedAppFiles = @(
             'opengl32sw.dll',
             'dxcompiler.dll', 'dxil.dll',
@@ -200,9 +198,8 @@
         AdditionalRequiredRelativePathsByArch = @{
             x64 = @(
                 'app\bass_aac.dll',
-                'app\avcodec-62.dll', 'app\avformat-62.dll', 'app\avutil-60.dll',
-                'app\swresample-6.dll', 'app\swscale-9.dll', 'app\avfilter-11.dll',
-                'app\libwinpthread-1.dll'
+                'app\avcodec-61.dll', 'app\avformat-61.dll', 'app\avutil-59.dll',
+                'app\swresample-5.dll', 'app\swscale-8.dll', 'app\avfilter-10.dll'
             )
             arm64 = @(
                 'app\avcodec-62.dll', 'app\avformat-62.dll', 'app\avutil-60.dll',

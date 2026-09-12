@@ -13,8 +13,11 @@
     # needs makes that video silently fail. When unsure, keep it.
     # =====================================================================
 
-    # Shared preview SDK baseline for every packaged architecture.
-    FFmpegVersion = 'n8.1.2'
+    # FFmpeg source tag to build. MUST stay on the n7.1 series so the produced
+    # DLL/import-lib basenames keep the major versions the x64 preview SDK is
+    # pinned to (scripts/build/windows-toolchain.psd1 + CMakeLists.txt).
+    # arm64 ships the full BtbN n8.1 LGPL SDK untrimmed.
+    FFmpegVersion = 'n7.1'
 
     # ABI-pinned outputs this build must produce (major-version-locked).
     # The build script asserts each of these DLLs + a matching import lib
@@ -22,8 +25,8 @@
     # absent (dropped — capture-device only; QtAVPlayer is patched not to use
     # it, see QT_AVPLAYER_NO_AVDEVICE).
     ExpectedDlls = @(
-        'avcodec-62', 'avformat-62', 'avutil-60',
-        'swresample-6', 'swscale-9', 'avfilter-11'
+        'avcodec-61', 'avformat-61', 'avutil-59',
+        'swresample-5', 'swscale-8', 'avfilter-10'
     )
 
     # ---------------------------------------------------------------------
@@ -92,15 +95,10 @@
         #    no such external dep remains (objdump assert).
         #  --enable-libdav1d: software AV1 decoder (see the 'libdav1d' decoder note
         #    below). Needs mingw-w64-x86_64-dav1d installed in the toolchain step.
-        #    dav1d must link STATICALLY into avcodec-62.dll or the self-containment
+        #    dav1d must link STATICALLY into avcodec-61.dll or the self-containment
         #    objdump assert (no external libdav1d.dll/libwinpthread) will fail; if it
         #    trips, add '--pkg-config-flags=--static' here and rebuild.
-        ExtraConfigureArgs = @(
-            '--enable-d3d11va', '--enable-dxva2', '--disable-iconv',
-            '--enable-libdav1d', '--pkg-config-flags=--static', '--extra-ldflags=-static-libgcc',
-            '--disable-autodetect', '--enable-small', '--enable-ffmpeg',
-            '--disable-ffplay', '--disable-ffprobe', '--disable-avdevice'
-        )
+        ExtraConfigureArgs = @('--enable-d3d11va', '--enable-dxva2', '--disable-iconv', '--enable-libdav1d', '--extra-ldflags=-static')
     }
 
     # ---------------------------------------------------------------------
@@ -137,20 +135,7 @@
     # Container demuxers. mov = mp4/m4v/mov; matroska = mkv/webm.
     Demuxers = @(
         'mov', 'matroska', 'avi', 'flv', 'mpegts', 'mpegps', 'asf',
-        'mp3', 'wav', 'ogg', 'flac', 'aac', 'image2', 'gif', 'rawvideo'
-    )
-
-    Encoders = @(
-        'libx264', 'aac', 'mpeg4',
-        'h264_mf', 'hevc_mf',
-        'h264_nvenc', 'hevc_nvenc',
-        'h264_qsv', 'hevc_qsv',
-        'h264_amf', 'hevc_amf'
-    )
-    Muxers = @('mov')
-    ExportFilters = @(
-        'color', 'split', 'crop', 'pad', 'alphamerge', 'overlay', 'fade',
-        'trim', 'tpad', 'atrim', 'volume', 'amix'
+        'mp3', 'wav', 'ogg', 'flac', 'aac', 'image2', 'gif'
     )
 
     # Parsers — paired with the decoders above. A decoder without its parser

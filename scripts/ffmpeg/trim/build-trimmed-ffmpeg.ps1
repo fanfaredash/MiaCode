@@ -1,10 +1,13 @@
 ﻿<#
 .SYNOPSIS
-    Build MiaCode's compact FFmpeg 8.1.2 preview SDK and export program.
+    Build a decode-only, minimal-size FFmpeg (n7.1, LGPL, shared) for MiaCode's
+    QtAVPlayer preview backend and install it into third_party/ffmpeg/windows/win64/dev.
 
 .DESCRIPTION
-    Builds an LGPL shared preview SDK and a separate GPL static export program
-    from one source checkout and one component allowlist.
+    Replaces the full ~110 MB BtbN FFmpeg DLL set with a trimmed build that keeps
+    only the components MiaCode actually needs (see trim-allowlist.psd1), shrinking
+    avcodec/avformat/avfilter dramatically while keeping QtAVPlayer's mandatory
+    filtergraph plumbing intact.
 
     Pipeline:
       0. Preflight   — MSYS2 (make/gcc/nasm), MSVC (dumpbin/lib via vcvars), git.
@@ -14,6 +17,7 @@
                        typo'd / nonexistent component is reported, never silently
                        dropped or fed to configure as a hard error.
       4. Configure   — --disable-everything + the validated --enable-* allowlist.
+                       Strictly LGPL: NO --enable-gpl / --enable-nonfree / x264.
       5. Build       — make + make install into a staging prefix.
       6. ImportLibs  — DLL -> .def (dumpbin) -> .lib (lib.exe) for MSVC linking.
       7. Assemble    — back up the existing dev SDK, then install the 6 trimmed
@@ -21,7 +25,9 @@
       8. Verify      — run the trimmed ffmpeg to assert every mandatory filter +
                        allowlisted decoder/demuxer is present; report size delta.
 
-    LICENSE: the preview SDK remains LGPL. The standalone libx264 export program is GPL.
+    LICENSE: decode-only => pure LGPL v2.1+, identical obligations to the FFmpeg
+    already shipped. Do NOT add --enable-gpl / libx264 — that would make MiaCode
+    GPL. (Export encoding stays in the separate GPL ffmpeg.exe by design.)
 
 .PARAMETER PrintPlanOnly
     Run preflight + allowlist→flags assembly and print the exact configure command
@@ -49,7 +55,6 @@ param(
     [string[]]$FfmpegGitUrl = @(),
     [switch]$SkipToolchainInstall,
     [switch]$SkipSourceFetch,
-    [switch]$ExportOnly,
     [switch]$PrintPlanOnly
 )
 
@@ -214,8 +219,6 @@ $plannedFilters = @($mand.Filters)
 $alwaysOnFilters = if ($mand.AlwaysOnFilters) { @($mand.AlwaysOnFilters) } else { @('buffer','buffersink','abuffer','abuffersink') }
 $plannedDecoders = @($allow.Decoders)
 $plannedDemuxers = @($allow.Demuxers)
-$plannedEncoders = @($allow.Encoders)
-$plannedMuxers = @($allow.Muxers)
 $plannedParsers = @($allow.Parsers)
 $plannedBsfs = @($mand.Bsfs)
 $plannedHwaccels = @($mand.Hwaccels)
@@ -229,12 +232,10 @@ if ($PrintPlanOnly) {
     Write-Host "  output dir : $OutputDir"
     Write-Host "  configure (component names NOT yet validated against --list-*):"
     Write-Host ("    --disable-everything --disable-doc --disable-debug --disable-static --enable-shared")
-    Write-Host ("    --arch=x86_64 --target-os=mingw32")
+    Write-Host ("    --arch=x86_64 --target-os=mingw32 (NO --enable-gpl / nonfree — LGPL decode-only)")
     Write-Host ("    --enable-decoder=" + ($plannedDecoders -join ','))
     Write-Host ("    --enable-parser="  + ($plannedParsers  -join ','))
     Write-Host ("    --enable-demuxer=" + ($plannedDemuxers -join ','))
-    Write-Host ("    --enable-encoder=" + ($plannedEncoders -join ','))
-    Write-Host ("    --enable-muxer=" + ($plannedMuxers -join ','))
     Write-Host ("    --enable-protocol=" + ($plannedProtocols -join ','))
     Write-Host ("    --enable-filter="  + ($plannedFilters  -join ','))
     Write-Host ("    --enable-bsf="     + ($plannedBsfs     -join ','))
@@ -242,7 +243,7 @@ if ($PrintPlanOnly) {
     Write-Host ("    " + ($extraArgs -join ' '))
     Write-Host ""
     Write-Host "  phases: toolchain(pacman) -> clone $($allow.FFmpegVersion) -> validate -> configure -> make -j$Jobs -> import-libs -> assemble(+backup) -> verify"
-    Write-Host "  Re-run without -PrintPlanOnly to build."
+    Write-Host "  Re-run without -PrintPlanOnly to build. Expect ~30-60 min."
     return
 }
 
@@ -251,8 +252,8 @@ if (-not $SkipToolchainInstall) {
     Write-Host "== Toolchain (pacman) =="
     # mingw-w64-x86_64-dav1d: software AV1 decoder (libdav1d), required by the
     # --enable-libdav1d flag in trim-allowlist.psd1 ExtraConfigureArgs. Ships a
-    # static libdav1d.a so it can link into avcodec-62.dll (self-contained).
-    Invoke-Msys2Bash "$(To-Msys2Path $pacmanExe) -S --needed --noconfirm make diffutils pkgconf git mingw-w64-x86_64-gcc mingw-w64-x86_64-nasm mingw-w64-x86_64-dav1d mingw-w64-x86_64-x264 mingw-w64-x86_64-ffnvcodec-headers mingw-w64-x86_64-libvpl mingw-w64-x86_64-amf-headers"
+    # static libdav1d.a so it can link into avcodec-61.dll (self-contained).
+    Invoke-Msys2Bash "$(To-Msys2Path $pacmanExe) -S --needed --noconfirm make diffutils pkgconf git mingw-w64-x86_64-gcc mingw-w64-x86_64-nasm mingw-w64-x86_64-dav1d"
 } else {
     Write-Host "== Toolchain install skipped (-SkipToolchainInstall) =="
 }
@@ -279,10 +280,7 @@ Write-Host "== Validate allowlist against ./configure --list-* =="
 $decoders = Select-Available $plannedDecoders (Get-ValidComponents $srcMsys 'decoders') 'decoders'
 $parsers  = Select-Available $plannedParsers  (Get-ValidComponents $srcMsys 'parsers')  'parsers'
 $demuxers = Select-Available $plannedDemuxers (Get-ValidComponents $srcMsys 'demuxers') 'demuxers'
-$encoders = Select-Available $plannedEncoders (Get-ValidComponents $srcMsys 'encoders') 'encoders'
-$muxers = Select-Available $plannedMuxers (Get-ValidComponents $srcMsys 'muxers') 'muxers'
 $filters  = Select-Available $plannedFilters  (Get-ValidComponents $srcMsys 'filters')  'filters'
-$exportFilters = Select-Available @($plannedFilters + @($allow.ExportFilters) | Select-Object -Unique) (Get-ValidComponents $srcMsys 'filters') 'export filters'
 $bsfs     = Select-Available $plannedBsfs     (Get-ValidComponents $srcMsys 'bsfs')     'bsfs'
 $hwaccels = Select-Available $plannedHwaccels (Get-ValidComponents $srcMsys 'hwaccels') 'hwaccels'
 $protocols = Select-Available $plannedProtocols (Get-ValidComponents $srcMsys 'protocols') 'protocols'
@@ -296,42 +294,6 @@ $protocols = Select-Available $plannedProtocols (Get-ValidComponents $srcMsys 'p
 $cfgText = Get-Content -Raw -LiteralPath (Join-Path $ffmpegSrcWin 'configure')
 if ($cfgText -notmatch 'asrc_abuffer\s+vsrc_buffer\s+asink_abuffer\s+vsink_buffer') {
     throw "This FFmpeg's configure no longer auto-includes the buffer/buffersink filtergraph endpoints unconditionally; the trim allowlist + this guard need review before building (would risk breaking ALL playback)."
-}
-
-function Build-ExportFfmpeg {
-    $exportPrefix = Join-Path $SourceDir 'export-install'
-    $exportPrefixMsys = To-Msys2Path $exportPrefix
-    $exportCfg = @(
-        "./configure",
-        "--prefix='$exportPrefixMsys'",
-        "--arch=x86_64", "--target-os=mingw32",
-        "--enable-static", "--disable-shared",
-        "--disable-everything", "--disable-autodetect", "--disable-doc", "--disable-debug", "--enable-small",
-        "--enable-gpl", "--enable-libx264", "--enable-ffnvcodec", "--enable-libvpl",
-        "--enable-amf", "--enable-mediafoundation", "--pkg-config-flags=--static", "--extra-ldflags=-static",
-        "--enable-ffmpeg", "--disable-ffplay", "--disable-ffprobe", "--disable-avdevice",
-        "--enable-decoder=$($decoders -join ',')",
-        "--enable-parser=$($parsers -join ',')",
-        "--enable-demuxer=$($demuxers -join ',')",
-        "--enable-encoder=$($encoders -join ',')",
-        "--enable-muxer=$($muxers -join ',')",
-        "--enable-protocol=$($protocols -join ',')",
-        "--enable-filter=$($exportFilters -join ',')",
-        "--enable-bsf=$($bsfs -join ',')"
-    )
-    $exportCfgLine = $exportCfg -join ' '
-    Write-Host "== Build compact static export ffmpeg =="
-    Invoke-Msys2Bash "cd '$srcMsys' && make distclean >/dev/null 2>&1 || true; $exportCfgLine && make -j$Jobs"
-    Invoke-Msys2Bash "strip '$srcMsys/ffmpeg.exe'"
-    $exportPath = Join-Path (Split-Path $OutputDir -Parent) 'ffmpeg.exe'
-    Copy-Item (Join-Path $ffmpegSrcWin 'ffmpeg.exe') $exportPath -Force
-    $exportSize = [math]::Round((Get-Item $exportPath).Length / 1MB, 1)
-    Write-Host "  export ffmpeg.exe: $exportSize MB"
-}
-
-if ($ExportOnly) {
-    Build-ExportFfmpeg
-    return
 }
 
 # ---- 4 + 5. configure + build ----------------------------------------------
@@ -355,23 +317,20 @@ Write-Host "  $cfgLine"
 Invoke-Msys2Bash "cd '$srcMsys' && $cfgLine"
 Write-Host "== Build (make -j$Jobs) =="
 Invoke-Msys2Bash "cd '$srcMsys' && make -j$Jobs && make install"
-Invoke-Msys2Bash "strip '$prefixMsys/bin/ffmpeg.exe' '$prefixMsys/bin/'*.dll"
 
 # ---- 6. MSVC import libs ----------------------------------------------------
 Write-Host "== Generate MSVC import libs (dumpbin -> .def -> lib) =="
 $stageBin = Join-Path $prefix 'bin'
 $stageLib = Join-Path $prefix 'lib'
-$mingwRuntime = Join-Path $Msys2Root 'mingw64\bin\libwinpthread-1.dll'
-if (!(Test-Path $mingwRuntime)) { throw "Missing MinGW runtime: $mingwRuntime" }
-Copy-Item $mingwRuntime $stageBin -Force
 foreach ($base in $allow.ExpectedDlls) {
     $dll = Join-Path $stageBin "$base.dll"
     if (!(Test-Path $dll)) { throw "Expected DLL not produced: $dll (check the allowlist / configure output)" }
-    # avcodec-62.dll -> avcodec.lib (strip the -NN major suffix to match find_library NAMES)
+    # avcodec-61.dll -> avcodec.lib (strip the -NN major suffix to match find_library NAMES)
     $libBase = ($base -replace '-\d+$', '')
     New-MsvcImportLib -DllPath $dll -OutLibPath (Join-Path $stageLib "$libBase.lib") -Vcvars $vcvars
     Write-Host "  $base.dll -> $libBase.lib"
 }
+
 # ---- 7. assemble into the dev SDK (with backup) ----------------------------
 Write-Host "== Assemble into $OutputDir =="
 if (Test-Path $OutputDir) {
@@ -397,7 +356,6 @@ foreach ($base in $allow.ExpectedDlls) {
     $libBase = ($base -replace '-\d+$', '')
     Copy-Item (Join-Path $stageLib "$libBase.lib") (Join-Path $OutputDir 'lib') -Force
 }
-Copy-Item (Join-Path $stageBin 'libwinpthread-1.dll') (Join-Path $OutputDir 'bin') -Force
 
 # ---- 8. verify -------------------------------------------------------------
 Write-Host "== Verify =="
@@ -428,7 +386,7 @@ if (Test-Path $ffmpegExe) {
 # these. Verify with objdump so a regression fails the build instead of shipping a
 # DLL that crashes the app on a clean machine.
 Write-Host "== Verify self-containment (no external MinGW runtime deps) =="
-$forbidden = 'zlib1\.dll|libiconv|libgcc_s|libstdc\+\+|libssp'
+$forbidden = 'libwinpthread|zlib1\.dll|libiconv|libgcc_s|libstdc\+\+|libssp'
 $selfFail = @()
 foreach ($base in $allow.ExpectedDlls) {
     $dllMsys = To-Msys2Path (Join-Path $OutputDir "bin\$base.dll")
@@ -440,9 +398,6 @@ if ($selfFail.Count -gt 0) {
     throw ("Trimmed DLLs still depend on un-shipped MinGW runtime DLLs (app would fail to open):`n  " + ($selfFail -join "`n  ") + "`nFix the static-link flags in trim-allowlist.psd1 ExtraConfigureArgs and rebuild.")
 }
 Write-Host "  OK - all av*.dll are self-contained (no external MinGW runtime DLL deps)."
-
-Build-ExportFfmpeg
-
 $newSize = Get-DirSizeMB (Join-Path $OutputDir 'bin')
 $backupDir = "$OutputDir.full.bak"
 Write-Host ""
