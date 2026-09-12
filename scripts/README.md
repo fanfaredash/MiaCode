@@ -33,14 +33,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchai
 powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot> -BuildDir <BuildDir> -Arch x64
 
 # 出包后校验
-powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v<version>-windows-x64 -Arch x64
+powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode_<version>_win_x64 -Arch x64
 ```
 
 `build-win.ps1` 依次执行：Python 依赖（仅 py7zr）、导出用 `ffmpeg.exe`、预览用 FFmpeg
 dev SDK（x64 走裁剪构建，`-SkipTrim` 关闭）、Qt 定位、CMake 配置与构建、调用 `package-win.ps1` 打包。两条 FFmpeg 链与打包
 链都按 `-Toolchain` 推导出的目标架构选择各自的目录：`third_party\ffmpeg\windows\<win64|winarm64>\`
-与 `third_party\bass\bin\<win64|winarm64>\`，包名分别为 `MiaCode-v<version>-windows-x64` 与
-`MiaCode-v<version>-windows-arm64`（设 `MIACODE_PACKAGE_CHANNEL` 时在版本后插入渠道段）。arm64 不随包分发 `bass_aac.dll`（上游只提供 x86/x64 版本），
+与 `third_party\bass\bin\<win64|winarm64>\`，包名分别为 `MiaCode_<version>_win_x64` 与
+`MiaCode_<version>_win_arm64`（设 `MIACODE_PACKAGE_CHANNEL` 时在版本后插入渠道段）。arm64 不随包分发 `bass_aac.dll`（上游只提供 x86/x64 版本），
 音频后端对缺失插件已有存在性检查。
 
 Qt 定位顺序：`-QtRoot` → `C:\Qt\<版本>\<架构目录>` → `.qt\<版本>\<架构目录>` →

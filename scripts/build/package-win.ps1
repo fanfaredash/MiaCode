@@ -380,7 +380,7 @@ if ([string]::IsNullOrWhiteSpace($distNamePattern)) {
     throw "Package.DistNamePattern is missing from windows-toolchain.psd1."
 }
 if ([string]::IsNullOrWhiteSpace($DistDir)) {
-    $channelSegment = if ($packageChannel) { "-$packageChannel" } else { "" }
+    $channelSegment = if ($packageChannel) { "_$packageChannel" } else { "" }
     $distName = $distNamePattern.Replace("{version}", $version).Replace("{channel}", $channelSegment).Replace("{arch}", $archName)
     $DistDir = Join-Path (Join-Path $repoRoot "dist") $distName
 } else {

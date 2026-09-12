@@ -132,9 +132,11 @@
     }
 
     Package = @{
-        # Release artifact folder name: <name>-v<version>[-<channel>]-<os>-<arch>.
-        # {channel} expands to '-<channel>' when MIACODE_PACKAGE_CHANNEL is set.
-        DistNamePattern = 'MiaCode-v{version}{channel}-windows-{arch}'
+        # Release artifact folder name: <name>_<version>[_<channel>]_<os>_<arch>.
+        # {channel} expands to '_<channel>' when MIACODE_PACKAGE_CHANNEL is set.
+        # Separators stay underscores except inside the version, which keeps its
+        # own dots and hyphens (e.g. 2.0.0-alpha).
+        DistNamePattern = 'MiaCode_{version}{channel}_win_{arch}'
         DistArchName = @{
             x64   = 'x64'
             arm64 = 'arm64'

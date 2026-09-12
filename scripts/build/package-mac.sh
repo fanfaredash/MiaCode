@@ -58,12 +58,14 @@ package_step() {
 }
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
-# Release artifact name: <name>-v<version>[-<channel>]-<os>-<arch>.
-PACKAGE_NAME="MiaCode-v${VERSION}"
+# Release artifact name: <name>_<version>[_<channel>]_<os>_<arch>. Separators
+# stay underscores except inside the version, which keeps its own dots and
+# hyphens (e.g. 2.0.0-alpha).
+PACKAGE_NAME="MiaCode_${VERSION}"
 if [[ -n "$PACKAGE_CHANNEL" ]]; then
-  PACKAGE_NAME+="-${PACKAGE_CHANNEL}"
+  PACKAGE_NAME+="_${PACKAGE_CHANNEL}"
 fi
-PACKAGE_NAME+="-macos-${PACKAGE_ARCHITECTURES}"
+PACKAGE_NAME+="_mac_${PACKAGE_ARCHITECTURES}"
 DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/$PACKAGE_NAME}"
 
 version_gt() {

@@ -20,7 +20,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     env:
-      # Release artifact marker: MiaCode-v<version>-nightly-windows-<arch>.
+      # Release artifact marker: MiaCode_<version>_nightly_win_<arch>.
       MIACODE_PACKAGE_CHANNEL: nightly
     strategy:
       fail-fast: false
@@ -61,7 +61,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $distDirs = @(Get-ChildItem dist -Directory -Filter "MiaCode-*-windows-${{ matrix.arch }}")
+          $distDirs = @(Get-ChildItem dist -Directory -Filter "MiaCode_*_win_${{ matrix.arch }}")
           if ($distDirs.Count -ne 1) {
             throw "Expected one MiaCode-*-windows-${{ matrix.arch }} directory under dist, found: $($distDirs.Name -join ', ')"
           }

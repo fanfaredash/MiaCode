@@ -33,7 +33,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchai
 powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot> -BuildDir <BuildDir> -Arch x64
 
 # Verify a package
-powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v<version>-windows-x64 -Arch x64
+powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode_<version>_win_x64 -Arch x64
 ```
 
 `build-win.ps1` runs, in order: Python dependencies (py7zr only), the export `ffmpeg.exe`, the
@@ -41,8 +41,8 @@ preview FFmpeg dev SDK (a trim build on x64 unless `-SkipTrim` is set), Qt resol
 build, then `package-win.ps1`. Both
 FFmpeg chains and the packaging chain pick their directories from the architecture the selected
 toolchain targets: `third_party\ffmpeg\windows\<win64|winarm64>\` and
-`third_party\bass\bin\<win64|winarm64>\`, producing `MiaCode-v<version>-windows-x64` or
-`MiaCode-v<version>-windows-arm64` (a channel segment from `MIACODE_PACKAGE_CHANNEL` lands right after the version). The arm64 package ships no `bass_aac.dll` (upstream publishes that
+`third_party\bass\bin\<win64|winarm64>\`, producing `MiaCode_<version>_win_x64` or
+`MiaCode_<version>_win_arm64` (a channel segment from `MIACODE_PACKAGE_CHANNEL` lands right after the version). The arm64 package ships no `bass_aac.dll` (upstream publishes that
 add-on for x86/x64 only); the audio backend already tolerates a missing add-on.
 
 Qt resolution order: `-QtRoot` → `C:\Qt\<version>\<arch dir>` → `.qt\<version>\<arch dir>` →
