@@ -19,6 +19,9 @@ jobs:
     name: Package Windows ${{ matrix.arch }} dev build
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
+    env:
+      # Release artifact marker: MiaCode-v<version>-nightly-windows-<arch>.
+      MIACODE_PACKAGE_CHANNEL: nightly
     strategy:
       fail-fast: false
       matrix:
@@ -27,7 +30,6 @@ jobs:
             runner: windows-2022
             toolchain: msvc
             buildDir: build-msvc
-            distSuffix: win64
             # x64 builds the decode-only preview FFmpeg SDK by default; MSYS2
             # and MSVC are preinstalled on this image, so the trim toolchain
             # runs as-is.
@@ -35,7 +37,6 @@ jobs:
             runner: windows-11-arm
             toolchain: msvc-arm64
             buildDir: build-msvc-arm64
-            distSuffix: winarm64
             # arm64 ships the full BtbN n8.1 LGPL SDK (the trim toolchain covers
             # x64 only, so no trim runs here).
 
@@ -60,9 +61,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $distDirs = @(Get-ChildItem dist -Directory -Filter "MiaCode-*-${{ matrix.distSuffix }}")
+          $distDirs = @(Get-ChildItem dist -Directory -Filter "MiaCode-*-windows-${{ matrix.arch }}")
           if ($distDirs.Count -ne 1) {
-            throw "Expected one MiaCode-*-${{ matrix.distSuffix }} directory under dist, found: $($distDirs.Name -join ', ')"
+            throw "Expected one MiaCode-*-windows-${{ matrix.arch }} directory under dist, found: $($distDirs.Name -join ', ')"
           }
           # Headless runner: no display session, so the launcher smoke test is a
           # local-machine check (see docs/ops/RELEASE_CHECKLIST.md), not a CI one.

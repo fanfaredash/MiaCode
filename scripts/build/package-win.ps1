@@ -16,6 +16,7 @@ $ErrorActionPreference = "Stop"
 # Qt version, toolchains and the package contents contract live in one data
 # file so the build chain and the packaging chain cannot drift apart.
 $toolchainData = Import-PowerShellDataFile -Path (Join-Path $PSScriptRoot "windows-toolchain.psd1")
+$packageChannel = if ([string]::IsNullOrWhiteSpace($env:MIACODE_PACKAGE_CHANNEL)) { "" } else { $env:MIACODE_PACKAGE_CHANNEL }
 
 function Resolve-RepoPath {
     param(
@@ -367,12 +368,21 @@ if (![string]::IsNullOrWhiteSpace($QtRoot)) {
 }
 $versionInfo = Read-VersionInfoFromCMake -CMakeFilePath (Join-Path $repoRoot "CMakeLists.txt")
 $version = $versionInfo.PackageVersion
-$distNamePattern = $toolchainData.Package.DistNameByArch.$Arch
+if ($packageChannel -and $packageChannel -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') {
+    throw "MIACODE_PACKAGE_CHANNEL must start with an alphanumeric character and contain only letters, digits, dots, underscores, or hyphens (got: $packageChannel)"
+}
+$archName = $toolchainData.Package.DistArchName.$Arch
+if ([string]::IsNullOrWhiteSpace($archName)) {
+    throw "No DistArchName entry for architecture '$Arch' in windows-toolchain.psd1."
+}
+$distNamePattern = $toolchainData.Package.DistNamePattern
 if ([string]::IsNullOrWhiteSpace($distNamePattern)) {
-    throw "No package name pattern for architecture '$Arch' in windows-toolchain.psd1."
+    throw "Package.DistNamePattern is missing from windows-toolchain.psd1."
 }
 if ([string]::IsNullOrWhiteSpace($DistDir)) {
-    $DistDir = Join-Path (Join-Path $repoRoot "dist") $distNamePattern.Replace("{version}", $version)
+    $channelSegment = if ($packageChannel) { "-$packageChannel" } else { "" }
+    $distName = $distNamePattern.Replace("{version}", $version).Replace("{channel}", $channelSegment).Replace("{arch}", $archName)
+    $DistDir = Join-Path (Join-Path $repoRoot "dist") $distName
 } else {
     $DistDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $DistDir
 }

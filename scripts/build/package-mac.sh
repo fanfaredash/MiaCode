@@ -58,12 +58,12 @@ package_step() {
 }
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
-MACOS_PACKAGE_SUFFIX="macos-apple-silicon"
+# Release artifact name: <name>-v<version>[-<channel>]-<os>-<arch>.
 PACKAGE_NAME="MiaCode-v${VERSION}"
 if [[ -n "$PACKAGE_CHANNEL" ]]; then
   PACKAGE_NAME+="-${PACKAGE_CHANNEL}"
 fi
-PACKAGE_NAME+="-${MACOS_PACKAGE_SUFFIX}"
+PACKAGE_NAME+="-macos-${PACKAGE_ARCHITECTURES}"
 DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/$PACKAGE_NAME}"
 
 version_gt() {

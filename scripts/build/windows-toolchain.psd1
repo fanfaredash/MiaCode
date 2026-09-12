@@ -132,9 +132,12 @@
     }
 
     Package = @{
-        DistNameByArch = @{
-            x64   = 'MiaCode-v{version}-win64'
-            arm64 = 'MiaCode-v{version}-winarm64'
+        # Release artifact folder name: <name>-v<version>[-<channel>]-<os>-<arch>.
+        # {channel} expands to '-<channel>' when MIACODE_PACKAGE_CHANNEL is set.
+        DistNamePattern = 'MiaCode-v{version}{channel}-windows-{arch}'
+        DistArchName = @{
+            x64   = 'x64'
+            arm64 = 'arm64'
         }
         # Archives produced next to the package directory. 7z (LZMA2, solid)
         # compresses this payload to roughly half of what deflate achieves.

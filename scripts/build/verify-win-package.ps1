@@ -9,14 +9,14 @@
     the provisioned dev SDK, leaves an import unresolved, or fails to start.
 
 .PARAMETER DistDir
-    Package directory, e.g. dist\MiaCode-v2.0.0-alpha-win64.
+    Package directory, e.g. dist\MiaCode-v2.0.0-alpha-windows-x64.
 
 .PARAMETER Arch
     Target architecture of the package: x64 or arm64. Selects the FFmpeg dev
     SDK root and the architecture-specific contents contract entries.
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v2.0.0-alpha-win64 -Arch x64
+    powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v2.0.0-alpha-windows-x64 -Arch x64
 #>
 param(
     [Parameter(Mandatory = $true)]

@@ -399,7 +399,14 @@ if ($selfFail.Count -gt 0) {
 }
 Write-Host "  OK - all av*.dll are self-contained (no external MinGW runtime DLL deps)."
 $newSize = Get-DirSizeMB (Join-Path $OutputDir 'bin')
-$bakSize = Get-DirSizeMB (Join-Path "$OutputDir.full.bak" 'bin')
+$backupDir = "$OutputDir.full.bak"
 Write-Host ""
-Write-Host ("DONE. Trimmed FFmpeg DLLs: {0} MB (was {1} MB). Next: reconfigure + rebuild MiaCode, then re-run the smoke test." -f $newSize, $bakSize)
-Write-Host "If a chart PV fails to play on the trimmed build, A/B against $OutputDir.full.bak to confirm a trim gap, add the codec to trim-allowlist.psd1, and rebuild."
+if (Test-Path $backupDir) {
+    $bakSize = Get-DirSizeMB (Join-Path $backupDir 'bin')
+    Write-Host ("DONE. Trimmed FFmpeg DLLs: {0} MB (baseline {1} MB). Next: reconfigure + rebuild MiaCode, then re-run the smoke test." -f $newSize, $bakSize)
+    Write-Host "If a chart PV fails to play on the trimmed build, A/B against $backupDir to confirm a trim gap, add the codec to trim-allowlist.psd1, and rebuild."
+} else {
+    # No baseline to compare against: the tree was built from source without a
+    # downloaded SDK in place.
+    Write-Host ("DONE. Trimmed FFmpeg DLLs: {0} MB. Next: reconfigure + rebuild MiaCode, then re-run the smoke test." -f $newSize)
+}
