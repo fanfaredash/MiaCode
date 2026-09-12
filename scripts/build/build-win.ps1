@@ -113,23 +113,20 @@ function Resolve-QtRootFromConfigDir {
     return $ConfigDir
 }
 
-function Resolve-MsvcGenerator {
-    # Ask vswhere which Visual Studio versions exist, then take the matching
-    # generator name straight from cmake itself. No hard-coded year/edition.
+function Enter-MsvcEnvironment {
+    param([string]$Architecture)
+
     $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
     if (!(Test-Path $vswhere)) {
-        return ""
+        throw "vswhere.exe not found."
     }
-    $installVersions = & $vswhere -all -products * -property installationVersion 2>$null
-    $majors = @($installVersions | ForEach-Object { ($_ -split "\.")[0] } | Where-Object { $_ } | Sort-Object -Unique -Descending)
-    $generatorList = (cmake --help) -join "`n"
-    foreach ($major in $majors) {
-        $match = [regex]::Match($generatorList, "Visual Studio $major \d{4}")
-        if ($match.Success) {
-            return $match.Value
-        }
+    $vsInstall = (& $vswhere -latest -products * -property installationPath 2>$null | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($vsInstall)) {
+        throw "Visual Studio installation not found."
     }
-    return ""
+    Import-Module (Join-Path $vsInstall "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
+    Enter-VsDevShell -VsInstallPath $vsInstall -SkipAutomaticLocation `
+        -DevCmdArguments "-arch=$Architecture -host_arch=$Architecture"
 }
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -219,24 +216,14 @@ if ([string]::IsNullOrWhiteSpace($QtRoot)) {
 
 # 4. Configure + build.
 $env:PATH = "$(Join-Path $QtRoot 'bin');$env:PATH"
+Enter-MsvcEnvironment -Architecture $targetArch
 
 $generator = $toolchainSpec.Generator
-if ([string]::IsNullOrWhiteSpace($generator)) {
-    $generator = Resolve-MsvcGenerator
-    if ([string]::IsNullOrWhiteSpace($generator)) {
-        throw "No Visual Studio installation with C++ build tools found."
-    }
-}
 Write-Host "Configure: generator '$generator', Qt '$QtRoot', config '$Config'"
 
 $configureArgs = @("-S", $repoRoot, "-B", $BuildDir, "-G", $generator,
     "-DCMAKE_PREFIX_PATH=$QtRoot",
     "-DMIACODE_BUILD_DEV_TOOLS=$buildDevTools")
-if (![string]::IsNullOrWhiteSpace($toolchainSpec.GeneratorPlatform)) {
-    # Visual Studio generators select the target architecture separately from
-    # the generator name; ARM64 is a cross/native platform argument.
-    $configureArgs += "-DCMAKE_GENERATOR_PLATFORM=$($toolchainSpec.GeneratorPlatform)"
-}
 & cmake @configureArgs
 if ($LASTEXITCODE -ne 0) {
     throw "CMake configure failed."

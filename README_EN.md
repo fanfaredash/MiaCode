@@ -58,7 +58,7 @@ If Qt is already installed locally, you can also build with the CMake preset:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\ffmpeg\ensure-windows-ffmpeg.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1
-cmake --preset vs2022-qt6
+cmake --preset ninja-msvc-qt6
 cmake --build --preset release
 .\build\Release\MiaCode.exe
 ```

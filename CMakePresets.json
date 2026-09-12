@@ -7,9 +7,9 @@
   },
   "configurePresets": [
     {
-      "name": "vs2022-qt6",
-      "displayName": "VS2022 + Qt6",
-      "generator": "Visual Studio 17 2022",
+      "name": "ninja-msvc-qt6",
+      "displayName": "Ninja Multi-Config + MSVC + Qt6",
+      "generator": "Ninja Multi-Config",
       "binaryDir": "${sourceDir}/build"
     }
   ],
@@ -17,13 +17,13 @@
     {
       "name": "release",
       "displayName": "Release",
-      "configurePreset": "vs2022-qt6",
+      "configurePreset": "ninja-msvc-qt6",
       "configuration": "Release"
     },
     {
       "name": "debug",
       "displayName": "Debug",
-      "configurePreset": "vs2022-qt6",
+      "configurePreset": "ninja-msvc-qt6",
       "configuration": "Debug"
     }
   ]

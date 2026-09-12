@@ -91,7 +91,7 @@ scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1 -PrintPlanOnly
 scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1
 
 # 4. Rebuild MiaCode against the trimmed SDK + re-verify:
-cmake --preset vs2022-qt6
+cmake --preset ninja-msvc-qt6
 cmake --build build --config Release --target MiaCode
 #    then launch + play a few real PVs (or re-run scripts\build\package-win.ps1 + smoke test).
 ```
