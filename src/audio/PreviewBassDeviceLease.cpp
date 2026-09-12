@@ -1,5 +1,6 @@
 #include "PreviewBassDeviceLease.h"
 
+#include <array>
 #include <mutex>
 #include <utility>
 
@@ -13,16 +14,19 @@ struct ProcessBassDeviceState {
     std::function<void()> freeOwnedDevice;
 };
 
-ProcessBassDeviceState& processBassDeviceState()
+ProcessBassDeviceState& processBassDeviceState(BassDeviceLeaseDomain domain)
 {
-    static ProcessBassDeviceState state;
-    return state;
+    static std::array<ProcessBassDeviceState, 2> states;
+    return states.at(static_cast<std::size_t>(domain));
 }
 
 }  // namespace
 
-PreviewBassDeviceLease::PreviewBassDeviceLease(Kind kind) noexcept
+PreviewBassDeviceLease::PreviewBassDeviceLease(
+    Kind kind,
+    BassDeviceLeaseDomain domain) noexcept
     : kind_(kind)
+    , domain_(domain)
 {
 }
 
@@ -33,6 +37,7 @@ PreviewBassDeviceLease::~PreviewBassDeviceLease()
 
 PreviewBassDeviceLease::PreviewBassDeviceLease(PreviewBassDeviceLease&& other) noexcept
     : kind_(std::exchange(other.kind_, Kind::None))
+    , domain_(other.domain_)
 {
 }
 
@@ -41,25 +46,29 @@ PreviewBassDeviceLease& PreviewBassDeviceLease::operator=(PreviewBassDeviceLease
     if (this != &other) {
         release();
         kind_ = std::exchange(other.kind_, Kind::None);
+        domain_ = other.domain_;
     }
     return *this;
 }
 
 PreviewBassDeviceLease PreviewBassDeviceLease::acquire(BassDeviceLeaseApi api)
 {
-    if (!api.getDevice || !api.initialize || !api.free) {
+    if (!api.selectDevice || !api.initialize || !api.free) {
         return {};
     }
 
-    auto& state = processBassDeviceState();
+    auto& state = processBassDeviceState(api.domain);
     std::lock_guard lock(state.mutex);
     if (state.ownedReferences > 0) {
+        if (api.selectDevice() == BassDeviceLeaseApi::kNoDevice) {
+            return {};
+        }
         ++state.ownedReferences;
-        return PreviewBassDeviceLease(Kind::ProcessOwned);
+        return PreviewBassDeviceLease(Kind::ProcessOwned, api.domain);
     }
 
-    if (api.getDevice() != BassDeviceLeaseApi::kNoDevice) {
-        return PreviewBassDeviceLease(Kind::Borrowed);
+    if (api.selectDevice() != BassDeviceLeaseApi::kNoDevice) {
+        return PreviewBassDeviceLease(Kind::Borrowed, api.domain);
     }
 
     if (!api.initialize()) {
@@ -68,7 +77,7 @@ PreviewBassDeviceLease PreviewBassDeviceLease::acquire(BassDeviceLeaseApi api)
 
     state.ownedReferences = 1;
     state.freeOwnedDevice = std::move(api.free);
-    return PreviewBassDeviceLease(Kind::ProcessOwned);
+    return PreviewBassDeviceLease(Kind::ProcessOwned, api.domain);
 }
 
 bool PreviewBassDeviceLease::acquired() const noexcept
@@ -88,7 +97,7 @@ void PreviewBassDeviceLease::release() noexcept
         return;
     }
 
-    auto& state = processBassDeviceState();
+    auto& state = processBassDeviceState(domain_);
     std::lock_guard lock(state.mutex);
     kind_ = Kind::None;
     if (state.ownedReferences <= 0 || --state.ownedReferences != 0) {

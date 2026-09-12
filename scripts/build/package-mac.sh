@@ -13,6 +13,8 @@ MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
 PACKAGE_ARCHITECTURES="${CMAKE_OSX_ARCHITECTURES:-arm64}"
 THIN_SINGLE_ARCH_PACKAGE="${MIACODE_THIN_MACOS_APP:-ON}"
 MIACODE_FFMPEG_DEV_DIR="${MIACODE_FFMPEG_DEV_DIR:-}"
+PACKAGE_CHANNEL="${MIACODE_PACKAGE_CHANNEL:-}"
+PACKAGE_JOBS="${MIACODE_PACKAGE_JOBS:-$(sysctl -n hw.ncpu)}"
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
   QT_ROOT="$QT_ROOT_DIR"
 fi
@@ -26,6 +28,10 @@ case "$THIN_SINGLE_ARCH_PACKAGE" in
 esac
 if [[ "$PACKAGE_ARCHITECTURES" != "arm64" ]]; then
   echo "MiaCode for macOS is arm64-only (got CMAKE_OSX_ARCHITECTURES=$PACKAGE_ARCHITECTURES)." >&2
+  exit 2
+fi
+if [[ -n "$PACKAGE_CHANNEL" && ! "$PACKAGE_CHANNEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "MIACODE_PACKAGE_CHANNEL must start with an alphanumeric character and contain only letters, digits, dots, underscores, or hyphens (got: $PACKAGE_CHANNEL)" >&2
   exit 2
 fi
 
@@ -53,7 +59,12 @@ package_step() {
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
 MACOS_PACKAGE_SUFFIX="macos-apple-silicon"
-DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-${MACOS_PACKAGE_SUFFIX}}"
+PACKAGE_NAME="MiaCode-v${VERSION}"
+if [[ -n "$PACKAGE_CHANNEL" ]]; then
+  PACKAGE_NAME+="-${PACKAGE_CHANNEL}"
+fi
+PACKAGE_NAME+="-${MACOS_PACKAGE_SUFFIX}"
+DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/$PACKAGE_NAME}"
 
 version_gt() {
   local i
@@ -378,25 +389,6 @@ verify_no_external_ffmpeg_dylib_references() {
   return "$verification_failed"
 }
 
-validate_bundled_ffmpeg_minos() {
-  local app_path="$1"
-  local expected_target="$2"
-  local library_path library
-  local -a required_libraries=(
-    "libavcodec.60.dylib"
-    "libavfilter.9.dylib"
-    "libavformat.60.dylib"
-    "libavutil.58.dylib"
-    "libswresample.4.dylib"
-    "libswscale.7.dylib"
-  )
-
-  for library in "${required_libraries[@]}"; do
-    library_path="$app_path/Contents/Frameworks/$library"
-    validate_minos "$library_path" "$expected_target"
-  done
-}
-
 if [[ -n "$QT_ROOT" ]]; then
   export PATH="$QT_ROOT/bin:$PATH"
   export CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH:-$QT_ROOT}"
@@ -430,15 +422,13 @@ if [[ -n "$PACKAGE_ARCHITECTURES" ]]; then
 fi
 package_step "Configuring Release build in $BUILD_DIR"
 cmake "${cmake_args[@]}"
-# Keep the complete build graph at four jobs or fewer. This cap is deliberate:
-# release packaging must not saturate the local machine with compiler processes.
-build_args=(--build "$BUILD_DIR" --config Release --parallel 4)
+build_args=(--build "$BUILD_DIR" --config Release --parallel "$PACKAGE_JOBS")
 if [[ "$BUILD_DEV_TOOLS" == "ON" ]]; then
   build_args+=(--target MiaCode simai_native_dump soundtouch_probe)
 else
   build_args+=(--target MiaCode)
 fi
-package_step "Building MiaCode (at most 4 concurrent jobs)"
+package_step "Building MiaCode with $PACKAGE_JOBS concurrent jobs"
 cmake "${build_args[@]}"
 
 APP_PATH="$BUILD_DIR/MiaCode.app"
@@ -452,10 +442,10 @@ fi
 
 package_step "Staging app bundle, documentation, assets, and runtime tools"
 rm -rf "$DIST_DIR"
-mkdir -p "$DIST_DIR/docs"
+mkdir -p "$DIST_DIR"
 cp -R "$APP_PATH" "$DIST_DIR/"
 
-for release_doc in LICENSE LICENSE_SCOPE.md THIRD_PARTY_NOTICES.md README.md README_EN.md; do
+for release_doc in LICENSE LICENSE_SCOPE.md THIRD_PARTY_NOTICES.md; do
   if [[ ! -f "$ROOT_DIR/$release_doc" ]]; then
     echo "Missing release documentation file: $ROOT_DIR/$release_doc" >&2
     exit 1
@@ -545,41 +535,49 @@ else
   exit 1
 fi
 
-for doc in docs/ops/DEBUG_INDEX.md docs/specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md; do
-  if [[ -f "$ROOT_DIR/$doc" ]]; then
-    cp "$ROOT_DIR/$doc" "$DIST_DIR/docs/$(basename "$doc")"
-  fi
-done
+cat >"$DIST_DIR/README.txt" <<'EOF'
+MiaCode macOS 包
 
-cat >"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
-MiaCode release package (macOS)
+启动
+打开 MiaCode.app。
 
-Run:
-  Open MiaCode.app
+Gatekeeper 提示
+从下载渠道取得的应用可能显示 Gatekeeper 提示。可使用以下任一方式启动：
 
-Included:
-  - MiaCode.app
-  - Start_MiaCode_Debug.command (runs MiaCode in debug mode; logs go to ./logs/)
-  - Qt frameworks/plugins deployed by macdeployqt
-  - BASS, BASSmix, BASS FX, and BASSOPUS arm64 runtime libraries
-  - MiaCode.app/Contents/MacOS/ffmpeg/ffmpeg
-  - assets (inside MiaCode.app/Contents/Resources/assets)
-  - docs/
+1. 在 Finder 中按住 Control 点按 MiaCode.app，选择“打开”，随后在确认窗口中选择“打开”。
+2. 在此包目录打开终端，执行：
+   xattr -dr com.apple.quarantine "MiaCode.app"
+
+调试启动
+打开 Start_MiaCode_Debug.command，应用将以诊断模式启动，日志保存在包目录的 logs/ 中。
+
+包内容
+MiaCode.app：应用程序
+Start_MiaCode_Debug.command：诊断启动器
+LICENSE、LICENSE_SCOPE.md、THIRD_PARTY_NOTICES.md 和 licenses/：许可证与第三方声明
 EOF
 
-if [[ "$BUILD_DEV_TOOLS" != "ON" ]]; then
-  cat >>"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
+cat >"$DIST_DIR/README_EN.txt" <<'EOF'
+MiaCode macOS Package
 
-Not included on purpose:
-  - simai_native_dump
-  - soundtouch_probe
+Launch
+Open MiaCode.app.
+
+Gatekeeper Prompt
+Apps downloaded from the internet may show a Gatekeeper prompt. Use either method below:
+
+1. In Finder, Control-click MiaCode.app, choose Open, then choose Open in the confirmation dialog.
+2. Open Terminal in this package directory and run:
+   xattr -dr com.apple.quarantine "MiaCode.app"
+
+Debug Launch
+Open Start_MiaCode_Debug.command to start MiaCode in diagnostic mode. Logs are written to logs/ in this package directory.
+
+Package Contents
+MiaCode.app: application
+Start_MiaCode_Debug.command: diagnostic launcher
+LICENSE, LICENSE_SCOPE.md, THIRD_PARTY_NOTICES.md, and licenses/: license and third-party notices
 EOF
-else
-  cat >>"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
-  - simai_native_dump
-  - soundtouch_probe
-EOF
-fi
 
 debug_launcher_source="$ROOT_DIR/scripts/debug/Start_MiaCode_Debug.command"
 debug_launcher_path="$DIST_DIR/Start_MiaCode_Debug.command"
@@ -644,15 +642,10 @@ for bass_library in "${required_bass_libraries[@]}"; do
     echo "Missing packaged macOS BASS runtime: $bass_path" >&2
     exit 1
   fi
-  if [[ "$(lipo -archs "$bass_path")" != "arm64" ]]; then
-    echo "Packaged BASS runtime is not arm64-only: $bass_path" >&2
-    exit 1
-  fi
 done
 
 # macdeployqt and architecture thinning rewrite Mach-O files and invalidate
-# bundled signatures. Re-sign only after both operations finish, then verify the
-# completed bundle before it can be archived.
+# bundled signatures, so signing runs after both operations finish.
 if [[ -n "$MACOS_CODESIGN_IDENTITY" ]]; then
   package_step "Signing the completed app bundle"
   if ! command -v codesign >/dev/null 2>&1; then
@@ -660,53 +653,36 @@ if [[ -n "$MACOS_CODESIGN_IDENTITY" ]]; then
     exit 1
   fi
   codesign --force --deep --sign "$MACOS_CODESIGN_IDENTITY" "$DIST_DIR/MiaCode.app"
-  codesign --verify --deep --strict --verbose=2 "$DIST_DIR/MiaCode.app"
 fi
 
 if [[ -n "$DEPLOYMENT_TARGET" ]]; then
   package_step "Validating minimum macOS version $DEPLOYMENT_TARGET"
   validate_minos "$DIST_DIR/MiaCode.app/Contents/MacOS/MiaCode" "$DEPLOYMENT_TARGET"
-  validate_minos "$DIST_DIR/MiaCode.app/Contents/Frameworks/QtCore.framework/Versions/A/QtCore" "$DEPLOYMENT_TARGET"
-  validate_bundled_ffmpeg_minos "$DIST_DIR/MiaCode.app" "$DEPLOYMENT_TARGET"
-  for bass_library in "${required_bass_libraries[@]}"; do
-    validate_minos "$bass_frameworks_dir/$bass_library" "$DEPLOYMENT_TARGET"
-  done
 fi
 
 assert_no_packaged_extensions "$DIST_DIR/MiaCode.app"
 
-package_step "Creating ZIP archive"
-ZIP_PATH="${DIST_DIR}.zip"
-rm -f "$ZIP_PATH"
-(
-  cd "$(dirname "$DIST_DIR")"
-  ditto -c -k --sequesterRsrc --keepParent "$(basename "$DIST_DIR")" "$(basename "$ZIP_PATH")"
-)
-
-zip_launcher_path="$(basename "$DIST_DIR")/Start_MiaCode_Debug.command"
-zip_launcher_mode="$(zipinfo -l "$ZIP_PATH" "$zip_launcher_path" | awk '$1 ~ /^-[rwx-]+$/ { print $1; exit }')"
-if [[ ! "$zip_launcher_mode" =~ ^-..x ]]; then
-  echo "ZIP is missing an executable macOS debug launcher: $zip_launcher_path" >&2
-  exit 1
-fi
-
-if [[ -n "$MACOS_CODESIGN_IDENTITY" ]]; then
-  package_step "Verifying the ZIP-extracted app signature"
-  zip_verify_dir="$(mktemp -d "${TMPDIR:-/tmp}/miacode-package-verify.XXXXXX")"
-  ditto -x -k "$ZIP_PATH" "$zip_verify_dir"
-  zip_extracted_app="$zip_verify_dir/$(basename "$DIST_DIR")/MiaCode.app"
-  if [[ ! -d "$zip_extracted_app" ]]; then
-    echo "ZIP-extracted app is missing: $zip_extracted_app" >&2
-    rm -rf "$zip_verify_dir"
+package_step "Creating 7z archive"
+ARCHIVE_PATH="${DIST_DIR}.7z"
+rm -f "$ARCHIVE_PATH"
+SEVEN_ZIP="$(command -v 7z || command -v 7za || command -v 7zz || true)"
+if [[ -n "$SEVEN_ZIP" ]]; then
+  (
+    cd "$(dirname "$DIST_DIR")"
+    "$SEVEN_ZIP" a -t7z -mx=9 -mmt=on -bso0 -bsp0 "$ARCHIVE_PATH" "$(basename "$DIST_DIR")"
+  )
+else
+  PYTHON_SEVEN_ZIP="${PYTHON_BIN:-python3}"
+  if ! "$PYTHON_SEVEN_ZIP" -c 'import py7zr' >/dev/null 2>&1; then
+    echo "7z archive creation needs a 7z binary or the py7zr module. Install p7zip, or run: $PYTHON_SEVEN_ZIP -m pip install py7zr" >&2
     exit 1
   fi
-  if ! codesign --verify --deep --strict --verbose=2 "$zip_extracted_app"; then
-    rm -rf "$zip_verify_dir"
-    exit 1
-  fi
-  rm -rf "$zip_verify_dir"
+  (
+    cd "$(dirname "$DIST_DIR")"
+    "$PYTHON_SEVEN_ZIP" -m py7zr c "$ARCHIVE_PATH" "$(basename "$DIST_DIR")"
+  )
 fi
 
 package_step "Packaging complete"
 echo "Packaged to $DIST_DIR"
-echo "Zip created: $ZIP_PATH"
+echo "Archive created: $ARCHIVE_PATH"

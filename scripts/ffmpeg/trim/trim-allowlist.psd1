@@ -14,8 +14,9 @@
     # =====================================================================
 
     # FFmpeg source tag to build. MUST stay on the n7.1 series so the produced
-    # DLL/import-lib basenames keep the major versions the rest of the build
-    # is pinned to (CMakeLists.txt + scripts/build/package-win.ps1).
+    # DLL/import-lib basenames keep the major versions the x64 preview SDK is
+    # pinned to (scripts/build/windows-toolchain.psd1 + CMakeLists.txt).
+    # arm64 ships the full BtbN n8.1 LGPL SDK untrimmed.
     FFmpegVersion = 'n7.1'
 
     # ABI-pinned outputs this build must produce (major-version-locked).
@@ -123,7 +124,7 @@
         # each; added per this list's conservative-superset rule so a stray PV
         # in one of these formats doesn't silently fail.
         'vc1', 'wmv1', 'wmv2', 'wmv3', 'msmpeg4v2', 'msmpeg4v3',
-        'theora', 'flv1', 'vp6', 'vp6f',
+        'theora', 'flv', 'vp6', 'vp6f',
         'mpeg4', 'mpeg2video', 'mpeg1video', 'mjpeg', 'prores', 'rawvideo',
         'png', 'gif',
         # audio

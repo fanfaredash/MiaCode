@@ -6,7 +6,7 @@ trimmed build (~15–20 MB target) without breaking playback.
 
 This is the build-it-yourself counterpart to `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`
 (which just downloads the full upstream SDK). It installs into the same place —
-`third_party/ffmpeg/windows/dev/` — so the rest of the build (CMake + packaging)
+`third_party/ffmpeg/windows/win64/dev/` — so the rest of the build (CMake + packaging)
 consumes it unchanged.
 
 > **License:** decode-only ⇒ pure **LGPL v2.1+**, same obligations as the FFmpeg
@@ -87,7 +87,7 @@ scripts\ffmpeg\trim\survey-chart-codecs.ps1 -ChartRoots '<chart-root-1>','<chart
 # 2. Review the build plan without building:
 scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1 -PrintPlanOnly
 
-# 3. Build + install into third_party/ffmpeg/windows/dev (~30–60 min):
+# 3. Build + install into third_party/ffmpeg/windows/win64/dev (~30–60 min):
 scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1
 
 # 4. Rebuild MiaCode against the trimmed SDK + re-verify:
@@ -96,7 +96,7 @@ cmake --build build --config Release --target MiaCode
 #    then launch + play a few real PVs (or re-run scripts\build\package-win.ps1 + smoke test).
 ```
 
-To revert to the full SDK: delete `third_party/ffmpeg/windows/dev`, restore
+To revert to the full SDK: delete `third_party/ffmpeg/windows/win64/dev`, restore
 `dev.full.bak`, or re-run `scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1`.
 
 ## Notes / limits

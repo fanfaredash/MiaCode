@@ -13,9 +13,14 @@ class QThreadPool;
 
 namespace miacode::waveform {
 
+// The density change keeps schema 3 because the serialized pyramid layout is
+// identical. New readers rebuild sparse v3 caches; old readers accept dense v3 caches.
 inline constexpr quint32 kWaveformCacheSchemaVersion = 3;
 inline constexpr int kWaveformMinTopLevelColumns = 2048;
-inline constexpr double kWaveformTopLevelColumnsPerSecond = 128.0;
+// Mixxx stores its detailed waveform near 441 visual frames per second. Keep a
+// power-of-two-friendly target above that rate so editor zoom does not stretch
+// one cached extrema pair across several screen pixels.
+inline constexpr double kWaveformTopLevelColumnsPerSecond = 512.0;
 inline constexpr int kWaveformDecodeSampleRate = 24000;
 
 struct WaveformColumn {

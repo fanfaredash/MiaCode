@@ -64,6 +64,11 @@ void PreferencesModel::setLanguageToken(const QString& token)
 
 QVariantList PreferencesModel::themeOptions() const
 {
+    return themeModeOptions();
+}
+
+QVariantList PreferencesModel::themeModeOptions() const
+{
     return QVariantList{
         option(QStringLiteral("system"), qtTrId("dialog.preferences.theme.system")),
         option(QStringLiteral("light"), qtTrId("dialog.preferences.theme.light")),
@@ -73,15 +78,65 @@ QVariantList PreferencesModel::themeOptions() const
 
 QString PreferencesModel::themeToken() const
 {
-    return settings_ != nullptr ? settings_->themeToken() : QStringLiteral("system");
+    return themeModeToken();
+}
+
+QString PreferencesModel::themeModeToken() const
+{
+    return settings_ != nullptr ? settings_->themeModeToken() : QStringLiteral("system");
 }
 
 void PreferencesModel::setThemeToken(const QString& token)
 {
-    if (settings_ == nullptr || token.trimmed().toLower() == themeToken()) {
+    setThemeModeToken(token);
+}
+
+void PreferencesModel::setThemeModeToken(const QString& token)
+{
+    if (settings_ == nullptr || token.trimmed().toLower() == themeModeToken()) {
         return;
     }
-    settings_->setThemeToken(token);
+    settings_->setThemeModeToken(token);
+    restartRequired_ = true;
+    emit interfaceChanged();
+}
+
+QVariantList PreferencesModel::themePaletteOptions() const
+{
+    return QVariantList{
+        option(QStringLiteral("dark"), qtTrId("dialog.preferences.theme.dark")),
+        option(QStringLiteral("light"), qtTrId("dialog.preferences.theme.light")),
+        option(QStringLiteral("legacy"), qtTrId("dialog.preferences.theme.legacy")),
+        option(QStringLiteral("legacy_light"), qtTrId("dialog.preferences.theme.legacy_light")),
+    };
+}
+
+QString PreferencesModel::lightThemeToken() const
+{
+    return settings_ != nullptr ? settings_->lightThemeToken() : QStringLiteral("light");
+}
+
+void PreferencesModel::setLightThemeToken(const QString& token)
+{
+    if (settings_ == nullptr || token.trimmed().toLower() == lightThemeToken()) {
+        return;
+    }
+    settings_->setLightThemeToken(token);
+    restartRequired_ = true;
+    emit interfaceChanged();
+}
+
+QString PreferencesModel::darkThemeToken() const
+{
+    return settings_ != nullptr ? settings_->darkThemeToken() : QStringLiteral("dark");
+}
+
+void PreferencesModel::setDarkThemeToken(const QString& token)
+{
+    if (settings_ == nullptr || token.trimmed().toLower() == darkThemeToken()) {
+        return;
+    }
+    settings_->setDarkThemeToken(token);
     restartRequired_ = true;
     emit interfaceChanged();
 }

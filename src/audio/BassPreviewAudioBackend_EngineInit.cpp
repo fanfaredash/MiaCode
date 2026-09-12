@@ -478,6 +478,7 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     const auto currentDevice = static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(
         BASS_GetDevice());
     if (currentDevice != miacode::preview_audio::BassDeviceLeaseApi::kNoDevice
+        && currentDevice != 0
         && currentDevice != static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(
             endpoint.bassDeviceIndex)) {
         appendAudioDebugLog(
@@ -500,7 +501,20 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     }
     if (!bassDeviceLease_.acquired()) {
         bassDeviceLease_ = miacode::preview_audio::PreviewBassDeviceLease::acquire({
-            [] { return static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(BASS_GetDevice()); },
+            [this] {
+#ifdef Q_OS_WIN
+                return BASS_SetDevice(bassOutputDeviceIndex_)
+                    ? static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(
+                          bassOutputDeviceIndex_)
+                    : miacode::preview_audio::BassDeviceLeaseApi::kNoDevice;
+#else
+                const auto device = static_cast<miacode::preview_audio::BassDeviceLeaseApi::DeviceId>(
+                    BASS_GetDevice());
+                return device > 0
+                    ? device
+                    : miacode::preview_audio::BassDeviceLeaseApi::kNoDevice;
+#endif
+            },
             [this] {
 #ifdef Q_OS_WIN
                 return BASS_Init(
@@ -519,10 +533,19 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
                     : static_cast<int>(BASS_GetDevice());
                 return true;
 #else
-                return BASS_Init(-1, static_cast<int>(deviceSampleRate_), 0, nullptr, nullptr) != FALSE;
+                if (!BASS_Init(-1, static_cast<int>(deviceSampleRate_), 0, nullptr, nullptr)) {
+                    return false;
+                }
+                bassOutputDeviceIndex_ = static_cast<int>(BASS_GetDevice());
+                return true;
 #endif
             },
-            [] { BASS_Free(); },
+            [this] {
+                if (bassOutputDeviceIndex_ >= 0) {
+                    BASS_SetDevice(static_cast<DWORD>(bassOutputDeviceIndex_));
+                }
+                BASS_Free();
+            },
         });
         if (!bassDeviceLease_.acquired()) {
             const int errorCode = static_cast<int>(BASS_ErrorGetCode());

@@ -1365,9 +1365,29 @@ Failed: %2</source>
         <source>Theme</source>
         <translation>モード</translation>
     </message>
+    <message id="dialog.preferences.theme.mode">
+        <source>Appearance</source>
+        <translation>外観モード</translation>
+    </message>
+    <message id="dialog.preferences.theme.light_palette">
+        <source>Light theme</source>
+        <translation>ライトテーマ</translation>
+    </message>
+    <message id="dialog.preferences.theme.dark_palette">
+        <source>Dark theme</source>
+        <translation>ダークテーマ</translation>
+    </message>
     <message id="dialog.preferences.theme.dark">
         <source>Dark</source>
         <translation>暗い</translation>
+    </message>
+    <message id="dialog.preferences.theme.legacy">
+        <source>Legacy</source>
+        <translation>ダーク（旧）</translation>
+    </message>
+    <message id="dialog.preferences.theme.legacy_light">
+        <source>Legacy Light</source>
+        <translation>ライト（旧）</translation>
     </message>
     <message id="dialog.preferences.theme.light">
         <source>Light</source>

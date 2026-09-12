@@ -51,7 +51,7 @@ Current history scan result:
 
 - Current tracked tree has no secret/local-path hits from the open-source scan patterns.
 - Filtered history has no hits from the open-source secret/local-path scan patterns, excluding intentionally vendored third-party code.
-- Filtered history removed historical build artifacts under `build-mingw-ascii/` / `build-mingw/`, probe files under `_audio_probe/`, generated slide data under `assets/generated/`, Remotion prototype files under `tools/intro_remotion/`, old FFmpeg backup files under `third_party/ffmpeg/windows/dev.full.bak/`, old M PLUS font copies, and superseded private investigation docs/scripts.
+- Filtered history removed historical build artifacts under `build-mingw-ascii/` / `build-mingw/`, probe files under `_audio_probe/`, generated slide data under `assets/generated/`, Remotion prototype files under `tools/intro_remotion/`, old FFmpeg backup files under `third_party/ffmpeg/windows/win64/dev.full.bak/`, old M PLUS font copies, and superseded private investigation docs/scripts.
 - Largest remaining Git objects are current distribution assets and third-party/source files that are intentionally retained.
 - Filtered `main` and `test` were force-pushed to GitHub on 2026-06-24; both point to `e150dfcd94c20877a0f212164040e3979e05f1c0`.
 - A pre-filter bundle backup exists outside the repository; do not publish it.
@@ -89,12 +89,25 @@ Clean-clone verification:
 
 ## Third-Party Download Verification
 
-- Windows export FFmpeg: `https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z`
-  - Checked: reachable via redirect to `200 OK`.
-  - Expected `ffmpeg.exe` SHA256: `B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997`.
-- Windows QtAVPlayer FFmpeg dev SDK: `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1.zip`
-  - Checked: reachable via redirect to `200 OK`.
-  - Installed by: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`.
+- Windows export FFmpeg:
+  - x64 (Gyan.dev 7.1.1 essentials, 87 MB static GPL): `https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z`
+    - Expected `ffmpeg.exe` SHA256: `B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997`.
+  - arm64 (BtbN n8.1 **GPL** static, pinned tag `autobuild-2026-09-12-13-12`):
+    `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-gpl-8.1.zip`
+    - Expected `ffmpeg.exe` SHA256: `22E1BB241B8747ED5EA5ECE8DE64AFCC8720F4550ED35ED24657D00C2BADBA5E`.
+  - Checked: both archives reachable; the arm64 `ffmpeg.exe` hash reproduced from the extracted binary.
+- Windows QtAVPlayer FFmpeg dev SDK:
+  - x64: built from FFmpeg source by `scripts/ffmpeg/trim/build-trimmed-ffmpeg.ps1` (run by
+    `build-win.ps1` unless `-SkipTrim` is passed). There is no prebuilt download for this tree:
+    BtbN removed the n7.1 assets, so the old
+    `.../releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1.zip` URL now returns
+    404 (checked while wiring the trim build in CI).
+  - arm64 (BtbN n8.1 LGPL **shared**, pinned immutable tag):
+    `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-12-13-12/ffmpeg-n8.1.2-52-g5a03dfa0f6-winarm64-lgpl-shared-8.1.zip`
+    - Expected archive SHA256: `DFB3F394B316F91CC2C399BBAA38A280F81E523E150A20F7DDD477843AA70608`.
+  - Checked: both archives reachable. The n8.1 win64/winarm64 payloads are byte-identical to the
+    rolling `latest` tag of the same day, while the archive hashes differ (the embedded top-level
+    directory name differs, so the hash is tag-bound).
 - macOS export FFmpeg: `https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip`
   - Checked: reachable via redirect to `200 OK`.
   - Expected SHA256: `430D60FBF419DAB28DAEE9B679E7929A31EE9BAE53F6E42E8AE26B725584290F`.
@@ -103,3 +116,5 @@ Clean-clone verification:
   - `https://github.com/FFmpeg/FFmpeg.git`
   - `https://git.ffmpeg.org/ffmpeg.git`
   - Checked: all returned `refs/tags/n7.1` at `507a51fbe9732f0f6f12f43ce12431e8faa834b7`.
+    Re-checked while moving the chain: `github.com` and `git.ffmpeg.org` answer for `n7.1`; the Gitee
+    mirror was unreachable from the checking host (TLS failure) at that time.

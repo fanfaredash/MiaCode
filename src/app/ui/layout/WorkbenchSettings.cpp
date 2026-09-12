@@ -181,14 +181,26 @@ double WorkbenchSettings::previewMinimumWidthRatio() const { return kPreviewMini
 double WorkbenchSettings::previewMaximumWidthRatio() const { return kPreviewMaximumWidthRatio; }
 bool WorkbenchSettings::previewCanvasFreeAspect() const { return previewCanvasFreeAspect_; }
 QString WorkbenchSettings::uiFontFamily() const { return uiFontFamily_; }
-QString WorkbenchSettings::themeToken() const
+QString WorkbenchSettings::themeModeToken() const
 {
-    switch (PreferenceDocument::preferredTheme()) {
-    case PreferenceDocument::ThemePreference::Light: return QStringLiteral("light");
-    case PreferenceDocument::ThemePreference::Dark: return QStringLiteral("dark");
-    case PreferenceDocument::ThemePreference::System: return QStringLiteral("system");
+    return PreferenceDocument::themePreferenceToken(PreferenceDocument::preferredTheme());
+}
+QString WorkbenchSettings::lightThemeToken() const
+{
+    return PreferenceDocument::themePaletteToken(PreferenceDocument::preferredLightTheme());
+}
+QString WorkbenchSettings::darkThemeToken() const
+{
+    return PreferenceDocument::themePaletteToken(PreferenceDocument::preferredDarkTheme());
+}
+QString WorkbenchSettings::activeThemeToken() const
+{
+    if (PreferenceDocument::preferredTheme() == PreferenceDocument::ThemePreference::Legacy) {
+        return QStringLiteral("legacy");
     }
-    return QStringLiteral("system");
+    const bool darkAppearance = miacode::ui::ThemeVariantResolver::resolve(
+        PreferenceDocument::preferredTheme()) == miacode::ui::ThemeVariant::Dark;
+    return darkAppearance ? darkThemeToken() : lightThemeToken();
 }
 bool WorkbenchSettings::darkTheme() const { return darkTheme_; }
 QFont WorkbenchSettings::codeFont() const { return codeFont_; }
@@ -245,24 +257,34 @@ void WorkbenchSettings::reloadEditorSettings()
 
 void WorkbenchSettings::reloadTheme()
 {
-    const bool next = miacode::ui::ThemeVariantResolver::resolve(PreferenceDocument::preferredTheme())
-                      == miacode::ui::ThemeVariant::Dark;
-    if (darkTheme_ == next) {
+    const bool darkAppearance = miacode::ui::ThemeVariantResolver::resolve(
+        PreferenceDocument::preferredTheme()) == miacode::ui::ThemeVariant::Dark;
+    const PreferenceDocument::ThemePalette activePalette =
+        PreferenceDocument::preferredTheme() == PreferenceDocument::ThemePreference::Legacy
+        ? PreferenceDocument::ThemePalette::Legacy
+        : (darkAppearance
+               ? PreferenceDocument::preferredDarkTheme()
+               : PreferenceDocument::preferredLightTheme());
+    const bool next = PreferenceDocument::themePaletteIsDark(activePalette);
+    const QString nextModeToken = themeModeToken();
+    const QString nextLightThemeToken = lightThemeToken();
+    const QString nextDarkThemeToken = darkThemeToken();
+    if (darkTheme_ == next
+        && publishedThemeModeToken_ == nextModeToken
+        && publishedLightThemeToken_ == nextLightThemeToken
+        && publishedDarkThemeToken_ == nextDarkThemeToken) {
         return;
     }
     darkTheme_ = next;
+    publishedThemeModeToken_ = nextModeToken;
+    publishedLightThemeToken_ = nextLightThemeToken;
+    publishedDarkThemeToken_ = nextDarkThemeToken;
     emit themeChanged();
 }
 
-void WorkbenchSettings::setThemeToken(const QString& token)
+void WorkbenchSettings::setThemeModeToken(const QString& token)
 {
-    const QString normalized = token.trimmed().toLower();
-    PreferenceDocument::ThemePreference next = PreferenceDocument::ThemePreference::System;
-    if (normalized == QStringLiteral("light")) {
-        next = PreferenceDocument::ThemePreference::Light;
-    } else if (normalized == QStringLiteral("dark")) {
-        next = PreferenceDocument::ThemePreference::Dark;
-    }
+    const PreferenceDocument::ThemePreference next = PreferenceDocument::themePreferenceFromToken(token);
     if (next == PreferenceDocument::preferredTheme()) {
         return;
     }
@@ -272,6 +294,26 @@ void WorkbenchSettings::setThemeToken(const QString& token)
     // UiTheme::colors() on its next repaint), while every QML surface stays on
     // the old palette until the next launch. The OS colour-scheme change
     // already ends here; the user's own choice has to as well.
+    reloadTheme();
+}
+
+void WorkbenchSettings::setLightThemeToken(const QString& token)
+{
+    const PreferenceDocument::ThemePalette next = PreferenceDocument::themePaletteFromToken(token);
+    if (next == PreferenceDocument::preferredLightTheme()) {
+        return;
+    }
+    PreferenceDocument::setPreferredLightTheme(next);
+    reloadTheme();
+}
+
+void WorkbenchSettings::setDarkThemeToken(const QString& token)
+{
+    const PreferenceDocument::ThemePalette next = PreferenceDocument::themePaletteFromToken(token);
+    if (next == PreferenceDocument::preferredDarkTheme()) {
+        return;
+    }
+    PreferenceDocument::setPreferredDarkTheme(next);
     reloadTheme();
 }
 

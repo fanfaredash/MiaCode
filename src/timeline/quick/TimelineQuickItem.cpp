@@ -1499,7 +1499,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // without hiding it. Still BELOW note sprites + the overlay (playhead/
     // cursor) which follow.
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
-        return waveformLayer_->updateNode(oldChild, state, currentDpr);
+        return waveformLayer_->updateNode(oldChild, state);
     });
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
         return notesLayer_->updateNode(oldChild, state, window(), textures_.get());

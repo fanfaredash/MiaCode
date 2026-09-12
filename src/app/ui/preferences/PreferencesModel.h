@@ -30,8 +30,11 @@ public:
     // Interface
     Q_PROPERTY(QVariantList languageOptions READ languageOptions NOTIFY interfaceChanged)
     Q_PROPERTY(QString languageToken READ languageToken WRITE setLanguageToken NOTIFY interfaceChanged)
-    Q_PROPERTY(QVariantList themeOptions READ themeOptions NOTIFY interfaceChanged)
-    Q_PROPERTY(QString themeToken READ themeToken WRITE setThemeToken NOTIFY interfaceChanged)
+    Q_PROPERTY(QVariantList themeModeOptions READ themeModeOptions NOTIFY interfaceChanged)
+    Q_PROPERTY(QString themeModeToken READ themeModeToken WRITE setThemeModeToken NOTIFY interfaceChanged)
+    Q_PROPERTY(QVariantList themePaletteOptions READ themePaletteOptions NOTIFY interfaceChanged)
+    Q_PROPERTY(QString lightThemeToken READ lightThemeToken WRITE setLightThemeToken NOTIFY interfaceChanged)
+    Q_PROPERTY(QString darkThemeToken READ darkThemeToken WRITE setDarkThemeToken NOTIFY interfaceChanged)
     Q_PROPERTY(bool previewOnLeft READ previewOnLeft WRITE setPreviewOnLeft NOTIFY interfaceChanged)
 
     // Editor
@@ -69,6 +72,14 @@ public:
     QVariantList themeOptions() const;
     QString themeToken() const;
     void setThemeToken(const QString& token);
+    QVariantList themeModeOptions() const;
+    QString themeModeToken() const;
+    void setThemeModeToken(const QString& token);
+    QVariantList themePaletteOptions() const;
+    QString lightThemeToken() const;
+    void setLightThemeToken(const QString& token);
+    QString darkThemeToken() const;
+    void setDarkThemeToken(const QString& token);
     bool previewOnLeft() const;
     void setPreviewOnLeft(bool onLeft);
 

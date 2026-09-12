@@ -8,7 +8,7 @@ This directory keeps only public, repeatable build, release, asset, and diagnost
 
 | Directory | Contents |
 |---|---|
-| `build/` | Windows/macOS build and packaging entry points |
+| `build/` | Windows/macOS build, packaging and package verification entry points |
 | `debug/` | Windows/macOS debug and diagnostic launchers |
 | `ffmpeg/` | FFmpeg runtime/dev-SDK provisioning plus the decode-only trim toolchain |
 | `assets/` | Asset generation and font-subsetting helpers |
@@ -18,24 +18,79 @@ This directory keeps only public, repeatable build, release, asset, and diagnost
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1
+# MSVC x64: the generator is resolved through vswhere (Visual Studio + Windows SDK required)
+# x64 builds the decode-only preview SDK with ffmpeg/trim by default (~150 MB -> ~20 MB, needs
+# MSYS2); pass -SkipTrim to skip that build.
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc -BuildDir build-msvc
+
+# MSVC arm64: native arm64 host, ARM64 generator platform and Qt's arm64 package
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain msvc-arm64 -BuildDir build-msvc-arm64
+
+# MinGW + Ninja: Qt's mingw_64 build
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1 -Toolchain mingw -BuildDir build
+
+# Package an existing build (-Arch has to match the build)
+powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot> -BuildDir <BuildDir> -Arch x64
+
+# Verify a package
+powershell -ExecutionPolicy Bypass -File .\scripts\build\verify-win-package.ps1 -DistDir .\dist\MiaCode-v<version>-win64 -Arch x64
 ```
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot>
-```
+`build-win.ps1` runs, in order: Python dependencies (py7zr only), the export `ffmpeg.exe`, the
+preview FFmpeg dev SDK (a trim build on x64 unless `-SkipTrim` is set), Qt resolution, CMake configure and
+build, then `package-win.ps1`. Both
+FFmpeg chains and the packaging chain pick their directories from the architecture the selected
+toolchain targets: `third_party\ffmpeg\windows\<win64|winarm64>\` and
+`third_party\bass\bin\<win64|winarm64>\`, producing `MiaCode-v<version>-win64` or
+`MiaCode-v<version>-winarm64`. The arm64 package ships no `bass_aac.dll` (upstream publishes that
+add-on for x86/x64 only); the audio backend already tolerates a missing add-on.
 
-`package-win.ps1` defaults to `build/` and checks whether the generated version header and `MiaCode.exe` need refreshing. If the executable is missing, version-stale, or older than the generated version header, it rebuilds `MiaCode` automatically.
+Qt resolution order: `-QtRoot` → `C:\Qt\<version>\<arch dir>` → `.qt\<version>\<arch dir>` →
+`QT_ROOT_DIR`/`Qt6_DIR` → otherwise `build/provision-qt.ps1` downloads it from the Qt repository.
+That script handles both upstream repository layouts (the flat pre-6.11 folders and the
+per-architecture folders 6.11 uses), verifies every archive against the published `.sha1`, and
+needs no aqtinstall.
+
+`package-win.ps1` rebuilds `MiaCode` and `MiaCodeLauncher` when needed, places the selected
+toolchain's C++ runtime and the trimmed FFmpeg runtimes into `app/`, asserts the package contents
+contract, and writes a 7z archive. With a single-config generator it also checks that
+`CMAKE_BUILD_TYPE` matches `-Config`.
+
+`verify-win-package.ps1` checks the contents contract, that the packaged FFmpeg DLLs match the dev
+SDK byte for byte, that every non-system import resolves inside the package, a smoke launch, and the
+archive; it exits 1 on any failure.
+
+The preview FFmpeg SDK can come from `ffmpeg/trim/build-trimmed-ffmpeg.ps1` instead of the full SDK
+that `ffmpeg/ensure-windows-ffmpeg-dev.ps1` downloads.
+
+Qt version and modules, all three toolchain definitions (target architecture, Qt host repository
+tree, MSVC redistributable subdirectory), the package contents lists and the archive format live in
+`build/windows-toolchain.psd1`. Give each toolchain its own build directory — generators and target
+architectures cannot share one.
 
 macOS:
 
-```bash
-bash scripts/build/build-macos.sh
-```
+Local packaging, reusing the Qt install, FFmpeg dev SDK, and export `ffmpeg`
+already present on the machine:
 
 ```bash
-QT_ROOT="$HOME/Qt/6.10.2/macos" CMAKE_OSX_ARCHITECTURES=arm64 bash scripts/build/package-mac.sh
+bash scripts/build/build-macos-local.sh
 ```
+
+CI packaging, installing Qt 6.10.2 and both FFmpeg pieces on a clean runner
+before assembling the package:
+
+```bash
+bash scripts/build/build-macos-ci.sh
+```
+
+Both entries hand the Release build and package assembly to `package-mac.sh`;
+call it directly for manual control, for example
+`QT_ROOT="$HOME/Qt/6.10.2/macos" bash scripts/build/package-mac.sh`. The CI
+entry reads `QT_VERSION`, `QT_MODULES`, and `MIACODE_PYTHON_VENV_DIR`; the local
+entry reads `QT_ROOT` (probing `.qt/` then `$HOME/Qt/` for `QT_VERSION`),
+`BUILD_DIR`, and `MIACODE_FFMPEG_DEV_DIR`. Setting `MIACODE_PACKAGE_CHANNEL`
+inserts a channel segment into the package name.
 
 Artifacts are written to `dist/`. When a single `arm64` or `x86_64`
 architecture is requested, packaging removes the other architecture slice from
@@ -44,11 +99,12 @@ Mach-O contains only the target architecture before re-signing. Set
 `MIACODE_THIN_MACOS_APP=OFF` to produce a comparison package that keeps Qt's
 universal binaries.
 
-The macOS QtAVPlayer preview decoder also needs an FFmpeg development SDK. Run
-`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh` once to create the pinned,
-repo-local FFmpeg 6 SDK under `third_party/ffmpeg/macos/dev/`. `package-mac.sh`
-uses that SDK (or an explicit compatible `MIACODE_FFMPEG_DEV_DIR`) and stages
-only its six required dylibs; it does not discover or copy Homebrew.
+The macOS QtAVPlayer preview decoder also needs an FFmpeg development SDK at the
+repo-local `third_party/ffmpeg/macos/dev/`, created by
+`bash scripts/ffmpeg/ensure-macos-ffmpeg-dev.sh` (an existing SDK that passes
+validation is reused). `package-mac.sh` uses that SDK (or an explicit compatible
+`MIACODE_FFMPEG_DEV_DIR`) and stages only its six required dylibs; it does not
+discover or copy Homebrew.
 
 ## Other Scripts
 

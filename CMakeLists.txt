@@ -960,9 +960,31 @@ if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 if (WIN32)
+    if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+        set(MIACODE_BASS_WINDOWS_ARCH "winarm64")
+    else()
+        set(MIACODE_BASS_WINDOWS_ARCH "win64")
+    endif()
+    set(MIACODE_BASS_WINDOWS_LIB_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/${MIACODE_BASS_WINDOWS_ARCH}")
+    set(MIACODE_BASS_WINDOWS_BIN_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/${MIACODE_BASS_WINDOWS_ARCH}")
+    # bass_aac ships for x86/x64 only; the arm64 runtime uses the remaining
+    # plugins and the audio backend already tolerates a missing add-on.
+    set(MIACODE_BASS_WINDOWS_DLLS bass.dll bassmix.dll bass_fx.dll bassopus.dll)
+    if (MIACODE_BASS_WINDOWS_ARCH STREQUAL "win64")
+        list(APPEND MIACODE_BASS_WINDOWS_DLLS bass_aac.dll)
+    endif()
+    foreach(MIACODE_BASS_DLL IN LISTS MIACODE_BASS_WINDOWS_DLLS)
+        if (NOT EXISTS "${MIACODE_BASS_WINDOWS_BIN_DIR}/${MIACODE_BASS_DLL}")
+            message(FATAL_ERROR
+                "Missing required Windows BASS runtime: ${MIACODE_BASS_WINDOWS_BIN_DIR}/${MIACODE_BASS_DLL}")
+        endif()
+    endforeach()
+
     target_link_libraries(MiaCode PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+        "${MIACODE_BASS_WINDOWS_LIB_DIR}/bass.lib"
+        "${MIACODE_BASS_WINDOWS_LIB_DIR}/bassmix.lib"
         winmm
         ole32       # Windows Core Audio endpoint notification COM API
         avrt  # Multimedia Class Scheduler Service (AvSetMmThreadCharacteristicsW)
@@ -980,12 +1002,9 @@ if (WIN32)
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_fx.dll"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_aac.dll"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
+            ${MIACODE_BASS_WINDOWS_DLLS}
             $<TARGET_FILE_DIR:MiaCode>
+        WORKING_DIRECTORY "${MIACODE_BASS_WINDOWS_BIN_DIR}"
     )
 elseif (APPLE)
     set(MIACODE_BASS_MACOS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/macos/universal")
@@ -1091,8 +1110,13 @@ target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 # ---------------------------------------------------------------------------
 if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     if (WIN32)
-        set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/dev")
+        if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+            set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/winarm64/dev")
+        else()
+            set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/win64/dev")
+        endif()
     elseif (APPLE)
         set(MIACODE_FFMPEG_DEV_DIR_DEFAULT
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/macos/dev")
@@ -1194,16 +1218,25 @@ if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     endif()
 
     if (WIN32)
-        # Runtime: the preview backend loads these next to MiaCode.exe. The
-        # Windows package script stages the same pinned majors.
+        # Runtime: the preview backend loads these next to MiaCode.exe. Resolve
+        # the six families from the dev SDK so x64 (n7.1, avcodec-61) and arm64
+        # (n8.1, avcodec-62) each stage their own majors; the package contract in
+        # scripts/build/windows-toolchain.psd1 pins the exact names per arch.
+        file(GLOB MIACODE_FFMPEG_WINDOWS_RUNTIME_DLLS
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avcodec-*.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avformat-*.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avutil-*.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/swresample-*.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/swscale-*.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avfilter-*.dll"
+        )
+        if (NOT MIACODE_FFMPEG_WINDOWS_RUNTIME_DLLS)
+            message(FATAL_ERROR
+                "No FFmpeg preview runtime DLLs found under '${MIACODE_FFMPEG_DEV_DIR}/bin'.")
+        endif()
         add_custom_command(TARGET MiaCode POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avcodec-61.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avformat-61.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avutil-59.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/swresample-5.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/swscale-8.dll"
-                "${MIACODE_FFMPEG_DEV_DIR}/bin/avfilter-10.dll"
+                ${MIACODE_FFMPEG_WINDOWS_RUNTIME_DLLS}
                 $<TARGET_FILE_DIR:MiaCode>
             VERBATIM
         )
@@ -1276,6 +1309,15 @@ if (WIN32)
         # routes all user-visible text through Qt's tr() / QStringLiteral
         # which encodes correctly regardless of compiler defaults.
         target_compile_options(MiaCodeLauncher PRIVATE /utf-8)
+    endif()
+    if (MINGW)
+        # MinGW counterpart of MSVC_RUNTIME_LIBRARY MultiThreaded above: the
+        # launcher sits at the dist root while the packaged libstdc++-6 /
+        # libgcc_s_seh-1 / libwinpthread-1 DLLs live in app/, so the launcher
+        # has to carry no MinGW runtime dependency of its own. -municode
+        # selects the wWinMain entry point the source defines; MinGW's default
+        # crt startup looks for WinMain and fails to link without it.
+        target_link_options(MiaCodeLauncher PRIVATE -municode -static -static-libgcc -static-libstdc++)
     endif()
     # Shared app icon — the wrapper exe lives at the dist root and is the
     # user-clickable face of MiaCode in File Explorer, so it must show
@@ -1450,18 +1492,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         target_compile_definitions(soundtouch_probe PRIVATE MIACODE_HAS_BASS_AUDIO=1)
         target_include_directories(soundtouch_probe PRIVATE third_party/bass/include)
         target_link_libraries(soundtouch_probe PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+            "${MIACODE_BASS_WINDOWS_LIB_DIR}/bass.lib"
+            "${MIACODE_BASS_WINDOWS_LIB_DIR}/bassmix.lib"
             avrt
         )
         add_custom_command(TARGET soundtouch_probe POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_fx.dll"
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_aac.dll"
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
+                ${MIACODE_BASS_WINDOWS_DLLS}
                 $<TARGET_FILE_DIR:soundtouch_probe>
+            WORKING_DIRECTORY "${MIACODE_BASS_WINDOWS_BIN_DIR}"
         )
     endif()
 

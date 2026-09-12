@@ -99,6 +99,15 @@ int main(int argc, char** argv)
                      && !written.contains(QStringLiteral("theme")),
                  QStringLiteral("canonical theme helper writes ui.theme only"), err);
 
+    ok &= expect(PreferenceDocument::themePreferenceFromToken(QStringLiteral("legacy"))
+                     == PreferenceDocument::ThemePreference::Legacy
+                 && PreferenceDocument::themePreferenceToken(PreferenceDocument::ThemePreference::Legacy)
+                        == QLatin1String("legacy"),
+                 QStringLiteral("legacy token round-trips without falling back to system"), err);
+    ok &= expect(PreferenceDocument::themePreferenceFromToken(QStringLiteral("unknown"))
+                     == PreferenceDocument::ThemePreference::System,
+                 QStringLiteral("unknown theme tokens still fall back to system"), err);
+
     if (ok) {
         QTextStream(stdout) << "ui_text_preferences_spec ok\n";
         return 0;

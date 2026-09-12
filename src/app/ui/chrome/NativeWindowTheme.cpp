@@ -1,6 +1,7 @@
 #include "chrome/NativeWindowTheme.h"
 
 #include "preferences/PreferenceDocument.h"
+#include "theme/ThemeVariantResolver.h"
 #include "theme/UiTheme.h"
 
 #ifdef Q_OS_MACOS
@@ -64,7 +65,13 @@ void applyToNativeHandle(HWND hwnd, bool active, bool backdropEnabled, bool forc
 
     setDwmWindowAttribute(hwnd, kDwmwaBorderColor, &kDwmColorNone, sizeof(kDwmColorNone));
 
-    if (PreferenceDocument::preferredTheme() == PreferenceDocument::ThemePreference::System) {
+    const bool systemAppearanceMatchesTheme =
+        miacode::ui::ThemeVariantResolver::resolve(PreferenceDocument::preferredTheme())
+            == (UiTheme::isDarkTheme()
+                    ? miacode::ui::ThemeVariant::Dark
+                    : miacode::ui::ThemeVariant::Light);
+    if (PreferenceDocument::preferredTheme() == PreferenceDocument::ThemePreference::System
+        && systemAppearanceMatchesTheme) {
         setDwmWindowAttribute(hwnd, kDwmwaCaptionColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
         setDwmWindowAttribute(hwnd, kDwmwaTextColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
     } else {
@@ -120,7 +127,9 @@ void applyToWindow(QWindow* window, bool backdropEnabled)
     }
     NativeWindowThemeMac::applyToNativeView(
         reinterpret_cast<void*>(window->winId()),
-        NativeWindowThemePolicy::appearanceFor(PreferenceDocument::preferredTheme()));
+        UiTheme::isDarkTheme()
+            ? NativeWindowThemePolicy::Appearance::Dark
+            : NativeWindowThemePolicy::Appearance::Light);
 #else
     Q_UNUSED(window);
     Q_UNUSED(backdropEnabled);

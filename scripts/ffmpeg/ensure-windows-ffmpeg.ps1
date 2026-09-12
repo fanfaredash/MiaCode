@@ -1,5 +1,18 @@
+# Provisions the standalone `ffmpeg.exe` used by video export.
+#
+# x64 keeps the Gyan.dev 7.1.1 essentials build this repository has shipped: a
+# static GPL build (libx264 included) at 87 MB, against 163 MB for the BtbN n8.1
+# GPL static build of the same content.
+# arm64 has no Gyan build, so it uses the BtbN n8.1 GPL static build pinned to
+# one immutable autobuild tag (the rolling `latest` tag is replaced daily).
+#
+# The binary lands in third_party/ffmpeg/windows/<win64|winarm64>/ffmpeg.exe and
+# is gitignored. package-win.ps1 ships it as app/ffmpeg/ffmpeg.exe.
+
 param(
-    [string]$RepoRoot = ""
+    [string]$RepoRoot = "",
+    [ValidateSet("x64", "arm64")]
+    [string]$Arch = "x64"
 )
 
 $ErrorActionPreference = "Stop"
@@ -106,21 +119,39 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 }
 
-$ffmpegDir = Join-Path $RepoRoot "third_party\ffmpeg\windows"
+$archSuffix = if ($Arch -eq "arm64") { "winarm64" } else { "win64" }
+$ffmpegDir = Join-Path $RepoRoot "third_party\ffmpeg\windows\$archSuffix"
 $ffmpegPath = Join-Path $ffmpegDir "ffmpeg.exe"
 $ffprobePath = Join-Path $ffmpegDir "ffprobe.exe"
+
+if ($Arch -eq "arm64") {
+    $ffmpegReleaseTag = "autobuild-2026-09-12-13-12"
+    $ffmpegBuildVersion = "n8.1.2-52-g5a03dfa0f6"
+    $ffmpegAssetName = "ffmpeg-$ffmpegBuildVersion-winarm64-gpl-8.1.zip"
+    $defaultUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$ffmpegReleaseTag/$ffmpegAssetName"
+    $defaultSha256 = "22E1BB241B8747ED5EA5ECE8DE64AFCC8720F4550ED35ED24657D00C2BADBA5E"
+    $defaultVersionPattern = 'ffmpeg version n8\.1\.\d+'
+} else {
+    $defaultUrl = "https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z"
+    $defaultSha256 = "B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997"
+    $defaultVersionPattern = '^ffmpeg version 7\.1\.1-essentials_build-www\.gyan\.dev'
+}
+
 $ffmpegUrl = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_URL)) {
-    "https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z"
+    $defaultUrl
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_URL
 }
 $expectedSha256 = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_SHA256)) {
-    "B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997"
+    $defaultSha256
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_SHA256.ToUpperInvariant()
 }
+# The Gyan build carries a release tag in its version banner; the BtbN tag is
+# stable while the version suffix inside the binary is tied to that build, so
+# its pattern matches the major/minor only.
 $expectedVersionPattern = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_VERSION_PATTERN)) {
-    '^ffmpeg version 7\.1\.1-essentials_build-www\.gyan\.dev'
+    $defaultVersionPattern
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_VERSION_PATTERN
 }
@@ -136,10 +167,12 @@ $archiveExtension = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG
 }
 
 if (Test-ExistingBinary -Path $ffmpegPath -ExpectedSha256 $expectedSha256 -ExpectedVersionPattern $expectedVersionPattern) {
-    Write-Host "Using existing Windows ffmpeg: $ffmpegPath"
+    Write-Host "Using existing Windows ffmpeg ($Arch): $ffmpegPath"
     return
 }
 
+# A provisioned binary for another architecture cannot pass the version probe on
+# this host, so the arch-specific directory is also the cache boundary.
 $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("miacode-ffmpeg-" + [System.Guid]::NewGuid().ToString("N"))
 $archivePath = Join-Path $tmpDir ("ffmpeg" + $archiveExtension)
 $extractDir = Join-Path $tmpDir "extracted"
@@ -148,7 +181,7 @@ try {
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
 
-    Write-Host "Downloading Windows ffmpeg from $ffmpegUrl"
+    Write-Host "Downloading Windows ffmpeg ($Arch) from $ffmpegUrl"
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
     if ($null -ne $curl) {
         & $curl.Source -L --fail --retry 5 --retry-delay 2 -o $archivePath $ffmpegUrl
@@ -210,7 +243,7 @@ try {
         throw "Unexpected downloaded ffmpeg version output: $installedVersionLine"
     }
 
-    Write-Host "Prepared Windows ffmpeg at $ffmpegPath"
+    Write-Host "Prepared Windows ffmpeg ($Arch) at $ffmpegPath"
 } finally {
     if (Test-Path $tmpDir) {
         Remove-Item -Recurse -Force $tmpDir

@@ -76,6 +76,10 @@ int main(int argc, char* argv[])
         "dark appearance",
         NativeWindowThemePolicy::appearanceFor(PreferenceDocument::ThemePreference::Dark),
         Appearance::Dark);
+    ok &= expectAppearance(
+        "legacy appearance",
+        NativeWindowThemePolicy::appearanceFor(PreferenceDocument::ThemePreference::Legacy),
+        Appearance::Dark);
 
     return ok ? 0 : 1;
 }

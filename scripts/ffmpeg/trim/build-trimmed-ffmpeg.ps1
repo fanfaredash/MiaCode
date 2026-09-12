@@ -1,7 +1,7 @@
 ﻿<#
 .SYNOPSIS
     Build a decode-only, minimal-size FFmpeg (n7.1, LGPL, shared) for MiaCode's
-    QtAVPlayer preview backend and install it into third_party/ffmpeg/windows/dev.
+    QtAVPlayer preview backend and install it into third_party/ffmpeg/windows/win64/dev.
 
 .DESCRIPTION
     Replaces the full ~110 MB BtbN FFmpeg DLL set with a trimmed build that keeps
@@ -63,7 +63,7 @@ $scriptDir = $PSScriptRoot
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $scriptDir))
 
 if ([string]::IsNullOrWhiteSpace($AllowlistPath)) { $AllowlistPath = Join-Path $scriptDir 'trim-allowlist.psd1' }
-if ([string]::IsNullOrWhiteSpace($OutputDir))     { $OutputDir = Join-Path $repoRoot 'third_party\ffmpeg\windows\dev' }
+if ([string]::IsNullOrWhiteSpace($OutputDir))     { $OutputDir = Join-Path $repoRoot 'third_party\ffmpeg\windows\win64\dev' }
 if ([string]::IsNullOrWhiteSpace($SourceDir))     { $SourceDir = Join-Path $repoRoot 'build\ffmpeg-trim' }
 if ($Jobs -le 0) { $Jobs = [Environment]::ProcessorCount }
 
@@ -112,6 +112,18 @@ function Invoke-Msys2Bash {
 
 function Resolve-Vcvars {
     if (![string]::IsNullOrWhiteSpace($VcvarsPath) -and (Test-Path $VcvarsPath)) { return $VcvarsPath }
+    # vswhere covers every Visual Studio year and edition (2022, 2026, ...)
+    # without hard-coding install roots; dumpbin/lib only need the C++ build
+    # tools, which the vcvars64.bat presence check below confirms.
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (Test-Path $vswhere) {
+        $installs = & $vswhere -all -products * -property installationPath 2>$null
+        foreach ($install in @($installs)) {
+            if ([string]::IsNullOrWhiteSpace($install)) { continue }
+            $candidate = Join-Path $install.Trim() 'VC\Auxiliary\Build\vcvars64.bat'
+            if (Test-Path $candidate) { return $candidate }
+        }
+    }
     $roots = @(
         'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools',
         'C:\Program Files\Microsoft Visual Studio\2022\Community',
@@ -356,7 +368,11 @@ if (Test-Path $ffmpegExe) {
     foreach ($f in ($alwaysOnFilters + @('scale','format'))) {
         if ($haveFilters -notmatch "(?m)\s$([regex]::Escape($f))\s") { $verifyFail += "filter:$f" }
     }
-    foreach ($d in $decoders) { if ($haveDecoders -notmatch "(?m)\s$([regex]::Escape($d))\s") { $verifyFail += "decoder:$d" } }
+    # Names may sit at line start, mid-line, or inside the trailing
+    # "(codec <name>)" annotation FFmpeg prints for shared decoders.
+    foreach ($d in $decoders) {
+        if ($haveDecoders -notmatch "(?m)(^|\s)$([regex]::Escape($d))(\s|$|\))") { $verifyFail += "decoder:$d" }
+    }
     if ($verifyFail.Count -gt 0) { Write-Warning ("Verify gaps (not found in trimmed ffmpeg): " + ($verifyFail -join ', ')) }
     else { Write-Host "  OK - mandatory filters + all allowlisted decoders present in the trimmed build." }
 } else {

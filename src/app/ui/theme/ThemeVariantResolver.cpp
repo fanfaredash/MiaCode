@@ -13,6 +13,8 @@ ThemeVariant ThemeVariantResolver::resolve(PreferenceDocument::ThemePreference p
         return ThemeVariant::Light;
     case PreferenceDocument::ThemePreference::Dark:
         return ThemeVariant::Dark;
+    case PreferenceDocument::ThemePreference::Legacy:
+        return ThemeVariant::Dark;
     case PreferenceDocument::ThemePreference::System:
         break;
     }

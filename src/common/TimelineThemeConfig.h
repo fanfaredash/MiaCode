@@ -105,10 +105,10 @@ inline QColor adjustedTimelineMeasureLineColor(QColor color, double brightness, 
     return color;
 }
 
-// Timeline "shell" chrome colours (window/base/border/grids/lanes/labels and
-// the translucent waveform tint). These live in Theme.qml as the single source
-// of truth; the QML TimelineThemeBridge writes them here before any scene
-// state is built, and scene builders read them through timelineThemeColors().
+// Timeline chrome colours (surfaces, borders, grids, lanes, labels and the
+// translucent waveform tint). Theme.qml resolves surface ownership and
+// palette roles; TimelineThemeBridge writes the result here before scene state
+// is built, and scene builders read it through timelineThemeColors().
 struct TimelineChromeColors {
     QColor window;
     QColor header;

@@ -18,6 +18,16 @@ enum class ThemePreference {
     System,
     Light,
     Dark,
+    // Read/write compatibility for the short-lived single-palette draft.
+    // Normalized preferences migrate this value to Dark + legacy dark palette.
+    Legacy,
+};
+
+enum class ThemePalette {
+    Light,
+    Dark,
+    Legacy,
+    LegacyLight,
 };
 
 struct LanguageOption {
@@ -37,6 +47,15 @@ bool isLanguageAvailable(const QString& token);
 bool ensurePreferredLanguageAvailable();
 ThemePreference preferredTheme();
 void setPreferredTheme(ThemePreference preference);
+QString themePreferenceToken(ThemePreference preference);
+ThemePreference themePreferenceFromToken(const QString& token);
+ThemePalette preferredLightTheme();
+void setPreferredLightTheme(ThemePalette palette);
+ThemePalette preferredDarkTheme();
+void setPreferredDarkTheme(ThemePalette palette);
+QString themePaletteToken(ThemePalette palette);
+ThemePalette themePaletteFromToken(const QString& token);
+bool themePaletteIsDark(ThemePalette palette);
 QString preferencesFilePath();
 QString currentPreferencesSchema();
 QString storedPreferencesSchema();
