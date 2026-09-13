@@ -17,8 +17,8 @@ import urllib.request
 DIST = Path("dist")
 PLATFORM = os.environ.get("CI_PLATFORM", "")
 # Compiler/build cache prefix follows files that change compile or package
-# layout. Verification scripts and the workflow stay in `source` so a finished
-# package is re-checked; they must not rotate this prefix.
+# layout. Verification scripts stay out of `source` so a finished package can
+# be reused; they must not rotate this prefix.
 WINDOWS_BUILD_RECIPE = (
     "scripts/build/build-win.ps1",
     "scripts/build/package-win.ps1",
@@ -30,16 +30,33 @@ MACOS_BUILD_RECIPE = (
     "scripts/build/package-mac.sh",
     "scripts/build/thin-macos-app.sh",
 )
+# These change CI checks and job text, not the 7z payload.
+SOURCE_EXCLUDE = (
+    "scripts/build/ci-package.py",
+    "scripts/build/verify-win-package.ps1",
+)
 
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def tree(*paths):
+def tree(*paths, exclude=()):
     # Git object IDs cover LFS pointers and submodule commits before downloads.
     # Generated SDKs/build outputs never enter the source identity.
-    return subprocess.check_output(["git", "ls-tree", "-r", "-z", "HEAD", "--", *paths])
+    data = subprocess.check_output(["git", "ls-tree", "-r", "-z", "HEAD", "--", *paths])
+    if not exclude:
+        return data
+    skipped = set(exclude)
+    kept = []
+    for entry in data.split(b"\0"):
+        if not entry:
+            continue
+        path = entry.split(b"\t", 1)[1].decode()
+        if path in skipped:
+            continue
+        kept.append(entry)
+    return b"\0".join(kept) + b"\0" if kept else b""
 
 
 def output(**values):
@@ -58,7 +75,8 @@ def inputs():
                          "resources", "assets", "translations", "templates",
                          "third_party", "scripts", "licenses", "LICENSE",
                          "LICENSE_SCOPE.md", "THIRD_PARTY_NOTICES.md",
-                         ".github/workflows/package.yml", ".gitmodules", ".gitattributes"))
+                         ".github/workflows/package.yml", ".gitmodules", ".gitattributes",
+                         exclude=SOURCE_EXCLUDE))
     recipe = digest(tree("scripts/ffmpeg", "scripts/build/windows-toolchain.psd1"))
     if PLATFORM.startswith("windows-"):
         build_recipe = digest(tree(*WINDOWS_BUILD_RECIPE))
