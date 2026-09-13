@@ -208,34 +208,6 @@ def format_trigger():
     return f"{local}（{event}）" if event else local
 
 
-def timestamps():
-    tracked = set(subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0"))
-    tracked.discard("")
-    log = subprocess.check_output(
-        ["git", "log", "--pretty=format:%ct", "--name-only", "--no-renames"],
-        text=True, errors="replace")
-    current_ts = None
-    expect_time = True
-    for line in log.splitlines():
-        if expect_time:
-            if not line:
-                continue
-            current_ts = int(line)
-            expect_time = False
-            continue
-        if line == "":
-            expect_time = True
-            continue
-        if line not in tracked:
-            continue
-        tracked.remove(line)
-        path = Path(line)
-        if path.is_file():
-            os.utime(path, (current_ts, current_ts))
-        if not tracked:
-            break
-
-
 def report():
     record = json.loads((DIST / "verification.json").read_text(encoding="utf-8"))
     elapsed = time.time() - int(os.environ["CI_STARTED_AT"])
@@ -250,5 +222,5 @@ def report():
 
 if __name__ == "__main__":
     commands = {"inputs": inputs, "verify": verify, "check": check, "report": report,
-                "verify-caches": verify_caches, "timestamps": timestamps}
+                "verify-caches": verify_caches}
     commands[sys.argv[1]]()
