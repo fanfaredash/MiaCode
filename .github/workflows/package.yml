@@ -5,6 +5,11 @@ on:
   push:
     branches: [dev, feature/qml-ui, ci/platform-package-refactor]
   workflow_dispatch:
+    inputs:
+      macos_only:
+        description: 运行 macOS arm64 修复验收
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,31 +26,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: windows-x64
-            runner: windows-2022
-            toolchain: msvc
-            build: build-msvc
-            qt: .qt/6.11.1/msvc2022_64
-            media: third_party/ffmpeg/windows/win64
-            version: ffmpeg7.1
-            estimate: 77–79 MiB
-          - platform: windows-arm64
-            runner: windows-11-arm
-            toolchain: msvc-arm64
-            build: build-msvc-arm64
-            qt: .qt/6.11.1/msvc2022_arm64
-            media: third_party/ffmpeg/windows/winarm64
-            version: ffmpeg8.1.2
-            estimate: 92–96 MiB
-          - platform: macos-arm64
-            runner: macos-14
-            toolchain: apple-clang
-            build: build-macos
-            qt: .qt/6.11.1
-            media: third_party/ffmpeg/macos
-            version: ffmpeg8.1.2
-            estimate: 80–83 MiB
+        include: >-
+          ${{ fromJSON(inputs.macos_only &&
+          '[{
+            "platform": "macos-arm64", "runner": "macos-14",
+            "toolchain": "apple-clang", "build": "build-macos",
+            "qt": ".qt/6.11.1", "media": "third_party/ffmpeg/macos",
+            "version": "ffmpeg8.1.2", "estimate": "80–83 MiB"
+          }]' ||
+          '[{
+            "platform": "windows-x64", "runner": "windows-2022",
+            "toolchain": "msvc", "build": "build-msvc",
+            "qt": ".qt/6.11.1/msvc2022_64", "media": "third_party/ffmpeg/windows/win64",
+            "version": "ffmpeg7.1", "estimate": "77–79 MiB"
+          }, {
+            "platform": "windows-arm64", "runner": "windows-11-arm",
+            "toolchain": "msvc-arm64", "build": "build-msvc-arm64",
+            "qt": ".qt/6.11.1/msvc2022_arm64", "media": "third_party/ffmpeg/windows/winarm64",
+            "version": "ffmpeg8.1.2", "estimate": "92–96 MiB"
+          }, {
+            "platform": "macos-arm64", "runner": "macos-14",
+            "toolchain": "apple-clang", "build": "build-macos",
+            "qt": ".qt/6.11.1", "media": "third_party/ffmpeg/macos",
+            "version": "ffmpeg8.1.2", "estimate": "80–83 MiB"
+          }]') }}
     defaults:
       run:
         shell: bash
@@ -136,7 +140,50 @@ jobs:
 
       - name: Build macOS package
         if: runner.os == 'macOS' && steps.package-cache.outputs.cache-hit != 'true'
+        id: macos-build
         run: bash scripts/build/build-macos-ci.sh
+
+      - name: Save macOS Qt after build
+        if: runner.os == 'macOS' && steps.macos-build.outcome == 'success' && steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ matrix.qt }}
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
+
+      - name: Save macOS FFmpeg after build
+        if: runner.os == 'macOS' && steps.macos-build.outcome == 'success' && steps.media-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ matrix.media }}
+          key: ${{ steps.media-cache.outputs.cache-primary-key }}
+
+      - name: Flush macOS compiler outputs
+        if: runner.os == 'macOS' && steps.macos-build.outcome == 'success'
+        run: sccache --stop-server
+
+      - name: Save macOS compiler outputs after build
+        if: runner.os == 'macOS' && steps.macos-build.outcome == 'success' && steps.compiler-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .cache/sccache
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
+
+      - name: Save macOS build directory after build
+        if: runner.os == 'macOS' && steps.macos-build.outcome == 'success' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ matrix.build }}
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+      - name: Preserve macOS package before verification
+        if: runner.os == 'macOS' && steps.macos-build.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-arm64-build-output
+          path: dist/*.7z
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Verify Windows application
         if: runner.os == 'Windows' && steps.package-cache.outputs.cache-hit != 'true'

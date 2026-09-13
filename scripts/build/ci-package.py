@@ -45,6 +45,10 @@ def inputs():
                          ".github/workflows/package.yml", ".gitmodules", ".gitattributes"))
     recipe = digest(tree("scripts/ffmpeg", "scripts/build/windows-toolchain.psd1"))
     build_recipe = digest(tree("scripts/build", ".github/workflows/package.yml"))
+    if PLATFORM == "macos-arm64":
+        build_recipe = digest(tree("scripts/build/build-macos-ci.sh",
+                                   "scripts/build/package-mac.sh",
+                                   "scripts/build/thin-macos-app.sh"))
     toolchain = digest((recipe + build_recipe + os.environ.get("ImageOS", "") +
                         os.environ.get("ImageVersion", "")).encode())
     output(source=source, recipe=recipe, toolchain=toolchain)
@@ -84,7 +88,7 @@ def verify():
     else:
         app = folder / "MiaCode.app/Contents/MacOS"
         ffmpeg = app / "ffmpeg/ffmpeg"
-        execute("lipo", "-verify_arch", "arm64", app / "MiaCode")
+        execute("lipo", app / "MiaCode", "-verify_arch", "arm64")
         log_dir = (DIST / "validation").resolve()
         log_dir.mkdir(parents=True, exist_ok=True)
         with (log_dir / "launch.log").open("w") as stream:
