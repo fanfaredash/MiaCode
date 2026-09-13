@@ -140,6 +140,7 @@ scripts/build/*
 !scripts/build/build-macos-ci.sh
 !scripts/build/build-macos-local.sh
 !scripts/build/build-win.ps1
+!scripts/build/ci-package.py
 !scripts/build/package-mac.sh
 !scripts/build/package-win.ps1
 !scripts/build/provision-qt.ps1

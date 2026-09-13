@@ -1,0 +1,190 @@
+name: Platform packages
+run-name: nightly · ${{ github.ref_name }} · ${{ github.sha }}
+
+on:
+  push:
+    branches: [dev, feature/qml-ui, ci/platform-package-refactor]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-packages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            runner: windows-2022
+            toolchain: msvc
+            build: build-msvc
+            qt: .qt/6.11.1/msvc2022_64
+            media: third_party/ffmpeg/windows/win64
+            version: ffmpeg7.1
+            estimate: 77–79 MiB
+          - platform: windows-arm64
+            runner: windows-11-arm
+            toolchain: msvc-arm64
+            build: build-msvc-arm64
+            qt: .qt/6.11.1/msvc2022_arm64
+            media: third_party/ffmpeg/windows/winarm64
+            version: ffmpeg8.1.2
+            estimate: 92–96 MiB
+          - platform: macos-arm64
+            runner: macos-14
+            toolchain: apple-clang
+            build: build-macos
+            qt: .qt/6.11.1
+            media: third_party/ffmpeg/macos
+            version: ffmpeg8.1.2
+            estimate: 80–83 MiB
+    defaults:
+      run:
+        shell: bash
+    env:
+      MIACODE_PACKAGE_CHANNEL: nightly
+      GIT_LFS_SKIP_SMUDGE: "1"
+      SCCACHE_DIR: ${{ github.workspace }}/.cache/sccache
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      CMAKE_OSX_ARCHITECTURES: arm64
+      CMAKE_OSX_DEPLOYMENT_TARGET: "13.0"
+      MIACODE_PACKAGE_JOBS: "4"
+      MIACODE_FFMPEG_BUILD_JOBS: "4"
+      CI_PLATFORM: ${{ matrix.platform }}
+      CI_ESTIMATE: ${{ matrix.estimate }}
+    steps:
+      - name: Start timing
+        run: echo "CI_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Checkout inputs
+        uses: actions/checkout@v7
+        with:
+          lfs: false
+
+      - name: Identify inputs and estimate package
+        id: inputs
+        run: python scripts/build/ci-package.py inputs
+
+      - name: Restore finished package
+        id: package-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            dist/*.7z
+            dist/verification.json
+          key: platform-v1-package-${{ matrix.platform }}-${{ steps.inputs.outputs.source }}
+
+      - name: Fetch build assets
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        run: |
+          git lfs pull
+          git submodule update --init --recursive
+
+      - name: Restore Qt
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        id: qt-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ matrix.qt }}
+          key: platform-v1-qt-${{ matrix.platform }}-6.11.1
+
+      - name: Restore FFmpeg
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        id: media-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ matrix.media }}
+          key: platform-v1-media-${{ matrix.platform }}-${{ matrix.version }}-${{ steps.inputs.outputs.recipe }}
+
+      - name: Restore compiler outputs
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        id: compiler-cache
+        uses: actions/cache@v6
+        with:
+          path: .cache/sccache
+          key: platform-v1-compiler-${{ matrix.platform }}-${{ steps.inputs.outputs.toolchain }}-${{ steps.inputs.outputs.source }}
+          restore-keys: platform-v1-compiler-${{ matrix.platform }}-${{ steps.inputs.outputs.toolchain }}-
+
+      - name: Restore build directory
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        id: build-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ matrix.build }}
+          key: platform-v1-build-${{ matrix.platform }}-${{ steps.inputs.outputs.toolchain }}-${{ steps.inputs.outputs.source }}
+          restore-keys: platform-v1-build-${{ matrix.platform }}-${{ steps.inputs.outputs.toolchain }}-
+
+      - name: Set up compiler cache
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          version: v0.17.0
+
+      - name: Build Windows package
+        if: runner.os == 'Windows' && steps.package-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./scripts/build/build-win.ps1 -Toolchain ${{ matrix.toolchain }} -BuildDir ${{ matrix.build }} -BuildJobs 4
+
+      - name: Build macOS package
+        if: runner.os == 'macOS' && steps.package-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build/build-macos-ci.sh
+
+      - name: Verify Windows application
+        if: runner.os == 'Windows' && steps.package-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem dist -Directory -Filter 'MiaCode_*')
+          if ($packages.Count -ne 1) { throw 'Expected one package directory' }
+          $arch = '${{ matrix.platform }}'.Replace('windows-', '')
+          ./scripts/build/verify-win-package.ps1 -DistDir $packages[0].FullName -Arch $arch
+
+      - name: Verify media and record package
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        env:
+          CI_SOURCE: ${{ steps.inputs.outputs.source }}
+        run: |
+          python scripts/build/ci-package.py verify
+          sccache --show-stats
+          sccache --stop-server
+
+      - name: Check package identity and size
+        id: archive
+        env:
+          CI_SOURCE: ${{ steps.inputs.outputs.source }}
+        run: python scripts/build/ci-package.py check
+
+      - name: Save finished package
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            dist/*.7z
+            dist/verification.json
+          key: ${{ steps.package-cache.outputs.cache-primary-key }}
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.archive.outputs.name }}
+          path: dist/*.7z
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Record result and enforce cache budget
+        env:
+          CI_PACKAGE_HIT: ${{ steps.package-cache.outputs.cache-hit }}
+          CI_QT_HIT: ${{ steps.qt-cache.outputs.cache-hit }}
+          CI_MEDIA_HIT: ${{ steps.media-cache.outputs.cache-hit }}
+          CI_COMPILER_HIT: ${{ steps.compiler-cache.outputs.cache-hit }}
+          CI_BUILD_HIT: ${{ steps.build-cache.outputs.cache-hit }}
+        run: python scripts/build/ci-package.py report

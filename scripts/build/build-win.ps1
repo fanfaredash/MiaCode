@@ -223,6 +223,7 @@ Write-Host "Configure: generator '$generator', Qt '$QtRoot', config '$Config'"
 
 $configureArgs = @("-S", $repoRoot, "-B", $BuildDir, "-G", $generator,
     "-DCMAKE_PREFIX_PATH=$QtRoot",
+    "-DCMAKE_TRY_COMPILE_CONFIGURATION=$Config",
     "-DMIACODE_BUILD_DEV_TOOLS=$buildDevTools")
 & cmake @configureArgs
 if ($LASTEXITCODE -ne 0) {
