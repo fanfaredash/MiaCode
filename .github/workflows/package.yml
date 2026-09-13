@@ -128,6 +128,10 @@ jobs:
           key: platform-v1-build-${{ matrix.platform }}-${{ steps.inputs.outputs.toolchain }}-${{ steps.inputs.outputs.source }}
           restore-keys: platform-v1-build-${{ matrix.platform }}-${{ steps.inputs.outputs.toolchain }}-
 
+      - name: Restore source timestamps
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        run: python scripts/build/ci-package.py timestamps
+
       - name: Set up compiler cache
         if: steps.package-cache.outputs.cache-hit != 'true'
         uses: mozilla-actions/sccache-action@v0.0.9
