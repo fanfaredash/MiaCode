@@ -10,6 +10,8 @@ import struct
 import subprocess
 import sys
 import time
+import urllib.parse
+import urllib.request
 
 
 DIST = Path("dist")
@@ -67,6 +69,70 @@ def execute(*args):
     subprocess.run([str(arg) for arg in args], check=True, timeout=120)
 
 
+def verify_caches():
+    prefix = "platform-v1-"
+    expected = {
+        f"{prefix}qt-macos-arm64-6.11.1",
+        f"{prefix}media-macos-arm64-ffmpeg8.1.2-{os.environ['CI_RECIPE']}",
+        f"{prefix}compiler-macos-arm64-{os.environ['CI_TOOLCHAIN']}-{os.environ['CI_SOURCE']}",
+        f"{prefix}build-macos-arm64-{os.environ['CI_TOOLCHAIN']}-{os.environ['CI_SOURCE']}",
+    }
+    page = 1
+    found = set()
+    while True:
+        query = urllib.parse.urlencode(dict(ref=os.environ["GITHUB_REF"], key=prefix,
+                                           per_page=100, page=page))
+        url = (f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}"
+               f"/actions/caches?{query}")
+        request = urllib.request.Request(url, headers={
+            "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+            "Accept": "application/vnd.github+json",
+        })
+        with urllib.request.urlopen(request, timeout=30) as response:
+            caches = json.load(response)["actions_caches"]
+        found.update(c["key"] for c in caches if c["size_in_bytes"] > 0)
+        if expected <= found or len(caches) < 100:
+            break
+        page += 1
+    if expected - found:
+        raise RuntimeError(f"Saved caches missing: {sorted(expected - found)}")
+    summary("\nmacOS 四层构建缓存：GitHub 缓存记录与非零体积检查通过。")
+
+
+def smoke_macos(app, log_dir):
+    log_dir = log_dir.resolve()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    with (log_dir / "launch.log").open("w") as stream:
+        process = subprocess.Popen([str(app.resolve()), "--debug"],
+                                   env={**os.environ, "MIACODE_LOG_DIR": str(log_dir)},
+                                   stdout=stream, stderr=subprocess.STDOUT)
+        try:
+            try:
+                code = process.wait(timeout=15)
+                raise RuntimeError(f"Application exited during launch: {code}")
+            except subprocess.TimeoutExpired:
+                pass
+            # Request the ordinary macOS quit event so Qt flushes its buffered
+            # logs. SIGTERM bypasses aboutToQuit and can discard startup markers.
+            execute("osascript", "-l", "JavaScript", "-e",
+                    'ObjC.import("AppKit"); '
+                    f'$.NSRunningApplication.runningApplicationWithProcessIdentifier({process.pid}).terminate')
+            if process.wait(timeout=15) != 0:
+                raise RuntimeError("Application did not exit cleanly")
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=15)
+    logs = "\n".join(p.read_text(encoding="utf-8", errors="replace")
+                     for p in log_dir.glob("*.log"))
+    if not re.search(r"action=start_ok|quick_shell/backend", logs):
+        print(logs[-6000:])
+        raise RuntimeError(f"Application readiness marker missing; logs: {log_dir}")
+    if re.search(r"load_failed|qml_object_creation_failed", logs):
+        print(logs[-6000:])
+        raise RuntimeError(f"QML application startup failed; logs: {log_dir}")
+
+
 def verify():
     package = archive()
     folder = package.with_suffix("")
@@ -89,28 +155,7 @@ def verify():
         app = folder / "MiaCode.app/Contents/MacOS"
         ffmpeg = app / "ffmpeg/ffmpeg"
         execute("lipo", app / "MiaCode", "-verify_arch", "arm64")
-        log_dir = (DIST / "validation").resolve()
-        log_dir.mkdir(parents=True, exist_ok=True)
-        with (log_dir / "launch.log").open("w") as stream:
-            process = subprocess.Popen([str((app / "MiaCode").resolve()), "--debug"],
-                                       env={**os.environ, "MIACODE_LOG_DIR": str(log_dir)},
-                                       stdout=stream, stderr=subprocess.STDOUT)
-            try:
-                try:
-                    code = process.wait(timeout=15)
-                    raise RuntimeError(f"Application exited during launch: {code}")
-                except subprocess.TimeoutExpired:
-                    pass
-            finally:
-                if process.poll() is None:
-                    process.terminate()
-                    process.wait(timeout=15)
-        logs = "\n".join(p.read_text(encoding="utf-8", errors="replace")
-                         for p in log_dir.glob("*.log"))
-        if not re.search(r"action=start_ok|quick_shell/backend", logs):
-            raise RuntimeError("Application readiness marker missing")
-        if re.search(r"load_failed|qml_object_creation_failed", logs):
-            raise RuntimeError("QML application startup failed")
+        smoke_macos(app / "MiaCode", DIST / "validation")
         checks.extend(["arm64 架构", "macOS 包依赖与部署版本检查", "应用启动"])
     version = subprocess.check_output([str(ffmpeg), "-version"], text=True).splitlines()[0]
     expected = "7.1" if PLATFORM == "windows-x64" else "8.1"
@@ -163,5 +208,7 @@ def report():
 
 
 if __name__ == "__main__":
-    commands = {"inputs": inputs, "verify": verify, "check": check, "report": report}
+    commands = {"inputs": inputs, "verify": verify, "check": check, "report": report,
+                "verify-caches": verify_caches,
+                "smoke-macos": lambda: smoke_macos(Path(sys.argv[2]), Path(sys.argv[3]))}
     commands[sys.argv[1]]()

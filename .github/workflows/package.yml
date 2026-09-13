@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: platform-packages-${{ github.ref }}
@@ -143,19 +144,29 @@ jobs:
         id: macos-build
         run: bash scripts/build/build-macos-ci.sh
 
+      - name: Preserve macOS package before verification
+        if: runner.os == 'macOS' && steps.macos-build.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-arm64-build-output
+          path: dist/*.7z
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Save macOS Qt after build
         if: runner.os == 'macOS' && steps.macos-build.outcome == 'success' && steps.qt-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ${{ matrix.qt }}
-          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
+          key: platform-v1-qt-${{ matrix.platform }}-6.11.1
 
       - name: Save macOS FFmpeg after build
         if: runner.os == 'macOS' && steps.macos-build.outcome == 'success' && steps.media-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ${{ matrix.media }}
-          key: ${{ steps.media-cache.outputs.cache-primary-key }}
+          key: platform-v1-media-${{ matrix.platform }}-${{ matrix.version }}-${{ steps.inputs.outputs.recipe }}
 
       - name: Flush macOS compiler outputs
         if: runner.os == 'macOS' && steps.macos-build.outcome == 'success'
@@ -166,24 +177,23 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: .cache/sccache
-          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
+          key: platform-v1-compiler-${{ matrix.platform }}-${{ steps.inputs.outputs.toolchain }}-${{ steps.inputs.outputs.source }}
 
       - name: Save macOS build directory after build
         if: runner.os == 'macOS' && steps.macos-build.outcome == 'success' && steps.build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ${{ matrix.build }}
-          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+          key: platform-v1-build-${{ matrix.platform }}-${{ steps.inputs.outputs.toolchain }}-${{ steps.inputs.outputs.source }}
 
-      - name: Preserve macOS package before verification
+      - name: Verify macOS saved caches
         if: runner.os == 'macOS' && steps.macos-build.outcome == 'success'
-        uses: actions/upload-artifact@v7
-        with:
-          name: macos-arm64-build-output
-          path: dist/*.7z
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 14
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_SOURCE: ${{ steps.inputs.outputs.source }}
+          CI_RECIPE: ${{ steps.inputs.outputs.recipe }}
+          CI_TOOLCHAIN: ${{ steps.inputs.outputs.toolchain }}
+        run: python scripts/build/ci-package.py verify-caches
 
       - name: Verify Windows application
         if: runner.os == 'Windows' && steps.package-cache.outputs.cache-hit != 'true'
@@ -196,12 +206,21 @@ jobs:
 
       - name: Verify media and record package
         if: steps.package-cache.outputs.cache-hit != 'true'
+        id: verification
         env:
           CI_SOURCE: ${{ steps.inputs.outputs.source }}
         run: |
           python scripts/build/ci-package.py verify
           sccache --show-stats
           sccache --stop-server
+
+      - name: Preserve macOS verification logs
+        if: failure() && runner.os == 'macOS' && steps.verification.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-arm64-verification-logs
+          path: dist/validation
+          retention-days: 14
 
       - name: Check package identity and size
         id: archive
