@@ -211,8 +211,10 @@ jobs:
           CI_SOURCE: ${{ steps.inputs.outputs.source }}
         run: |
           python scripts/build/ci-package.py verify
-          sccache --show-stats
-          sccache --stop-server
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            sccache --show-stats
+            sccache --stop-server
+          fi
 
       - name: Preserve macOS verification logs
         if: failure() && runner.os == 'macOS' && steps.verification.outcome == 'failure'
