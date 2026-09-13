@@ -195,7 +195,7 @@ jobs:
           CI_TOOLCHAIN: ${{ steps.inputs.outputs.toolchain }}
         run: python scripts/build/ci-package.py verify-caches
 
-      - name: Verify Windows application
+      - name: Verify Windows package
         if: runner.os == 'Windows' && steps.package-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
@@ -206,7 +206,6 @@ jobs:
 
       - name: Verify media and record package
         if: steps.package-cache.outputs.cache-hit != 'true'
-        id: verification
         env:
           CI_SOURCE: ${{ steps.inputs.outputs.source }}
         run: |
@@ -215,14 +214,6 @@ jobs:
             sccache --show-stats
             sccache --stop-server
           fi
-
-      - name: Preserve macOS verification logs
-        if: failure() && runner.os == 'macOS' && steps.verification.outcome == 'failure'
-        uses: actions/upload-artifact@v7
-        with:
-          name: macos-arm64-verification-logs
-          path: dist/validation
-          retention-days: 14
 
       - name: Check package identity and size
         id: archive

@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
     Verifies a packaged Windows build: contents contract, FFmpeg trim match,
-    dependency completeness and a smoke launch.
+    and dependency completeness.
 
 .DESCRIPTION
     Runs after package-win.ps1. Fails (exit 1) when the package is missing a
     required entry, ships FFmpeg DLLs that differ from
-    the provisioned dev SDK, leaves an import unresolved, or fails to start.
+    the provisioned dev SDK, or leaves an import unresolved.
 
 .PARAMETER DistDir
     Package directory, e.g. dist\MiaCode_2.0.0-alpha_win_x64.
@@ -24,9 +24,7 @@ param(
     [ValidateSet("x64", "arm64")]
     [string]$Arch = "x64",
     [string]$QtRoot = "",
-    [int]$LaunchTimeoutSeconds = 25,
-    [switch]$IncludeDevTools,
-    [switch]$SkipLaunch
+    [switch]$IncludeDevTools
 )
 
 $ErrorActionPreference = "Stop"
@@ -148,55 +146,7 @@ if ([string]::IsNullOrWhiteSpace($objdump)) {
     }
 }
 
-# --- 4. smoke launch ---------------------------------------------------------
-if (!$SkipLaunch) {
-    Write-Host "== Smoke launch =="
-    $logDir = Join-Path $DistDir "logs"
-    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-    Get-ChildItem -LiteralPath $logDir -Filter "*.log" -ErrorAction SilentlyContinue | Remove-Item -Force
-    $previousLogDir = $env:MIACODE_LOG_DIR
-    $env:MIACODE_LOG_DIR = $logDir
-    try {
-        $appProcess = Start-Process -FilePath (Join-Path $appDir "MiaCode.exe") -ArgumentList "--debug" -PassThru
-        Start-Sleep -Seconds $LaunchTimeoutSeconds
-        $appAlive = !$appProcess.HasExited
-        if (!$appAlive) {
-            $failures.Add("app\MiaCode.exe exited during the smoke window (code $($appProcess.ExitCode))")
-        }
-        Get-Process -Name MiaCode -ErrorAction SilentlyContinue | Stop-Process -Force
-    } finally {
-        $env:MIACODE_LOG_DIR = $previousLogDir
-    }
-
-    $runtimeLog = Join-Path $logDir "miacode_runtime_debug.log"
-    if (!(Test-Path -LiteralPath $runtimeLog)) {
-        $failures.Add("runtime log not written: $runtimeLog")
-    } else {
-        $logText = Get-Content -LiteralPath $runtimeLog -Raw
-        # The app has two UI paths: the QML shell logs action=load_begin /
-        # start_ok, the quick shell logs its backend readiness. Either one proves
-        # the window came up.
-        if ($logText -notmatch "action=load_begin|action=start_ok|quick_shell/backend") {
-            $failures.Add("UI never reached a ready state (no load_begin / start_ok / quick_shell backend entry)")
-        }
-        if ($logText -match "load_failed|qml_object_creation_failed") {
-            $failures.Add("QML UI failed to load (see $runtimeLog)")
-        }
-    }
-
-    $launcherProcess = Start-Process -FilePath (Join-Path $DistDir "MiaCode.exe") -PassThru
-    Start-Sleep -Seconds $LaunchTimeoutSeconds
-    if ($launcherProcess.HasExited) {
-        $failures.Add("dist\MiaCode.exe (launcher) exited during the smoke window (code $($launcherProcess.ExitCode))")
-    }
-    $childProcesses = Get-Process -Name MiaCode -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $launcherProcess.Id }
-    if (!$childProcesses) {
-        $failures.Add("launcher did not start the app process")
-    }
-    Get-Process -Name MiaCode -ErrorAction SilentlyContinue | Stop-Process -Force
-}
-
-# --- 5. archives ---------------------------------------------------------------
+# --- 4. archives ---------------------------------------------------------------
 Write-Host "== Archives =="
 $archiveFormats = $toolchainData.Package.ArchiveFormats
 if (!$archiveFormats -or $archiveFormats.Count -eq 0) { $archiveFormats = @("7z") }

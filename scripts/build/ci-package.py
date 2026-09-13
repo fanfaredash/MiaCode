@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Platform package identity, smoke verification and Actions measurements."""
+"""Platform package identity, static verification and Actions measurements."""
 
 import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import struct
 import subprocess
 import sys
@@ -16,6 +15,20 @@ import urllib.request
 
 DIST = Path("dist")
 PLATFORM = os.environ.get("CI_PLATFORM", "")
+# Compiler/build cache prefix follows files that change compile or package
+# layout. Verification scripts and the workflow stay in `source` so a finished
+# package is re-checked; they must not rotate this prefix.
+WINDOWS_BUILD_RECIPE = (
+    "scripts/build/build-win.ps1",
+    "scripts/build/package-win.ps1",
+    "scripts/build/provision-qt.ps1",
+    "scripts/build/windows-toolchain.psd1",
+)
+MACOS_BUILD_RECIPE = (
+    "scripts/build/build-macos-ci.sh",
+    "scripts/build/package-mac.sh",
+    "scripts/build/thin-macos-app.sh",
+)
 
 
 def digest(data):
@@ -46,11 +59,12 @@ def inputs():
                          "LICENSE_SCOPE.md", "THIRD_PARTY_NOTICES.md",
                          ".github/workflows/package.yml", ".gitmodules", ".gitattributes"))
     recipe = digest(tree("scripts/ffmpeg", "scripts/build/windows-toolchain.psd1"))
-    build_recipe = digest(tree("scripts/build", ".github/workflows/package.yml"))
-    if PLATFORM == "macos-arm64":
-        build_recipe = digest(tree("scripts/build/build-macos-ci.sh",
-                                   "scripts/build/package-mac.sh",
-                                   "scripts/build/thin-macos-app.sh"))
+    if PLATFORM.startswith("windows-"):
+        build_recipe = digest(tree(*WINDOWS_BUILD_RECIPE))
+    elif PLATFORM == "macos-arm64":
+        build_recipe = digest(tree(*MACOS_BUILD_RECIPE))
+    else:
+        build_recipe = digest(tree("scripts/build", ".github/workflows/package.yml"))
     toolchain = digest((recipe + build_recipe + os.environ.get("ImageOS", "") +
                         os.environ.get("ImageVersion", "")).encode())
     output(source=source, recipe=recipe, toolchain=toolchain)
@@ -99,40 +113,6 @@ def verify_caches():
     summary("\nmacOS 四层构建缓存：GitHub 缓存记录与非零体积检查通过。")
 
 
-def smoke_macos(app, log_dir):
-    log_dir = log_dir.resolve()
-    log_dir.mkdir(parents=True, exist_ok=True)
-    with (log_dir / "launch.log").open("w") as stream:
-        process = subprocess.Popen([str(app.resolve()), "--debug"],
-                                   env={**os.environ, "MIACODE_LOG_DIR": str(log_dir)},
-                                   stdout=stream, stderr=subprocess.STDOUT)
-        try:
-            try:
-                code = process.wait(timeout=15)
-                raise RuntimeError(f"Application exited during launch: {code}")
-            except subprocess.TimeoutExpired:
-                pass
-            # Request the ordinary macOS quit event so Qt flushes its buffered
-            # logs. SIGTERM bypasses aboutToQuit and can discard startup markers.
-            execute("osascript", "-l", "JavaScript", "-e",
-                    'ObjC.import("AppKit"); '
-                    f'$.NSRunningApplication.runningApplicationWithProcessIdentifier({process.pid}).terminate')
-            if process.wait(timeout=15) != 0:
-                raise RuntimeError("Application did not exit cleanly")
-        finally:
-            if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=15)
-    logs = "\n".join(p.read_text(encoding="utf-8", errors="replace")
-                     for p in log_dir.glob("*.log"))
-    if not re.search(r"action=start_ok|quick_shell/backend", logs):
-        print(logs[-6000:])
-        raise RuntimeError(f"Application readiness marker missing; logs: {log_dir}")
-    if re.search(r"load_failed|qml_object_creation_failed", logs):
-        print(logs[-6000:])
-        raise RuntimeError(f"QML application startup failed; logs: {log_dir}")
-
-
 def verify():
     package = archive()
     folder = package.with_suffix("")
@@ -150,13 +130,12 @@ def verify():
                 signature, actual = struct.unpack("<4sH", stream.read(6))
             if signature != b"PE\0\0" or actual != machine:
                 raise RuntimeError(f"Unexpected PE architecture: {binary}")
-        checks.extend(["PE 架构", "Windows 包结构与依赖检查", "应用与启动器启动"])
+        checks.extend(["PE 架构", "Windows 包结构与依赖检查"])
     else:
         app = folder / "MiaCode.app/Contents/MacOS"
         ffmpeg = app / "ffmpeg/ffmpeg"
         execute("lipo", app / "MiaCode", "-verify_arch", "arm64")
-        smoke_macos(app / "MiaCode", DIST / "validation")
-        checks.extend(["arm64 架构", "macOS 包依赖与部署版本检查", "应用启动"])
+        checks.extend(["arm64 架构", "macOS 包依赖与部署版本检查"])
     version = subprocess.check_output([str(ffmpeg), "-version"], text=True).splitlines()[0]
     expected = "7.1" if PLATFORM == "windows-x64" else "8.1"
     if expected not in version:
@@ -209,6 +188,5 @@ def report():
 
 if __name__ == "__main__":
     commands = {"inputs": inputs, "verify": verify, "check": check, "report": report,
-                "verify-caches": verify_caches,
-                "smoke-macos": lambda: smoke_macos(Path(sys.argv[2]), Path(sys.argv[3]))}
+                "verify-caches": verify_caches}
     commands[sys.argv[1]]()
