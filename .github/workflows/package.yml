@@ -133,6 +133,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.17.0
+          disable_annotations: true
 
       - name: Build Windows package
         if: runner.os == 'Windows' && steps.package-cache.outputs.cache-hit != 'true'
@@ -143,16 +144,6 @@ jobs:
         if: runner.os == 'macOS' && steps.package-cache.outputs.cache-hit != 'true'
         id: macos-build
         run: bash scripts/build/build-macos-ci.sh
-
-      - name: Preserve macOS package before verification
-        if: runner.os == 'macOS' && steps.macos-build.outcome == 'success'
-        uses: actions/upload-artifact@v7
-        with:
-          name: macos-arm64-build-output
-          path: dist/*.7z
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 14
 
       - name: Save macOS Qt after build
         if: runner.os == 'macOS' && steps.macos-build.outcome == 'success' && steps.qt-cache.outputs.cache-hit != 'true'
@@ -211,7 +202,6 @@ jobs:
         run: |
           python scripts/build/ci-package.py verify
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            sccache --show-stats
             sccache --stop-server
           fi
 
@@ -242,8 +232,6 @@ jobs:
       - name: Record result and enforce cache budget
         env:
           CI_PACKAGE_HIT: ${{ steps.package-cache.outputs.cache-hit }}
-          CI_QT_HIT: ${{ steps.qt-cache.outputs.cache-hit }}
-          CI_MEDIA_HIT: ${{ steps.media-cache.outputs.cache-hit }}
-          CI_COMPILER_HIT: ${{ steps.compiler-cache.outputs.cache-hit }}
-          CI_BUILD_HIT: ${{ steps.build-cache.outputs.cache-hit }}
+          CI_EVENT: ${{ github.event_name }}
+          CI_TRIGGERED_AT: ${{ github.event.head_commit.timestamp }}
         run: python scripts/build/ci-package.py report

@@ -4,6 +4,7 @@
 import hashlib
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import struct
 import subprocess
@@ -68,8 +69,6 @@ def inputs():
     toolchain = digest((recipe + build_recipe + os.environ.get("ImageOS", "") +
                         os.environ.get("ImageVersion", "")).encode())
     output(source=source, recipe=recipe, toolchain=toolchain)
-    summary(f"平台：{PLATFORM}；运行前包体估算：{os.environ['CI_ESTIMATE']}。\n"
-            f"输入：`{source}`。估算依据为历史成功构建的 7z 体积。")
 
 
 def archive():
@@ -110,7 +109,6 @@ def verify_caches():
         page += 1
     if expected - found:
         raise RuntimeError(f"Saved caches missing: {sorted(expected - found)}")
-    summary("\nmacOS 四层构建缓存：GitHub 缓存记录与非零体积检查通过。")
 
 
 def verify():
@@ -168,21 +166,39 @@ def check():
     output(name=package.name)
 
 
+def format_elapsed(elapsed):
+    total = max(0, int(round(elapsed)))
+    hours, rem = divmod(total, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if hours:
+        return f"{hours} 小时 {minutes} 分"
+    if minutes and seconds:
+        return f"{minutes} 分 {seconds:02d} 秒"
+    if minutes:
+        return f"{minutes} 分钟"
+    return f"{seconds} 秒"
+
+
+def format_trigger():
+    raw = os.environ.get("CI_TRIGGERED_AT", "").strip()
+    if raw:
+        moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    else:
+        moment = datetime.fromtimestamp(int(os.environ["CI_STARTED_AT"]), tz=timezone.utc)
+    local = moment.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
+    event = {"push": "推送", "workflow_dispatch": "手动"}.get(os.environ.get("CI_EVENT", ""))
+    return f"{local}（{event}）" if event else local
+
+
 def report():
     record = json.loads((DIST / "verification.json").read_text(encoding="utf-8"))
     elapsed = time.time() - int(os.environ["CI_STARTED_AT"])
-    hit = os.environ["CI_PACKAGE_HIT"] == "true"
-    summary(f"\n出包耗时：{elapsed:.1f} 秒（作业计时步骤至上传完成）。\n"
-            f"包体：{record['bytes'] / 1048576:.2f} MiB（{record['bytes']} 字节）。\n"
-            f"SHA256：`{record['sha256']}`。\n\n|缓存|结果|\n|---|---|")
-    for label, name in [("成品", "PACKAGE"), ("Qt", "QT"), ("FFmpeg", "MEDIA"),
-                        ("编译器输出", "COMPILER"), ("构建目录", "BUILD")]:
-        value = os.environ.get(f"CI_{name}_HIT", "")
-        result = "命中" if value == "true" else ("跳过：成品命中" if hit else "未精确命中")
-        summary(f"|{label}|{result}|")
-    summary(f"\n功能检查：{'、'.join(record['checks'])}。\n"
-            f"功能验证运行：{record['verified_run']}；本轮校验压缩包 SHA256。")
-    if hit and elapsed >= 60:
+    summary("\n".join((
+        f"耗时 {format_elapsed(elapsed)}",
+        f"大小 {record['bytes'] / 1048576:.2f} MiB",
+        f"触发 {format_trigger()}",
+    )))
+    if os.environ.get("CI_PACKAGE_HIT") == "true" and elapsed >= 60:
         raise RuntimeError(f"Cached package delivery exceeded 60 seconds: {elapsed:.1f}s")
 
 
