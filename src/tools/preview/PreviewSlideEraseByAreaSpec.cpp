@@ -1,4 +1,4 @@
-// Covers the vanilla-autoplay slide/wifi track erasure in PreviewTrackShared.
+// Covers erase-by-area slide/wifi track behavior in PreviewTrackShared.
 //
 // The assertions are deliberately structural — step count, monotonicity, where
 // the steps land, and the tail that stays lit — rather than a table of expected
@@ -17,10 +17,11 @@
 
 namespace {
 
-using miacode::preview::scene::PreviewSlideAutoplayAreas;
-using miacode::preview::scene::buildPreviewSlideAutoplayAreas;
-using miacode::preview::scene::previewSlideStarProgress;
-using miacode::preview::scene::previewSlideVanillaHiddenArrowCount;
+using miacode::preview::scene::PreviewSlideEraseByAreaData;
+using miacode::preview::scene::PreviewSlideEraseByAreaSegment;
+using miacode::preview::scene::buildPreviewSlideEraseByAreaData;
+using miacode::preview::scene::previewSlideStarSegment;
+using miacode::preview::scene::previewSlideEraseByAreaHiddenArrowCount;
 using miacode::preview::scene::previewWifiEraseByAreaHiddenRowCount;
 
 constexpr qreal kEpsilon = 1e-6;
@@ -65,23 +66,27 @@ int totalTrackArrowCount(const TimelineNoteMarker& marker)
 
 // The star clears the track in whole hit-area steps and stops before the end:
 // the arrows past the last step stay lit until the track itself disappears.
-bool verifyVanillaTrimStepsByAreaAndLeavesATail(QTextStream& err)
+bool verifyEraseByAreaStepsAndLeavesATail(QTextStream& err)
 {
     TimelineNoteMarker marker;
     if (!parseSingleSlideMarker(QStringLiteral("(120){8}1-5[8:1],\nE"), &marker, err)) {
         return false;
     }
 
-    const PreviewSlideAutoplayAreas areas = buildPreviewSlideAutoplayAreas(marker);
-    if (!require(areas.isValid(), QStringLiteral("1-5 builds a valid autoplay area list"), err)) {
+    const PreviewSlideEraseByAreaData areas = buildPreviewSlideEraseByAreaData(marker);
+    if (!require(areas.isValid(), QStringLiteral("1-5 builds a valid erase-by-area data"), err)) {
         return false;
     }
-    if (!require(areas.areaCount() > 1, QStringLiteral("1-5 has more than one hit area"), err)) {
+    if (!require(areas.segments.size() == 1, QStringLiteral("1-5 builds one erase-by-area segment"), err)) {
+        return false;
+    }
+    const PreviewSlideEraseByAreaSegment& segment = areas.segments.constFirst();
+    if (!require(segment.areaCount() > 1, QStringLiteral("1-5 has more than one hit area"), err)) {
         return false;
     }
     if (!require(
             areas.totalArrowCount == totalTrackArrowCount(marker),
-            QStringLiteral("autoplay area list covers every track arrow"),
+            QStringLiteral("erase-by-area data covers every track arrow"),
             err)) {
         return false;
     }
@@ -90,7 +95,7 @@ bool verifyVanillaTrimStepsByAreaAndLeavesATail(QTextStream& err)
     int distinctNonZero = 0;
     for (int step = 0; step <= 1000; ++step) {
         const qreal progress = static_cast<qreal>(step) / 1000.0;
-        const int hidden = previewSlideVanillaHiddenArrowCount(areas, progress);
+        const int hidden = previewSlideEraseByAreaHiddenArrowCount(areas, 0, progress);
         if (!require(hidden >= previous, QStringLiteral("hidden arrow count never decreases"), err)) {
             return false;
         }
@@ -101,19 +106,19 @@ bool verifyVanillaTrimStepsByAreaAndLeavesATail(QTextStream& err)
     }
 
     if (!require(
-            previewSlideVanillaHiddenArrowCount(areas, 0.0) == 0,
+            previewSlideEraseByAreaHiddenArrowCount(areas, 0, 0.0) == 0,
             QStringLiteral("nothing is erased before the star moves"),
             err)) {
         return false;
     }
     if (!require(
-            distinctNonZero <= areas.areaCount() - 1,
+            distinctNonZero <= segment.areaCount() - 1,
             QStringLiteral("the track clears in at most areaCount - 1 steps"),
             err)) {
         return false;
     }
     return require(
-        previewSlideVanillaHiddenArrowCount(areas, 1.0) < areas.totalArrowCount,
+        previewSlideEraseByAreaHiddenArrowCount(areas, 0, 1.0) < areas.totalArrowCount,
         QStringLiteral("the trailing arrows are still lit when the star lands"),
         err
     );
@@ -122,26 +127,30 @@ bool verifyVanillaTrimStepsByAreaAndLeavesATail(QTextStream& err)
 // The hit-area index advances at even fractions of the trace window rather than
 // at the geometric area boundaries, so each plateau is the recorded exit point
 // of the area the index has just left.
-bool verifyVanillaTrimStepsLandOnEvenWindowFractions(QTextStream& err)
+bool verifyEraseByAreaStepsLandOnEvenWindowFractions(QTextStream& err)
 {
     TimelineNoteMarker marker;
     if (!parseSingleSlideMarker(QStringLiteral("(120){8}1-5[8:1],\nE"), &marker, err)) {
         return false;
     }
 
-    const PreviewSlideAutoplayAreas areas = buildPreviewSlideAutoplayAreas(marker);
-    if (!require(areas.isValid(), QStringLiteral("1-5 builds a valid autoplay area list"), err)) {
+    const PreviewSlideEraseByAreaData areas = buildPreviewSlideEraseByAreaData(marker);
+    if (!require(areas.isValid(), QStringLiteral("1-5 builds a valid erase-by-area data"), err)) {
+        return false;
+    }
+    if (!require(areas.segments.size() == 1, QStringLiteral("1-5 builds one erase-by-area segment"), err)) {
         return false;
     }
 
-    const int areaCount = areas.areaCount();
+    const PreviewSlideEraseByAreaSegment& segment = areas.segments.constFirst();
+    const int areaCount = segment.areaCount();
     for (int hitIndex = 0; hitIndex < areaCount; ++hitIndex) {
-        const qreal windowStart = static_cast<qreal>(hitIndex) * areas.criticalProportion / areaCount;
-        const qreal windowEnd = static_cast<qreal>(hitIndex + 1) * areas.criticalProportion / areaCount;
+        const qreal windowStart = static_cast<qreal>(hitIndex) * segment.criticalProportion / areaCount;
+        const qreal windowEnd = static_cast<qreal>(hitIndex + 1) * segment.criticalProportion / areaCount;
         const qreal sample = qMin<qreal>(1.0, (windowStart + windowEnd) * 0.5);
-        const int expected = hitIndex == 0 ? 0 : areas.hiddenArrowCountAfterArea.at(hitIndex - 1);
+        const int expected = hitIndex == 0 ? 0 : segment.hiddenArrowCountAfterArea.at(hitIndex - 1);
         if (!require(
-                previewSlideVanillaHiddenArrowCount(areas, sample) == expected,
+                previewSlideEraseByAreaHiddenArrowCount(areas, 0, sample) == expected,
                 QStringLiteral("hit area %1 plateaus at its recorded exit arrow").arg(hitIndex),
                 err)) {
             return false;
@@ -150,57 +159,94 @@ bool verifyVanillaTrimStepsLandOnEvenWindowFractions(QTextStream& err)
     return true;
 }
 
-// A connected slide keeps one merged hit-area list: the incoming segment's
-// first area replaces the previous slot instead of adding a step of its own.
-bool verifyConnectedSlideMergesJoinAreas(QTextStream& err)
+// The correction for connected slides is segment-local. In particular, the
+// final segment must retain exactly the same critical clock and erase curve as
+// the same shape rendered independently.
+bool verifyConnectedLastSegmentMatchesStandalone(QTextStream& err)
 {
-    TimelineNoteMarker marker;
-    if (!parseSingleSlideMarker(QStringLiteral("(120){8}1-3-5[8:1],\nE"), &marker, err)) {
+    TimelineNoteMarker chainMarker;
+    if (!parseSingleSlideMarker(QStringLiteral("(120){8}8>3q4[8:4],\nE"), &chainMarker, err)) {
         return false;
     }
     if (!require(
-            marker.slideTrackAreaPoints.size() == 2,
-            QStringLiteral("1-3-5 parses as two chained segments"),
+            chainMarker.slideTrackAreaPoints.size() == 2,
+            QStringLiteral("8>3q4 parses as two chained segments"),
             err)) {
         return false;
     }
 
-    int unmergedAreaCount = 0;
-    for (const QVector<QVector<QPointF>>& segment : marker.slideTrackAreaPoints) {
-        unmergedAreaCount += segment.size();
+    TimelineNoteMarker standaloneMarker;
+    if (!parseSingleSlideMarker(QStringLiteral("(120){8}3q4[8:4],\nE"), &standaloneMarker, err)) {
+        return false;
     }
 
-    const PreviewSlideAutoplayAreas areas = buildPreviewSlideAutoplayAreas(marker);
-    if (!require(areas.isValid(), QStringLiteral("1-3-5 builds a valid autoplay area list"), err)) {
+    const PreviewSlideEraseByAreaData chainAreas = buildPreviewSlideEraseByAreaData(chainMarker);
+    const PreviewSlideEraseByAreaData standaloneAreas = buildPreviewSlideEraseByAreaData(standaloneMarker);
+    if (!require(
+            chainAreas.isValid() && chainAreas.segments.size() == 2,
+            QStringLiteral("8>3q4 builds two erase-by-area segments"),
+            err)) {
         return false;
     }
     if (!require(
-            areas.areaCount() == unmergedAreaCount - 1,
-            QStringLiteral("the chain join folds one hit area away"),
+            standaloneAreas.isValid() && standaloneAreas.segments.size() == 1,
+            QStringLiteral("3q4 builds one standalone erase-by-area segment"),
             err)) {
         return false;
     }
 
-    int previous = -1;
+    const PreviewSlideEraseByAreaSegment& chainFirst = chainAreas.segments.at(0);
+    const PreviewSlideEraseByAreaSegment& chainLast = chainAreas.segments.at(1);
+    const PreviewSlideEraseByAreaSegment& standalone = standaloneAreas.segments.constFirst();
+    if (!require(
+            qAbs(chainFirst.criticalProportion - 1.0) < kEpsilon,
+            QStringLiteral("an intermediate segment uses its complete local duration"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            chainLast.totalArrowCount == standalone.totalArrowCount
+                && chainLast.hiddenArrowCountAfterArea == standalone.hiddenArrowCountAfterArea,
+            QStringLiteral("the chain's final 3q4 segment keeps the standalone area cuts"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            qAbs(chainLast.criticalProportion - standalone.criticalProportion) < kEpsilon,
+            QStringLiteral("the chain's final 3q4 segment keeps the standalone critical proportion"),
+            err)) {
+        return false;
+    }
+
     for (int step = 0; step <= 1000; ++step) {
-        const int hidden = previewSlideVanillaHiddenArrowCount(areas, static_cast<qreal>(step) / 1000.0);
-        if (!require(hidden >= previous, QStringLiteral("chained hidden count never decreases"), err)) {
+        const qreal localProgress = static_cast<qreal>(step) / 1000.0;
+        const int standaloneHidden = previewSlideEraseByAreaHiddenArrowCount(standaloneAreas, 0, localProgress);
+        const int chainLastHidden = previewSlideEraseByAreaHiddenArrowCount(chainAreas, 1, localProgress)
+            - chainLast.arrowOffset;
+        if (!require(
+                chainLastHidden == standaloneHidden,
+                QStringLiteral("the chain's final segment matches standalone 3q4 at step %1").arg(step),
+                err)) {
             return false;
         }
-        previous = hidden;
+    }
+
+    if (!require(
+            previewSlideEraseByAreaHiddenArrowCount(chainAreas, 1, 0.0) == chainLast.arrowOffset,
+            QStringLiteral("the continuation erases none of its own arrows at the join"),
+            err)) {
+        return false;
     }
     return require(
-        previewSlideVanillaHiddenArrowCount(areas, 1.0) < areas.totalArrowCount,
-        QStringLiteral("a chained track also keeps a lit tail"),
+        previewSlideEraseByAreaHiddenArrowCount(chainAreas, 1, 1.0) < chainAreas.totalArrowCount,
+        QStringLiteral("the connected track keeps the final segment's lit tail"),
         err
     );
 }
 
-// Star progress is what drives the erasure, so it has to follow the segment
-// split the parser produced rather than treating a chain's segments as equal.
-// `1^3-5` is chosen because its two segments differ in length, which a
-// per-segment-uniform implementation would get wrong.
-bool verifyStarProgressFollowsTheParsedSegmentSplit(QTextStream& err)
+// The erasure and the rendered star share this segment locator. It must switch
+// at the parser-authored join and expose progress local to that segment.
+bool verifyStarSegmentFollowsTheParsedTimingSplit(QTextStream& err)
 {
     TimelineNoteMarker marker;
     if (!parseSingleSlideMarker(QStringLiteral("(120){8}1^3-5[8:1],\nE"), &marker, err)) {
@@ -214,42 +260,40 @@ bool verifyStarProgressFollowsTheParsedSegmentSplit(QTextStream& err)
     }
 
     const double firstDuration = marker.slideSegmentDurations.at(0);
-    const double totalDuration = firstDuration + marker.slideSegmentDurations.at(1);
-    if (!require(totalDuration > 0.0, QStringLiteral("the chain has a positive trace duration"), err)) {
-        return false;
-    }
-    const qreal durationShare = static_cast<qreal>(firstDuration / totalDuration);
-    if (!require(
-            qAbs(durationShare - 0.5) > 0.01,
-            QStringLiteral("1^3-5 splits unevenly, so the check can discriminate"),
-            err)) {
-        return false;
-    }
-
     const double joinSecond = marker.slideSegmentShootSeconds.at(1);
+    int segmentIndex = -1;
+    qreal segmentProportion = -1.0;
+    previewSlideStarSegment(marker, marker.slideTraceSecond, 2, &segmentIndex, &segmentProportion);
     if (!require(
-            qAbs(previewSlideStarProgress(marker, marker.slideTraceSecond)) < kEpsilon,
-            QStringLiteral("star progress is zero when the trace starts"),
+            segmentIndex == 0 && qAbs(segmentProportion) < kEpsilon,
+            QStringLiteral("the star starts at segment zero progress zero"),
             err)) {
         return false;
     }
+    previewSlideStarSegment(
+        marker,
+        marker.slideTraceSecond + firstDuration * 0.5,
+        2,
+        &segmentIndex,
+        &segmentProportion
+    );
     if (!require(
-            qAbs(previewSlideStarProgress(marker, joinSecond) - durationShare) < kEpsilon,
-            QStringLiteral("star progress at the join equals the first segment's share"),
+            segmentIndex == 0 && qAbs(segmentProportion - 0.5) < kEpsilon,
+            QStringLiteral("star progress is local and linear inside the first segment"),
             err)) {
         return false;
     }
+    previewSlideStarSegment(marker, joinSecond, 2, &segmentIndex, &segmentProportion);
     if (!require(
-            qAbs(previewSlideStarProgress(marker, marker.slideTraceSecond + firstDuration * 0.5)
-                 - durationShare * 0.5)
-                < kEpsilon,
-            QStringLiteral("star progress is linear inside a segment"),
+            segmentIndex == 1 && qAbs(segmentProportion) < kEpsilon,
+            QStringLiteral("the star changes to final-segment progress zero at the join"),
             err)) {
         return false;
     }
+    previewSlideStarSegment(marker, marker.endSecond, 2, &segmentIndex, &segmentProportion);
     return require(
-        qAbs(previewSlideStarProgress(marker, marker.endSecond) - 1.0) < kEpsilon,
-        QStringLiteral("star progress reaches one when the star lands"),
+        segmentIndex == 1 && qAbs(segmentProportion - 1.0) < kEpsilon,
+        QStringLiteral("the final segment reaches progress one when the star lands"),
         err
     );
 }
@@ -341,22 +385,24 @@ int main(int argc, char** argv)
     QTextStream out(stdout);
     QTextStream err(stderr);
 
-    if (!verifyVanillaTrimStepsByAreaAndLeavesATail(err)) {
+    if (!verifyEraseByAreaStepsAndLeavesATail(err)) {
         return 1;
     }
-    if (!verifyVanillaTrimStepsLandOnEvenWindowFractions(err)) {
+    if (!verifyEraseByAreaStepsLandOnEvenWindowFractions(err)) {
         return 1;
     }
-    if (!verifyConnectedSlideMergesJoinAreas(err)) {
+    if (!verifyConnectedLastSegmentMatchesStandalone(err)) {
         return 1;
     }
-    if (!verifyStarProgressFollowsTheParsedSegmentSplit(err)) {
+    if (!verifyStarSegmentFollowsTheParsedTimingSplit(err)) {
         return 1;
     }
     if (!verifyWifiClearsAreaByAreaAndCompletes(err)) {
         return 1;
     }
 
-    out << "preview_slide_vanilla_trim_spec ok" << Qt::endl;
+    out << "preview_slide_erase_by_area_spec ok" << Qt::endl;
     return 0;
 }
+
+

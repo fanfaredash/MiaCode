@@ -5,10 +5,6 @@
 enum class RenderMode {
     Native,
     MaimuriDxStyle,
-    // Chart review, but slide and wifi tracks clear the way the arcade clears
-    // them while autoplaying (PreviewSlideTrackTrimMode::VanillaAutoplay).
-    // Exclusive with MaimuriDxStyle: that mode drives track clearing from the
-    // runtime judge simulation, so the two cannot both apply.
     EraseByArea,
 };
 
