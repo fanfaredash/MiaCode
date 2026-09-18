@@ -2573,6 +2573,30 @@ Line %2 · double-click to rename</translation>
         <source>Prepare Charts</source>
         <translation>Prepare Charts</translation>
     </message>
+    <message id="drop_chart.preview.existing_project">
+        <source>Existing chart files or project data:</source>
+        <translation>Existing chart files or project data:</translation>
+    </message>
+    <message id="drop_chart.preview.overwrite_question">
+        <source>These files will be overwritten. Continue?</source>
+        <translation>These files will be overwritten. Continue?</translation>
+    </message>
+    <message id="drop_chart.preview.multiple_audio">
+        <source>Multiple audio files remain in this directory:</source>
+        <translation>Multiple audio files remain in this directory:</translation>
+    </message>
+    <message id="drop_chart.preview.create_folder">
+        <source>Create a separate chart folder for this audio?</source>
+        <translation>Create a separate chart folder for this audio?</translation>
+    </message>
+    <message id="drop_chart.preview.single_track">
+        <source>The current directory already contains %1. Create a separate chart folder for this audio?
+
+%2</source>
+        <translation>The current directory already contains %1. Create a separate chart folder for this audio?
+
+%2</translation>
+    </message>
     <message id="editor.bookmark.delete">
         <source>Delete Bookmark</source>
         <translation>Delete Bookmark</translation>

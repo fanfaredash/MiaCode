@@ -14,6 +14,7 @@ struct ChartDropCandidate {
     QString sourceDirectory;
     QString extension;
     QString targetDirectory;
+    QStringList extraAudioPaths;
 };
 
 struct ChartDropCreateResult {
@@ -38,7 +39,7 @@ struct ChartDropImportResult {
 // answers one operation at a time and never retains the dropped paths.
 struct DocumentImportAdapter {
     using Validate = std::function<QList<ChartDropCandidate>(const QStringList&, QString* error)>;
-    using Confirmation = std::function<void(const QList<ChartDropCandidate>&, std::function<void(bool)>)>;
+    using Confirmation = std::function<void(QList<ChartDropCandidate>&, std::function<void(bool)>)>;
     using LeaveDocument = std::function<void(std::function<void(bool)>)>;
     using CreateCharts = std::function<void(const QList<ChartDropCandidate>&,
                                             std::function<void(const ChartDropCreateResult&)>)>;

@@ -181,6 +181,28 @@ QString cleanDropFolderName(QString name)
     return name;
 }
 
+QString displayDropPath(const QString& path)
+{
+    const QFileInfo info(QDir::cleanPath(path));
+    const QString absolutePath = QDir::toNativeSeparators(info.absoluteFilePath());
+    const QString root = absolutePath.size() >= 3 && absolutePath.at(1) == QLatin1Char(':')
+        ? absolutePath.left(3)
+        : QDir::toNativeSeparators(QDir::rootPath());
+    const QString parentName = QDir(QDir::cleanPath(info.absolutePath())).dirName();
+    const QString itemName = info.fileName();
+    return QDir::toNativeSeparators(
+        root + QStringLiteral("...\\") + parentName + QLatin1Char('\\') + itemName);
+}
+
+bool removeDropPath(const QString& path)
+{
+    const QFileInfo info(path);
+    if (!info.exists()) {
+        return true;
+    }
+    return info.isDir() ? QDir(path).removeRecursively() : QFile::remove(path);
+}
+
 } // namespace
 
 miacode::DocumentImportAdapter miacode::runtime::DocumentSessionHost::chartDropImportAdapter()
@@ -190,42 +212,74 @@ miacode::DocumentImportAdapter miacode::runtime::DocumentSessionHost::chartDropI
         Q_UNUSED(error);
         const QStringList supported = miacode::chart_assets::supportedTrackFileExtensions();
         QList<DroppedChartCandidate> candidates;
+        QHash<QString, QList<QFileInfo>> grouped;
         for (const QString& path : audioPaths) {
             const QFileInfo info(path);
             const QString extension = info.suffix().toLower();
             if (!info.isFile() || !supported.contains(extension)) {
                 continue;
             }
-            QString title = info.completeBaseName();
-            if (extension == QStringLiteral("mp3")) {
-                const auto tag = miacode::id3::readTagFromFile(path);
-                if (!tag.title.trimmed().isEmpty()) {
-                    title = tag.title.trimmed();
-                }
-            }
-            QString folder = cleanDropFolderName(title);
-            if (folder.isEmpty()) {
-                folder = QStringLiteral("Untitled");
-            }
-            candidates.append({info.absoluteFilePath(), info.absolutePath(), extension,
-                               QDir(info.absolutePath()).filePath(folder)});
+            grouped[info.absolutePath().toCaseFolded()].append(info);
         }
 
-        QHash<QString, QSet<QString>> reserved;
-        for (DroppedChartCandidate& candidate : candidates) {
-            const QString key = candidate.sourceDirectory.toCaseFolded();
-            QString target = candidate.targetDirectory;
-            int suffix = 2;
-            while (QFileInfo::exists(target) || reserved[key].contains(target.toCaseFolded())) {
-                target = QDir(candidate.sourceDirectory).filePath(
-                    QStringLiteral("%1 (%2)").arg(QFileInfo(candidate.targetDirectory).fileName()).arg(suffix++));
+        for (auto group = grouped.cbegin(); group != grouped.cend(); ++group) {
+            const QList<QFileInfo>& droppedInDirectory = group.value();
+            if (droppedInDirectory.size() > 1) {
+                QSet<QString> reserved;
+                for (const QFileInfo& info : droppedInDirectory) {
+                    QString title = info.completeBaseName();
+                    if (info.suffix().compare(QStringLiteral("mp3"), Qt::CaseInsensitive) == 0) {
+                        const auto tag = miacode::id3::readTagFromFile(info.absoluteFilePath());
+                        if (!tag.title.trimmed().isEmpty()) {
+                            title = tag.title.trimmed();
+                        }
+                    }
+                    QString folder = cleanDropFolderName(title);
+                    if (folder.isEmpty()) {
+                        folder = QStringLiteral("Untitled");
+                    }
+                    QString target = QDir(info.absolutePath()).filePath(folder);
+                    int suffix = 2;
+                    while (QFileInfo::exists(target) || reserved.contains(target.toCaseFolded())) {
+                        target = QDir(info.absolutePath()).filePath(
+                            QStringLiteral("%1 (%2)").arg(folder).arg(suffix++));
+                    }
+                    reserved.insert(target.toCaseFolded());
+                    candidates.append({info.absoluteFilePath(), info.absolutePath(), info.suffix().toLower(), target, {}});
+                }
+                continue;
             }
-            candidate.targetDirectory = target;
-            reserved[key].insert(target.toCaseFolded());
+
+            const QFileInfo info = droppedInDirectory.first();
+            QStringList audioInDirectory;
+            const QDir directory(info.absolutePath());
+            const QFileInfoList files = directory.entryInfoList(
+                QStringList{QStringLiteral("*.mp3"), QStringLiteral("*.wav"), QStringLiteral("*.flac"), QStringLiteral("*.ogg")},
+                QDir::Files | QDir::Readable, QDir::Name);
+            for (const QFileInfo& file : files) {
+                audioInDirectory.append(file.absoluteFilePath());
+            }
+            const bool sourceIsTrack = info.fileName().compare(
+                QStringLiteral("track.%1").arg(info.suffix()), Qt::CaseInsensitive) == 0;
+            bool hasTrack = false;
+            for (const QString& trackName : miacode::chart_assets::trackCandidateFileNames()) {
+                if (QFileInfo::exists(directory.filePath(trackName))) {
+                    hasTrack = true;
+                    break;
+                }
+            }
+            if (audioInDirectory.size() > 1 && hasTrack && !sourceIsTrack) {
+                audioInDirectory.removeAll(info.absoluteFilePath());
+                candidates.append({info.absoluteFilePath(), info.absolutePath(), info.suffix().toLower(),
+                                   info.absolutePath(), audioInDirectory});
+                continue;
+            }
+            candidates.append({info.absoluteFilePath(), info.absolutePath(), info.suffix().toLower(),
+                               info.absolutePath(), {}});
         }
         return candidates;
     };
-    adapter.requestFirstConfirmation = [this](const QList<DroppedChartCandidate>& candidates,
+    adapter.requestFirstConfirmation = [this](QList<DroppedChartCandidate>& candidates,
                                                std::function<void(bool)> onDecided) {
         miacode::UiRequestService* const requests = session_.uiRequestService();
         if (requests == nullptr) {
@@ -234,20 +288,122 @@ miacode::DocumentImportAdapter miacode::runtime::DocumentSessionHost::chartDropI
             }
             return;
         }
+        QList<DroppedChartCandidate>& prepared = candidates;
+        bool hasFolderChoices = false;
+        QStringList folderChoicePreview;
+        int folderChoiceCount = 0;
+        for (int index = 0; index < prepared.size(); ++index) {
+            DroppedChartCandidate& candidate = prepared[index];
+            if (candidate.extraAudioPaths.isEmpty()) {
+                continue;
+            }
+            hasFolderChoices = true;
+            ++folderChoiceCount;
+            QString title = QFileInfo(candidate.sourcePath).completeBaseName();
+            if (candidate.extension.compare(QStringLiteral("mp3"), Qt::CaseInsensitive) == 0) {
+                const auto tag = miacode::id3::readTagFromFile(candidate.sourcePath);
+                if (!tag.title.trimmed().isEmpty()) {
+                    title = tag.title.trimmed();
+                }
+            }
+            QString folder = cleanDropFolderName(title);
+            if (folder.isEmpty()) {
+                folder = QStringLiteral("Untitled");
+            }
+            QString target = QDir(candidate.sourceDirectory).filePath(folder);
+            int suffix = 2;
+            while (QFileInfo::exists(target)) {
+                target = QDir(candidate.sourceDirectory).filePath(
+                    QStringLiteral("%1 (%2)").arg(folder).arg(suffix++));
+            }
+            folderChoicePreview << qtTrId("drop_chart.preview.multiple_audio");
+            for (const QString& path : std::as_const(candidate.extraAudioPaths)) {
+                folderChoicePreview << displayDropPath(path);
+            }
+            folderChoicePreview << qtTrId("drop_chart.preview.create_folder");
+            folderChoicePreview << QDir::toNativeSeparators(QDir::cleanPath(target));
+            candidate.targetDirectory = target;
+        }
+
+        if (folderChoiceCount == 1 && prepared.size() == 1) {
+            const DroppedChartCandidate& candidate = prepared.constFirst();
+            QString existingTrackName;
+            for (const QString& trackName : miacode::chart_assets::trackCandidateFileNames()) {
+                if (QFileInfo::exists(QDir(candidate.sourceDirectory).filePath(trackName))) {
+                    existingTrackName = trackName;
+                    break;
+                }
+            }
+            QList<DroppedChartCandidate>* const preparedPtr = &prepared;
+            requests->requestConfirmation(
+                qtTrId("drop_chart.preview.title"),
+                qtTrId("drop_chart.preview.single_track")
+                    .arg(existingTrackName,
+                         QDir::toNativeSeparators(QFileInfo(candidate.sourcePath).absoluteFilePath())),
+                qtTrId("drop_chart.preview.create").arg(prepared.size()),
+                [onDecided, preparedPtr](bool accepted) {
+                    if (accepted) {
+                        preparedPtr->first().extraAudioPaths.clear();
+                    }
+                    if (onDecided) {
+                        onDecided(accepted);
+                    }
+                });
+            return;
+        }
+
+        for (DroppedChartCandidate& candidate : prepared) {
+            candidate.extraAudioPaths.clear();
+        }
+
+        const std::function<void(bool)> finishDecision = [onDecided](bool accepted) {
+            if (onDecided) {
+                onDecided(accepted);
+            }
+        };
         QStringList preview;
-        for (const DroppedChartCandidate& candidate : candidates) {
-            preview << QDir::toNativeSeparators(candidate.targetDirectory);
+        QStringList conflicts;
+        for (const DroppedChartCandidate& candidate : prepared) {
+            preview << QDir::toNativeSeparators(QDir::cleanPath(candidate.targetDirectory));
+            const QString targetDirectory = candidate.targetDirectory;
+            if (!QFileInfo::exists(targetDirectory)) {
+                continue;
+            }
+            const QString maidataPath = QDir(targetDirectory).filePath(QStringLiteral("maidata.txt"));
+            const QFileInfo sourceInfo(candidate.sourcePath);
+            for (const QString& trackName : miacode::chart_assets::trackCandidateFileNames()) {
+                const QString trackPath = QDir(targetDirectory).filePath(trackName);
+                if (QFileInfo::exists(trackPath)
+                    && sourceInfo.absoluteFilePath().compare(QFileInfo(trackPath).absoluteFilePath(), Qt::CaseInsensitive) != 0) {
+                    conflicts << displayDropPath(trackPath);
+                }
+            }
+            if (QFileInfo::exists(maidataPath)) {
+                conflicts << displayDropPath(maidataPath);
+            }
+            const QString projectDataPath = QDir(targetDirectory).filePath(QStringLiteral(".miacode"));
+            if (QFileInfo::exists(projectDataPath)) {
+                conflicts << displayDropPath(projectDataPath);
+            }
+        }
+        conflicts.removeDuplicates();
+        if (hasFolderChoices) {
+            preview << QString();
+            preview.append(folderChoicePreview);
+        }
+        if (!conflicts.isEmpty()) {
+            preview << QString();
+            preview << qtTrId("drop_chart.preview.existing_project");
+            preview.append(conflicts);
+            preview << QString();
+            preview << qtTrId("drop_chart.preview.overwrite_question");
         }
         requests->requestConfirmation(
             qtTrId("drop_chart.preview.title"),
             qtTrId("drop_chart.preview.message")
-                .arg(candidates.size()) + preview.join(QLatin1Char('\n')),
-            qtTrId("drop_chart.preview.create").arg(candidates.size()),
-            [onDecided = std::move(onDecided)](bool accepted) mutable {
-                if (onDecided) {
-                    onDecided(accepted);
-                }
-            });
+                .arg(prepared.size()) + preview.join(QLatin1Char('\n')),
+            qtTrId("drop_chart.preview.create").arg(prepared.size()),
+            finishDecision);
     };
     adapter.requestLeaveDocument = [this](std::function<void(bool)> onDecided) {
         requestLeaveDocument(std::move(onDecided));
@@ -298,26 +454,102 @@ void miacode::runtime::DocumentSessionHost::finishChartsFromAudioDrop(
         QStringLiteral("ui/chart_drop"),
         QStringLiteral("batch_create_started count=%1").arg(candidates.size()));
     for (const DroppedChartCandidate& candidate : candidates) {
-        const QString staging = QDir(candidate.sourceDirectory).filePath(
-            QStringLiteral(".miacode-drop-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
-        const QString stagedChart = QDir(staging).filePath(QFileInfo(candidate.targetDirectory).fileName());
-        const QString stagedTrack = QDir(stagedChart).filePath(QStringLiteral("track.%1").arg(candidate.extension));
-        const QString stagedMaidata = QDir(stagedChart).filePath(QStringLiteral("maidata.txt"));
-        QString failedStage = QStringLiteral("create_staging_directory");
-        bool ok = QDir().mkpath(stagedChart);
-        if (ok) {
-            failedStage = QStringLiteral("copy_audio");
-            ok = QFile::copy(candidate.sourcePath, stagedTrack);
+        const QString targetDirectory = candidate.targetDirectory;
+        const QString trackPath = QDir(targetDirectory).filePath(
+            QStringLiteral("track.%1").arg(candidate.extension));
+        const QString maidataPath = QDir(targetDirectory).filePath(QStringLiteral("maidata.txt"));
+        QString failedStage;
+        bool renamed = false;
+        bool copied = false;
+        QList<QPair<QString, QString>> backups;
+        bool ok = true;
+
+        if (targetDirectory.compare(candidate.sourceDirectory, Qt::CaseInsensitive) != 0
+            && !QDir().mkpath(targetDirectory)) {
+            ++failed;
+            continue;
+        }
+
+        const QString backupPrefix = QDir(targetDirectory).filePath(
+            QStringLiteral(".miacode-drop-backup-%1-").arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        const auto backupExisting = [&backups, &backupPrefix](const QString& path) {
+            if (!QFileInfo::exists(path)) {
+                return true;
+            }
+            const QString backupPath = backupPrefix + QFileInfo(path).fileName();
+            if (!QFile::rename(path, backupPath)) {
+                return false;
+            }
+            backups.append({path, backupPath});
+            return true;
+        };
+        const auto restoreBackups = [&backups]() {
+            for (auto it = backups.crbegin(); it != backups.crend(); ++it) {
+                removeDropPath(it->first);
+                QFile::rename(it->second, it->first);
+            }
+        };
+
+        const QFileInfo sourceInfo(candidate.sourcePath);
+        const bool sourceIsTrack = sourceInfo.absoluteFilePath().compare(
+            QFileInfo(trackPath).absoluteFilePath(), Qt::CaseInsensitive) == 0;
+        for (const QString& trackName : miacode::chart_assets::trackCandidateFileNames()) {
+            const QString existingTrackPath = QDir(targetDirectory).filePath(trackName);
+            if (QFileInfo::exists(existingTrackPath)
+                && sourceInfo.absoluteFilePath().compare(
+                       QFileInfo(existingTrackPath).absoluteFilePath(), Qt::CaseInsensitive) != 0) {
+                failedStage = QStringLiteral("backup_track");
+                ok = backupExisting(existingTrackPath);
+                if (!ok) {
+                    break;
+                }
+            }
+        }
+        if (ok && !sourceIsTrack) {
+            if (targetDirectory.compare(candidate.sourceDirectory, Qt::CaseInsensitive) == 0) {
+                failedStage = QStringLiteral("rename_audio");
+                ok = QFile::rename(candidate.sourcePath, trackPath);
+                renamed = ok;
+            } else {
+                failedStage = QStringLiteral("copy_audio");
+                ok = QFile::copy(candidate.sourcePath, trackPath);
+                copied = ok;
+            }
+        }
+        if (ok && QFileInfo::exists(maidataPath)) {
+            failedStage = QStringLiteral("backup_maidata");
+            ok = backupExisting(maidataPath);
+        }
+        const QString projectDataPath = QDir(targetDirectory).filePath(QStringLiteral(".miacode"));
+        QString projectDataBackup;
+        if (ok && QFileInfo::exists(projectDataPath)) {
+            projectDataBackup = backupPrefix + QStringLiteral(".miacode");
+            failedStage = QStringLiteral("backup_project_data");
+            ok = QFile::rename(projectDataPath, projectDataBackup);
+            if (ok) {
+                backups.append({projectDataPath, projectDataBackup});
+            }
         }
         if (ok) {
-            failedStage.clear();
-            ok = writeDocumentFileAtomically(stagedMaidata, emptyDocument, &failedStage);
+            ok = writeDocumentFileAtomically(maidataPath, emptyDocument, &failedStage);
         }
         if (ok) {
-            failedStage = QStringLiteral("publish");
-            ok = QDir().rename(stagedChart, candidate.targetDirectory);
+            failedStage = QStringLiteral("create_project_data");
+            ok = QDir().mkpath(projectDataPath);
         }
-        QDir(staging).removeRecursively();
+        if (!ok) {
+            if (renamed) {
+                QFile::rename(trackPath, candidate.sourcePath);
+            }
+            if (copied) {
+                QFile::remove(trackPath);
+            }
+            restoreBackups();
+        } else {
+            for (const auto& backup : std::as_const(backups)) {
+                removeDropPath(backup.second);
+            }
+        }
         if (!ok) {
             ++failed;
             miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,

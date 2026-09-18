@@ -2573,6 +2573,30 @@ Line %2 · double-click to rename</source>
         <source>Prepare Charts</source>
         <translation>譜面作成の確認</translation>
     </message>
+    <message id="drop_chart.preview.existing_project">
+        <source>Existing chart files or project data:</source>
+        <translation>既存の譜面ファイルまたはプロジェクトデータ：</translation>
+    </message>
+    <message id="drop_chart.preview.overwrite_question">
+        <source>These files will be overwritten. Continue?</source>
+        <translation>上記のファイルを上書きします。続行しますか？</translation>
+    </message>
+    <message id="drop_chart.preview.multiple_audio">
+        <source>Multiple audio files remain in this directory:</source>
+        <translation>このフォルダーには複数の音声ファイルが残っています：</translation>
+    </message>
+    <message id="drop_chart.preview.create_folder">
+        <source>Create a separate chart folder for this audio?</source>
+        <translation>この音声用に譜面フォルダーを作成しますか？</translation>
+    </message>
+    <message id="drop_chart.preview.single_track">
+        <source>The current directory already contains %1. Create a separate chart folder for this audio?
+
+%2</source>
+        <translation>現在のフォルダーには%1が存在します。この音声用に独立した譜面フォルダーを作成しますか？
+
+%2</translation>
+    </message>
     <message id="editor.bookmark.delete">
         <source>Delete Bookmark</source>
         <translation>ブックマークを削除</translation>

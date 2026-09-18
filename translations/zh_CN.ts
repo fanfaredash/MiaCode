@@ -2573,6 +2573,30 @@ Line %2 · double-click to rename</source>
         <source>Prepare Charts</source>
         <translation>准备创建谱面</translation>
     </message>
+    <message id="drop_chart.preview.existing_project">
+        <source>Existing chart files or project data:</source>
+        <translation>目录中已有以下谱面文件或工程数据：</translation>
+    </message>
+    <message id="drop_chart.preview.overwrite_question">
+        <source>These files will be overwritten. Continue?</source>
+        <translation>确认后将覆盖上述文件，请问是否覆盖？</translation>
+    </message>
+    <message id="drop_chart.preview.multiple_audio">
+        <source>Multiple audio files remain in this directory:</source>
+        <translation>当前目录中还存在多个音频文件：</translation>
+    </message>
+    <message id="drop_chart.preview.create_folder">
+        <source>Create a separate chart folder for this audio?</source>
+        <translation>是否为当前音频创建独立谱面文件夹？</translation>
+    </message>
+    <message id="drop_chart.preview.single_track">
+        <source>The current directory already contains %1. Create a separate chart folder for this audio?
+
+%2</source>
+        <translation>当前路径下已存在%1，是否为当前音频创建独立谱面文件夹？
+
+%2</translation>
+    </message>
     <message id="editor.bookmark.delete">
         <source>Delete Bookmark</source>
         <translation>删除书签</translation>
