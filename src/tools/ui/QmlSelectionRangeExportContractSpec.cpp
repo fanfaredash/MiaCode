@@ -182,6 +182,20 @@ bool verifySelectionRangeExportContract(QTextStream& err)
         seedBody.contains(QStringLiteral("applyPendingSelectionRangeExport()")),
         QStringLiteral("the staged range is applied from inside seedFromDifficulty"),
         err);
+    const QString enterBody =
+        functionBody(sessionImpl, QStringLiteral("ExportSession::enter"));
+    ok &= require(
+        enterBody.contains(QStringLiteral("QTimer::singleShot"))
+            && orderedBefore(enterBody,
+                             QStringLiteral("QTimer::singleShot"),
+                             QStringLiteral("seedFromDifficulty")),
+        QStringLiteral("page entry shows first; chart seed runs on the next event-loop tick"),
+        err);
+    ok &= require(
+        functionBody(sessionImpl, QStringLiteral("ExportSession::leave"))
+            .contains(QStringLiteral("clearPendingSelectionRangeExport()")),
+        QStringLiteral("leaving before the deferred seed drops the staged range"),
+        err);
     const QString applyBody =
         functionBody(sessionImpl, QStringLiteral("ExportSession::applyPendingSelectionRangeExport"));
     ok &= require(

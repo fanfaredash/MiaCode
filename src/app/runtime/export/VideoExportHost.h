@@ -126,11 +126,10 @@ private:
     // active one). Callers validate the difficulty/scene_ and pause
     // playback first.
     VideoExportTask buildVideoExportSeedTask(int difficultyId = 0);
-    // Parse + &first-shift note markers for an arbitrary difficulty of the
-    // LIVE document, mirroring the worker-side snapshot rebuild
-    // (buildVideoExportTaskFromSnapshot). Empty when the difficulty has no
-    // parseable chart body.
-    QVector<TimelineNoteMarker> buildParsedMarkersForDifficulty(int difficultyId) const;
+    // Parse a difficulty, stamp lastTimelineParse*, and return its markers.
+    QVector<TimelineNoteMarker> parseAndPublishTimelineForDifficulty(int difficultyId);
+    bool liveTimelineCoversDifficulty(int difficultyId) const;
+    void ensureExportTrackDuration();
     // The preview-state bracket the export page wraps around its session:
     // exportPreviewActive_ + debug-HUD suppression + chart-info HUD on begin;
     // full restore + aspect reset on end.

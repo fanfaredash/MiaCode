@@ -10,6 +10,7 @@ Rectangle {
 
     required property var pages
     required property var previewSession
+    required property var previewSettings
     readonly property var session: pages && pages.exportSession ? pages.exportSession : null
     readonly property bool introSettingsEnabled: !!root.session
                                                   && root.session.introEnabled
@@ -60,82 +61,77 @@ Rectangle {
         return options && options.length > index ? options[index].family : ""
     }
 
+    readonly property int tabInset: 6
+    readonly property int formInset: Theme.dialogMargin + Theme.dialogPadding
+
     color: Theme.surfaceColor(Theme.colors.background.panel)
     clip: true
 
+    Component {
+        id: appearanceForm
+        PreviewAppearancePages {
+            width: appearanceLoader.width
+            previewSettings: root.previewSettings
+            pageIndex: root.session && root.session.settingsTab === "gameplay"
+                       ? 1
+                       : root.session && root.session.settingsTab === "skin" ? 2 : 0
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 16
-        spacing: 8
+        anchors.bottomMargin: Theme.dialogPadding
+        spacing: 0
 
-        Flow {
+        PanelHeader {
             Layout.fillWidth: true
-            spacing: 8
-            Repeater {
-                model: root.session ? root.session.difficulties : []
-                delegate: ChromeRow {
-                    id: badge
-                    required property var modelData
-                    implicitHeight: 28
-                    implicitWidth: badgeLabel.implicitWidth + leftPadding + rightPadding
-                    checkable: true
-                    checked: root.session && root.session.selectedDifficultyId === modelData.id
-                    selected: badge.checked
-                    onClicked: if (root.session) root.session.selectDifficulty(modelData.id)
-                    contentItem: Text {
-                        id: badgeLabel
-                        text: badge.modelData.name
-                        color: badge.checked ? Theme.colors.text.active : Theme.colors.text.secondary
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.secondaryFontSize
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-            }
+            title: qsTrId("export_page.center")
+            sidebarTitle: true
+            showMore: false
         }
 
-        Row {
-            spacing: 4
-            AppTab {
-                panelTab: true
-                text: qsTrId("sidebar.export")
-                active: root.session && root.session.activeTab === "export"
-                onClicked: if (root.session) root.session.activeTab = "export"
-            }
-            AppTab {
-                panelTab: true
-                text: qsTrId("action.batch_export")
-                active: root.session && root.session.activeTab === "batch"
-                onClicked: if (root.session) root.session.activeTab = "batch"
-            }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: Theme.colors.border.normal
-        }
-
-        Text {
-            Layout.fillWidth: true
-            visible: !!(root.session && root.session.unavailableReason)
-            text: root.session ? root.session.unavailableReason : ""
-            color: Theme.colors.text.secondary
-            font.family: Theme.uiFont
-            font.pixelSize: Theme.uiFontSize
-            wrapMode: Text.WordWrap
-        }
-
-        // ---- Shared single/batch export settings ----
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: root.session && !(root.session && root.session.unavailableReason)
-            spacing: 8
+            Layout.topMargin: 6
+            spacing: 2
 
             Row {
+                Layout.fillWidth: true
+                Layout.leftMargin: root.tabInset
+                Layout.preferredHeight: Theme.controlMinHeight
+                spacing: 4
+                AppTab {
+                    panelTab: true
+                    text: qsTrId("sidebar.export")
+                    active: root.session && root.session.activeTab === "export"
+                    onClicked: if (root.session) root.session.activeTab = "export"
+                }
+                AppTab {
+                    panelTab: true
+                    text: qsTrId("action.batch_export")
+                    active: root.session && root.session.activeTab === "batch"
+                    onClicked: if (root.session) root.session.activeTab = "batch"
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: root.tabInset
+                Layout.rightMargin: root.tabInset
+                visible: !!(root.session && root.session.unavailableReason)
+                text: root.session ? root.session.unavailableReason : ""
+                color: Theme.colors.text.secondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+                wrapMode: Text.WordWrap
+            }
+
+            Row {
+                Layout.fillWidth: true
+                Layout.leftMargin: root.tabInset
+                Layout.preferredHeight: Theme.controlMinHeight
+                visible: root.session && !(root.session && root.session.unavailableReason)
                 spacing: 4
                 Repeater {
                     model: root.settingsTabs
@@ -150,36 +146,47 @@ Rectangle {
                 }
             }
 
+            Flow {
+                id: difficultyRow
+                Layout.fillWidth: true
+                Layout.leftMargin: root.tabInset
+                Layout.preferredHeight: Theme.controlMinHeight
+                spacing: 4
+                Repeater {
+                    model: root.session ? root.session.difficulties : []
+                    delegate: AppTab {
+                        required property var modelData
+                        panelTab: true
+                        text: modelData.name
+                        difficultyId: modelData.id
+                        active: root.session && root.session.selectedDifficultyId === modelData.id
+                        onClicked: if (root.session) root.session.selectDifficulty(modelData.id)
+                    }
+                }
+            }
+
             Flickable {
                 id: settingsFlickable
                 objectName: "exportSettingsFlickable"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                // Nothing mode-specific sits above this any more, so every
-                // tab now opens on the same viewport. The floor stays as the
-                // short-window guard: squeezed down to a couple of rows the
-                // pane reads as content that vanished rather than as a panel
-                // with a scrollbar.
+                Layout.topMargin: Theme.panelPadding
                 Layout.minimumHeight: 200
+                visible: root.session && !(root.session && root.session.unavailableReason)
                 clip: true
+                contentWidth: width
                 contentHeight: settingsBody.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: AppScrollBar {
-                    id: settingsScrollBar
-                    // Default AsNeeded fades out when idle; on a squeezed
-                    // pane that reads as "the rest of the content is gone"
-                    // rather than "scroll for more". Keep it visible for as
-                    // long as there is anything to scroll to.
                     policy: settingsFlickable.contentHeight > settingsFlickable.height
                         ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
                 }
 
                 ColumnLayout {
                     id: settingsBody
-                    // Leave room for the scrollbar so it rides beside the
-                    // content instead of overlapping the text underneath it.
-                    width: settingsFlickable.width - settingsScrollBar.width - 4
-                    spacing: 12
+                    x: root.formInset
+                    width: settingsFlickable.width - 2 * root.formInset
+                    spacing: Theme.panelPadding
 
                     // Batch (only reachable while batch export is the active mode)
                     ColumnLayout {
@@ -347,236 +354,234 @@ Rectangle {
                     // Output (single-export range lives on this tab)
                     ColumnLayout {
                         visible: root.session && root.session.settingsTab === "output"
-                        spacing: 12
+                        spacing: Theme.panelPadding
                         Layout.fillWidth: true
 
-                        GridLayout {
-                            columns: 2
-                            columnSpacing: 12
-                            rowSpacing: 10
+                        ColumnLayout {
+                            visible: root.session && root.session.activeTab === "export"
+                            spacing: Theme.chromePadding
                             Layout.fillWidth: true
 
-                        Text {
-                            visible: root.session && root.session.activeTab === "export"
-                            text: qsTrId("video_export.output")
-                            color: Theme.colors.text.secondary
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.uiFontSize
-                        }
-                        RowLayout {
-                            visible: root.session && root.session.activeTab === "export"
-                            Layout.fillWidth: true
-                            AppTextField {
+                            Text {
+                                text: qsTrId("video_export.filename")
+                                color: Theme.colors.text.secondary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.uiFontSize
+                            }
+                            RowLayout {
                                 Layout.fillWidth: true
-                                text: root.session ? root.session.outputPath : ""
-                                onEditingFinished: if (root.session) root.session.outputPath = text
+                                AppTextField {
+                                    Layout.fillWidth: true
+                                    text: root.session ? root.session.outputPath : ""
+                                    onEditingFinished: if (root.session) root.session.outputPath = text
+                                }
+                                AppButton {
+                                    text: qsTrId("action.browse")
+                                    onClicked: if (root.session) root.session.browseOutputPath()
+                                }
                             }
-                            AppButton {
-                                text: qsTrId("action.browse")
-                                onClicked: if (root.session) root.session.browseOutputPath()
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 0
+                                spacing: Theme.chromePadding
+                                Text {
+                                    text: qsTrId("dialog.video_export.resolution")
+                                    color: Theme.colors.text.secondary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                }
+                                AppComboBox {
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.resolutionOptions : []
+                                    textRole: "label"
+                                    currentIndex: root.session ? root.session.resolutionIndex : 0
+                                    onActivated: if (root.session) root.session.resolutionIndex = currentIndex
+                                }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 0
+                                spacing: Theme.chromePadding
+                                Text {
+                                    text: qsTrId("dialog.video_export.fps")
+                                    color: Theme.colors.text.secondary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                }
+                                AppComboBox {
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.fpsOptions : []
+                                    currentIndex: {
+                                        if (!root.session) return 1
+                                        const opts = root.session.fpsOptions
+                                        for (let i = 0; i < opts.length; ++i)
+                                            if (opts[i] === root.session.fps) return i
+                                        return 1
+                                    }
+                                    displayText: root.session ? (root.session.fps + " FPS") : ""
+                                    onActivated: if (root.session) root.session.fps = model[currentIndex]
+                                }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 0
+                                spacing: Theme.chromePadding
+                                Text {
+                                    text: qsTrId("dialog.video_export.audio_bitrate")
+                                    color: Theme.colors.text.secondary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                }
+                                AppComboBox {
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.audioBitrateOptions : []
+                                    currentIndex: {
+                                        if (!root.session) return 2
+                                        const opts = root.session.audioBitrateOptions
+                                        for (let i = 0; i < opts.length; ++i)
+                                            if (opts[i] === root.session.audioBitrateKbps) return i
+                                        return 2
+                                    }
+                                    displayText: root.session ? (root.session.audioBitrateKbps + " kbps") : ""
+                                    onActivated: if (root.session) root.session.audioBitrateKbps = model[currentIndex]
+                                }
                             }
                         }
 
-                        Text {
-                            text: qsTrId("dialog.video_export.resolution")
-                            color: Theme.colors.text.secondary
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.uiFontSize
-                        }
-                        AppComboBox {
+                        RowLayout {
                             Layout.fillWidth: true
-                            model: root.session ? root.session.resolutionOptions : []
-                            textRole: "label"
-                            currentIndex: root.session ? root.session.resolutionIndex : 0
-                            onActivated: if (root.session) root.session.resolutionIndex = currentIndex
-                        }
+                            spacing: 12
 
-                        Text {
-                            text: qsTrId("dialog.video_export.fps")
-                            color: Theme.colors.text.secondary
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.uiFontSize
-                        }
-                        AppComboBox {
-                            Layout.fillWidth: true
-                            model: root.session ? root.session.fpsOptions : []
-                            currentIndex: {
-                                if (!root.session) return 1
-                                const opts = root.session.fpsOptions
-                                for (let i = 0; i < opts.length; ++i)
-                                    if (opts[i] === root.session.fps) return i
-                                return 1
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 0
+                                spacing: Theme.chromePadding
+                                Text {
+                                    text: qsTrId("dialog.video_export.preset")
+                                    color: Theme.colors.text.secondary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                }
+                                AppComboBox {
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.presetOptions : []
+                                    currentIndex: root.session ? root.session.presetIndex : 1
+                                    onActivated: if (root.session) root.session.presetIndex = currentIndex
+                                }
                             }
-                            displayText: root.session ? (root.session.fps + " FPS") : ""
-                            onActivated: if (root.session) root.session.fps = model[currentIndex]
-                        }
-
-                        Text {
-                            text: qsTrId("dialog.video_export.audio_bitrate")
-                            color: Theme.colors.text.secondary
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.uiFontSize
-                        }
-                        AppComboBox {
-                            Layout.fillWidth: true
-                            model: root.session ? root.session.audioBitrateOptions : []
-                            currentIndex: {
-                                if (!root.session) return 2
-                                const opts = root.session.audioBitrateOptions
-                                for (let i = 0; i < opts.length; ++i)
-                                    if (opts[i] === root.session.audioBitrateKbps) return i
-                                return 2
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 0
+                                spacing: Theme.chromePadding
+                                Text {
+                                    text: qsTrId("dialog.video_export.size_preset")
+                                    color: Theme.colors.text.secondary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.uiFontSize
+                                }
+                                AppComboBox {
+                                    Layout.fillWidth: true
+                                    model: root.session ? root.session.sizePresetOptions : []
+                                    currentIndex: root.session ? root.session.sizePresetIndex : 0
+                                    onActivated: if (root.session) root.session.sizePresetIndex = currentIndex
+                                }
                             }
-                            displayText: root.session ? (root.session.audioBitrateKbps + " kbps") : ""
-                            onActivated: if (root.session) root.session.audioBitrateKbps = model[currentIndex]
-                        }
-
-                        Text {
-                            text: qsTrId("dialog.video_export.preset")
-                            color: Theme.colors.text.secondary
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.uiFontSize
-                        }
-                        AppComboBox {
-                            Layout.fillWidth: true
-                            model: root.session ? root.session.presetOptions : []
-                            currentIndex: root.session ? root.session.presetIndex : 1
-                            onActivated: if (root.session) root.session.presetIndex = currentIndex
-                        }
-
-                        Text {
-                            text: qsTrId("dialog.video_export.size_preset")
-                            color: Theme.colors.text.secondary
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.uiFontSize
-                        }
-                        AppComboBox {
-                            Layout.fillWidth: true
-                            model: root.session ? root.session.sizePresetOptions : []
-                            currentIndex: root.session ? root.session.sizePresetIndex : 0
-                            onActivated: if (root.session) root.session.sizePresetIndex = currentIndex
-                        }
                         }
 
                         ColumnLayout {
                             visible: root.session && root.session.activeTab === "export"
-                            spacing: 10
+                            spacing: Theme.panelPadding
                             Layout.fillWidth: true
 
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.topMargin: 2
                             height: 1
                             color: Theme.colors.border.normal
                         }
 
-                        Text {
-                            text: qsTrId("video_export.export_range")
-                            color: Theme.colors.text.active
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.uiFontSize
-                            font.bold: true
-                        }
-
-                        ExportRangeSelector {
-                            objectName: "exportRangeSelector"
+                        ColumnLayout {
+                            spacing: Theme.chromePadding
                             Layout.fillWidth: true
-                            exportSession: root.session
-                            previewSession: root.previewSession
+
+                            Text {
+                                text: qsTrId("video_export.export_range")
+                                color: Theme.colors.text.secondary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.uiFontSize
+                            }
+
+                            ExportRangeSelector {
+                                objectName: "exportRangeSelector"
+                                Layout.fillWidth: true
+                                exportSession: root.session
+                                previewSession: root.previewSession
+                            }
                         }
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.chromePadding
+
                             Text {
                                 text: qsTrId("dialog.video_export.range.start")
                                 color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 80
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.uiFontSize
+                                Layout.alignment: Qt.AlignVCenter
                             }
                             AppTextField {
                                 id: exportRangeStartField
 
                                 objectName: "exportRangeStartField"
                                 Layout.preferredWidth: 100
+                                Layout.alignment: Qt.AlignVCenter
                                 text: root.session ? root.session.exportStartSeconds.toFixed(3) : "0"
                                 onEditingFinished: if (root.session) text = root.session.setExportStartText(text)
                             }
+                            Item { Layout.fillWidth: true }
                         }
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.chromePadding
+
                             Text {
                                 text: qsTrId("dialog.video_export.range.end")
                                 color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 80
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.uiFontSize
+                                Layout.alignment: Qt.AlignVCenter
                             }
                             AppTextField {
                                 id: exportRangeEndField
 
                                 objectName: "exportRangeEndField"
                                 Layout.preferredWidth: 100
+                                Layout.alignment: Qt.AlignVCenter
                                 text: root.session ? root.session.exportEndSeconds.toFixed(3) : "0"
                                 onEditingFinished: if (root.session) text = root.session.setExportEndText(text)
                             }
+                            Item { Layout.fillWidth: true }
                         }
                         Text {
                             text: root.session
-                                  ? qsTrId("qml.total_duration_1_s").arg(root.session.contentDurationSeconds.toFixed(3))
+                                  ? qsTrId("qml.total_duration_1_s").arg(
+                                        (root.session.exportEndSeconds - root.session.exportStartSeconds).toFixed(3))
                                   : ""
                             color: Theme.colors.text.secondary
                         }
-                        }
-                    }
 
-                    // Video
-                    ColumnLayout {
-                        visible: root.session && root.session.settingsTab === "video"
-                        spacing: 10
-                        Layout.fillWidth: true
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 1
+                            color: Theme.colors.border.normal
+                        }
+                        }
 
-                        LabeledSlider {
-                            objectName: "exportBrightnessOuterSlider"
-                            label: qsTrId("qml.outer_brightness")
-                            from: 0
-                            to: 100
-                            value: root.session ? root.session.backgroundBrightnessOuter * 100 : 50
-                            onMoved: function(v) { if (root.session) root.session.backgroundBrightnessOuter = v / 100 }
-                        }
-                        LabeledSlider {
-                            objectName: "exportBrightnessInnerSlider"
-                            label: qsTrId("qml.inner_brightness")
-                            from: 0
-                            to: 100
-                            value: root.session ? root.session.backgroundBrightnessInner * 100 : 20
-                            onMoved: function(v) { if (root.session) root.session.backgroundBrightnessInner = v / 100 }
-                        }
-                        LabeledSlider {
-                            objectName: "exportLayoutSquareScaleSlider"
-                            label: qsTrId("video_export.layout_size")
-                            from: 50
-                            to: 100
-                            stepSize: 5
-                            value: root.session ? root.session.layoutSquareScale * 100 : 95
-                            onMoved: function(v) { if (root.session) root.session.layoutSquareScale = v / 100 }
-                        }
-                        RowLayout {
-                            Text {
-                                text: qsTrId("qml.background_scaling")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppComboBox {
-                                Layout.fillWidth: true
-                                model: root.session ? root.session.backgroundScaleModeOptions : []
-                                currentIndex: root.session ? root.session.backgroundScaleModeIndex : 0
-                                onActivated: if (root.session) root.session.backgroundScaleModeIndex = currentIndex
-                            }
-                        }
-                        AppSwitch {
-                            text: qsTrId("video_export.smooth_brightness")
-                            checked: root.session ? root.session.smoothBrightness : false
-                            onToggled: if (root.session) root.session.smoothBrightness = checked
-                        }
-                        AppSwitch {
-                            text: qsTrId("video_export.show_bottom_left_timestamp")
-                            checked: root.session ? root.session.showTimestamp : true
-                            onToggled: if (root.session) root.session.showTimestamp = checked
-                        }
                         AppSwitch {
                             text: qsTrId("dialog.video_export.option.show_object_stats")
                             checked: root.session ? root.session.showObjectStatsHud : false
@@ -599,205 +604,15 @@ Rectangle {
                         }
                     }
 
-                    // Gameplay (task-local speeds)
-                    ColumnLayout {
-                        visible: root.session && root.session.settingsTab === "gameplay"
-                        spacing: 10
+                    Loader {
+                        id: appearanceLoader
                         Layout.fillWidth: true
-                        RowLayout {
-                            Text {
-                                text: qsTrId("dialog.render_settings.video.tap_flow_speed")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppTextField {
-                                Layout.preferredWidth: 80
-                                text: root.session ? root.session.tapFlowSpeed.toFixed(2) : "7.50"
-                                onEditingFinished: {
-                                    if (!root.session) return
-                                    var value = Number(text)
-                                    if (isFinite(value)) root.session.tapFlowSpeed = value
-                                    text = root.session.tapFlowSpeed.toFixed(2)
-                                }
-                            }
-                        }
-                        RowLayout {
-                            Text {
-                                text: qsTrId("dialog.render_settings.video.touch_flow_speed")
-                                color: Theme.colors.text.secondary
-                                Layout.preferredWidth: 120
-                            }
-                            AppTextField {
-                                Layout.preferredWidth: 80
-                                text: root.session ? root.session.touchFlowSpeed.toFixed(2) : "7.50"
-                                onEditingFinished: {
-                                    if (!root.session) return
-                                    var value = Number(text)
-                                    if (isFinite(value)) root.session.touchFlowSpeed = value
-                                    text = root.session.touchFlowSpeed.toFixed(2)
-                                }
-                            }
-                        }
-                    }
-
-                    // Global preview skin/HUD font controls are also available
-                    // from PreviewSettingsDialog. Both paths use the same v2
-                    // owner-live preview state so export reflects the change.
-                    ColumnLayout {
-                        visible: root.session && root.session.settingsTab === "skin"
-                        spacing: 10
-                        Layout.fillWidth: true
-
-                        SettingsSection {
-                            title: qsTrId("video_export.skin")
-                            first: true
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Text {
-                                    text: qsTrId("video_export.skin")
-                                    color: Theme.colors.text.secondary
-                                    Layout.preferredWidth: 120
-                                }
-                                AppComboBox {
-                                    id: exportSkinCombo
-                                    objectName: "exportSkinCombo"
-                                    Layout.fillWidth: true
-                                    model: root.session ? root.session.skinOptions : []
-                                    textRole: "label"
-                                    currentIndex: root.session ? root.session.skinIndex : -1
-                                    Accessible.name: qsTrId("video_export.skin")
-                                    onActivated: if (root.session) root.session.skinIndex = currentIndex
-                                }
-                                AppButton {
-                                    text: qsTrId("dialog.skin_settings.open_directory")
-                                    onClicked: if (root.session) root.session.openSkinDirectory()
-                                }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Text {
-                                    text: qsTrId("dialog.skin_settings.chart_effect")
-                                    color: Theme.colors.text.secondary
-                                    Layout.preferredWidth: 120
-                                }
-                                AppComboBox {
-                                    id: exportSkinJudgeEffectCombo
-                                    objectName: "exportSkinJudgeEffectCombo"
-                                    Layout.fillWidth: true
-                                    model: root.session ? root.session.skinJudgeEffectOptions : []
-                                    currentIndex: root.session ? root.session.skinJudgeEffectIndex : 0
-                                    Accessible.name: qsTrId("dialog.skin_settings.chart_effect")
-                                    onActivated: if (root.session) root.session.skinJudgeEffectIndex = currentIndex
-                                }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Text {
-                                    text: qsTrId("dialog.render_settings.gameplay.judge_line")
-                                    color: Theme.colors.text.secondary
-                                    Layout.preferredWidth: 120
-                                }
-                                AppComboBox {
-                                    id: exportOutlineCombo
-                                    objectName: "exportOutlineCombo"
-                                    Layout.fillWidth: true
-                                    model: root.session ? root.session.outlineOptions : []
-                                    currentIndex: root.session ? root.session.outlineIndex : 1
-                                    Accessible.name: qsTrId("dialog.render_settings.gameplay.judge_line")
-                                    onActivated: if (root.session) root.session.outlineIndex = currentIndex
-                                }
-                                AppButton {
-                                    text: qsTrId("dialog.skin_settings.open_directory")
-                                    onClicked: if (root.session) root.session.openJudgeLineDirectory()
-                                }
-                            }
-                        }
-
-                        SettingsSection {
-                            title: qsTrId("dialog.video_export.option.hud_font")
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Text {
-                                    text: qsTrId("dialog.video_export.option.hud_font_area")
-                                    color: Theme.colors.text.secondary
-                                    Layout.preferredWidth: 120
-                                }
-                                AppComboBox {
-                                    id: hudFontAreaCombo
-                                    objectName: "hudFontAreaCombo"
-                                    Layout.fillWidth: true
-                                    model: root.session ? root.session.hudFontAreaOptions : []
-                                    textRole: "label"
-                                    currentIndex: root.session ? root.session.hudFontAreaIndex : 0
-                                    Accessible.name: qsTrId("qml.hud_font_area")
-                                    onActivated: if (root.session) root.session.hudFontAreaIndex = currentIndex
-                                }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Text {
-                                    text: qsTrId("cover.font")
-                                    color: Theme.colors.text.secondary
-                                    Layout.preferredWidth: 120
-                                }
-                                AppComboBox {
-                                    id: hudFontCombo
-                                    objectName: "hudFontCombo"
-                                    Layout.fillWidth: true
-                                    model: root.session ? root.session.fontLibraryOptions : []
-                                    textRole: "label"
-                                    currentIndex: root.fontIndexForPath(model,
-                                                                       root.session ? root.session.hudFontPath : "")
-                                    Accessible.name: qsTrId("dialog.video_export.option.hud_font")
-                                    onActivated: if (root.session) root.session.hudFontPath = model[currentIndex].path
-                                }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                implicitHeight: hudFontSample.implicitHeight + 20
-                                radius: Theme.controlRadius
-                                color: Theme.overlayColor(Theme.colors.background.surface)
-                                Text {
-                                    id: hudFontSample
-                                    anchors.fill: parent
-                                    anchors.margins: 10
-                                    text: root.session ? root.session.hudFontSample : ""
-                                    color: Theme.colors.text.primary
-                                    font.family: root.fontFamilyForPath(
-                                                     root.session ? root.session.fontLibraryOptions : [],
-                                                     root.session ? root.session.hudFontPath : "") || Theme.uiFont
-                                    font.pixelSize: Theme.uiFontSize
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    elide: Text.ElideRight
-                                }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                AppButton {
-                                    id: hudFontImportButton
-                                    objectName: "hudFontImportButton"
-                                    text: qsTrId("card_font.import")
-                                    Accessible.name: qsTrId("qml.import_hud_font")
-                                    onClicked: if (root.session) root.session.importHudFont()
-                                }
-                                AppButton {
-                                    id: hudFontResetButton
-                                    objectName: "hudFontResetButton"
-                                    text: qsTrId("action.reset")
-                                    Accessible.name: qsTrId("qml.reset_hud_font")
-                                    onClicked: if (root.session) root.session.resetHudFont()
-                                }
-                                Item { Layout.fillWidth: true }
-                            }
-                        }
+                        active: root.session
+                                && (root.session.settingsTab === "video"
+                                    || root.session.settingsTab === "gameplay"
+                                    || root.session.settingsTab === "skin")
+                        visible: active
+                        sourceComponent: appearanceForm
                     }
 
                     // Intro
@@ -1026,9 +841,11 @@ Rectangle {
                 }
             }
 
-            Item { Layout.fillWidth: true; Layout.preferredHeight: 1 }
             RowLayout {
                 Layout.fillWidth: true
+                Layout.topMargin: Theme.panelPadding
+                Layout.leftMargin: root.formInset
+                Layout.rightMargin: root.formInset
                 Item { Layout.fillWidth: true }
                 AppButton {
                     text: root.session && root.session.exportRunning ? qsTrId("video_export.cancel_export") : qsTrId("video_export.start_export")
@@ -1043,7 +860,6 @@ Rectangle {
                 }
             }
         }
-
     }
 
     Component.onCompleted: root.normalizeSettingsTab()

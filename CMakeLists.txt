@@ -731,6 +731,7 @@ set(MIACODE_UI_QML_FILES
     src/app/ui/preview/PreviewTransport.qml
     src/app/ui/preview/NoteStatistics.qml
     src/app/ui/preview/AudioSettingsDialog.qml
+    src/app/ui/preview/PreviewAppearancePages.qml
     src/app/ui/preview/PreviewSettingsDialog.qml
 )
 foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)

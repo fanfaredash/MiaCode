@@ -4,19 +4,13 @@
 
 #include "app/services/JobProgressService.h"
 #include "ui/preferences/LocaleService.h"
-#include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSfxAssets.h"
-#include "common/PreviewVideoGeometryConfig.h"
-#include "core/scene/PreviewHudState.h"
 #include "core/video/PreviewRenderSettings.h"
-#include "preview/runtime/PreviewRuntime.h"
-#include "audio/QtPreviewSfxRuntime.h"
 #include "tools/video_export/VideoExportPreferences.h"
 #include "tools/video_export/VideoExportSettings.h"
 #include "tools/video_export/FontLibrary.h"
 
 #include <QCoreApplication>
-#include <QDesktopServices>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
@@ -24,6 +18,7 @@
 #include <QJsonObject>
 #include <QScopedValueRollback>
 #include <QSettings>
+#include <QTimer>
 #include <QUrl>
 
 #include <utility>
@@ -67,8 +62,6 @@ ExportSession::ExportSession(miacode::ShellNotifications& notifications,
                 emit localeLabelsChanged();
                 emit fontLibraryChanged();
                 emit introSoundOptionsChanged();
-                emit skinChanged();
-                emit hudFontChanged();
                 emit introChanged();
             });
     connect(&notifications, &miacode::ShellNotifications::videoExportWorkerRunningChanged, this, [this](bool running) {
@@ -139,16 +132,6 @@ QVariantList ExportSession::sizePresetOptions() const
     };
 }
 
-QVariantList ExportSession::backgroundScaleModeOptions() const
-{
-    return QVariantList{
-        qtTrId("dialog.video_export.option.scale.fill"),
-        qtTrId("dialog.video_export.option.scale.fit"),
-        qtTrId("dialog.video_export.option.scale.square_fit"),
-        qtTrId("dialog.video_export.option.scale.inner_circle_fit_outer_fill"),
-    };
-}
-
 int ExportSession::presetIndex() const
 {
     return task_.preset == VideoExportPreset::Fast ? 0 : 1;
@@ -164,21 +147,6 @@ int ExportSession::sizePresetIndex() const
     case VideoExportSizePreset::UltraCompact:
         return 3;
     case VideoExportSizePreset::Standard:
-    default:
-        return 0;
-    }
-}
-
-int ExportSession::backgroundScaleModeIndex() const
-{
-    switch (task_.backgroundScaleMode) {
-    case PreviewBackgroundScaleMode::FitContain:
-        return 1;
-    case PreviewBackgroundScaleMode::SquareFitContain:
-        return 2;
-    case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
-        return 3;
-    case PreviewBackgroundScaleMode::FillCrop:
     default:
         return 0;
     }
@@ -264,108 +232,6 @@ QVariantList ExportSession::fontLibraryOptions() const
     fontLibraryOptionsCacheDefaultLabel_ = defaultLabel;
     fontLibraryOptionsCacheValid_ = true;
     return fontLibraryOptionsCache_;
-}
-
-QVariantList ExportSession::skinOptions() const
-{
-    QVariantList list;
-    if (preview() == nullptr) {
-        return list;
-    }
-    for (const QString& name : preview()->availableSkinDirectoryNames()) {
-        list.append(QVariantMap{
-            {QStringLiteral("id"), name},
-            {QStringLiteral("label"), preview()->skinDisplayName(name)},
-        });
-    }
-    return list;
-}
-
-int ExportSession::skinIndex() const
-{
-    if (preview() == nullptr) {
-        return -1;
-    }
-    const QStringList names = preview()->availableSkinDirectoryNames();
-    for (int i = 0; i < names.size(); ++i) {
-        if (names.at(i).compare(appearance_->skinDirectoryName(), Qt::CaseInsensitive) == 0) {
-            return i;
-        }
-    }
-    return names.isEmpty() ? -1 : 0;
-}
-
-QVariantList ExportSession::skinJudgeEffectOptions() const
-{
-    return QVariantList{
-        qtTrId("dialog.skin_settings.chart_effect.standard"),
-        qtTrId("dialog.skin_settings.chart_effect.starry"),
-    };
-}
-
-int ExportSession::skinJudgeEffectIndex() const
-{
-    return appearance_->judgeEffectStyle() == PreviewJudgeEffectStyle::Starry ? 1 : 0;
-}
-
-QVariantList ExportSession::outlineOptions() const
-{
-    return QVariantList{
-        qtTrId("dialog.render_settings.gameplay.judge_line.point"),
-        qtTrId("dialog.render_settings.gameplay.judge_line.line"),
-        qtTrId("dialog.render_settings.gameplay.judge_line.area"),
-        qtTrId("dialog.render_settings.gameplay.judge_line.area_labeled"),
-    };
-}
-
-int ExportSession::outlineIndex() const
-{
-    if (preview() == nullptr) {
-        return 1;
-    }
-    switch (appearance_->outlineVariant()) {
-    case PreviewOutlineVariant::Point:
-        return 0;
-    case PreviewOutlineVariant::JudgeArea:
-        return 2;
-    case PreviewOutlineVariant::JudgeAreaLabeled:
-        return 3;
-    case PreviewOutlineVariant::Line:
-    default:
-        return 1;
-    }
-}
-
-QVariantList ExportSession::hudFontAreaOptions() const
-{
-    QVariantList result;
-    for (const auto& choice : miacode::preview::scene::previewHudFontAreaChoices()) {
-        result.append(QVariantMap{
-            {QStringLiteral("label"), qtTrId(choice.labelKey)},
-            {QStringLiteral("sample"), QLatin1String(choice.sample)},
-            {QStringLiteral("areaId"), miacode::preview::scene::previewHudFontAreaId(choice.area)},
-        });
-    }
-    return result;
-}
-
-int ExportSession::hudFontAreaIndex() const
-{
-    return miacode::preview::scene::previewHudFontAreaIndex(
-        miacode::preview::scene::previewHudFontAreaFromId(hudFontAreaId_));
-}
-
-QString ExportSession::hudFontPath() const
-{
-    return miacode::preview::scene::previewHudCustomFontPath(
-        miacode::preview::scene::previewHudFontAreaFromId(hudFontAreaId_));
-}
-
-QString ExportSession::hudFontSample() const
-{
-    const QVariantList areas = hudFontAreaOptions();
-    return areas.at(qBound(0, hudFontAreaIndex(), static_cast<int>(areas.size()) - 1))
-        .toMap().value(QStringLiteral("sample")).toString();
 }
 
 QString ExportSession::introSoundLabel() const
@@ -471,15 +337,20 @@ void ExportSession::enter(int previousActiveDifficultyId)
         emit selectedDifficultyIdChanged();
     }
     rebuildDifficultyList();
-    seedFromDifficulty(selectedDifficultyId_);
-    syncAudition();
+    // PageHost marks the QML page after this returns. Seed waits one tick.
+    const quint64 generation = ++pagePrepareGeneration_;
+    QTimer::singleShot(0, this, [this, generation]() {
+        if (!pageSessionActive_ || generation != pagePrepareGeneration_) {
+            return;
+        }
+        seedFromDifficulty(selectedDifficultyId_);
+        syncAudition();
+    });
     // Re-scan once per real page entry so imports made by another QML surface
     // are visible, while repeated property reads during this entry share the
     // materialized option list.
     fontLibraryOptionsCacheValid_ = false;
     emit fontLibraryChanged();
-    emit skinChanged();
-    emit hudFontChanged();
 }
 
 void ExportSession::leave()
@@ -487,6 +358,10 @@ void ExportSession::leave()
     // Idle no-op: must not tear down the v1 Widgets export audition/session.
     if (!pageSessionActive_) {
         return;
+    }
+    ++pagePrepareGeneration_;
+    if (!hasSeededTask_) {
+        clearPendingSelectionRangeExport();
     }
     pageSessionActive_ = false;
     emit pageSessionActiveChanged();
@@ -499,13 +374,15 @@ void ExportSession::leave()
 void ExportSession::selectDifficulty(int difficultyId)
 {
     const int next = difficultyExists(difficultyId) ? difficultyId : 0;
-    if (selectedDifficultyId_ != next) {
-        selectedDifficultyId_ = next;
-        emit selectedDifficultyIdChanged();
+    if (selectedDifficultyId_ == next) {
+        return;
     }
+    selectedDifficultyId_ = next;
+    emit selectedDifficultyIdChanged();
     if (!pageSessionActive_) {
         return;
     }
+    ++pagePrepareGeneration_;
     seedFromDifficulty(selectedDifficultyId_);
     syncAudition();
 }
@@ -562,6 +439,7 @@ void ExportSession::refreshFromDocument()
     }
     rebuildDifficultyList();
     if (pageSessionActive_) {
+        ++pagePrepareGeneration_;
         seedFromDifficulty(selectedDifficultyId_);
         syncAudition();
     }
@@ -631,9 +509,9 @@ void ExportSession::seedFromDifficulty(int difficultyId)
         QSettings settings(QStringLiteral("fanfaredash"), QStringLiteral("MiaCode"));
         batchOutputDirectory_ = settings.value(QStringLiteral("batch_video_export_dialog/last_output_directory")).toString();
     }
+    adoptPreviewRenderSettings();
     emit outputChanged();
     emit videoChanged();
-    emit gameplayChanged();
     emit introChanged();
     emit rangeChanged();
     emit batchChanged();
@@ -659,6 +537,7 @@ void ExportSession::applyLivePreviewSettings()
     if (engine() == nullptr) {
         return;
     }
+    adoptPreviewRenderSettings();
     VideoExportTask liveTask = task_;
     applyOwnerLiveFields(&liveTask);
     {
@@ -690,8 +569,6 @@ void ExportSession::adoptPreviewRenderSettings()
     task_.showTimestamp = values.value(QStringLiteral("showTimestamp"), task_.showTimestamp).toBool();
     task_.tapFlowSpeed = values.value(QStringLiteral("tapFlowSpeed"), task_.tapFlowSpeed).toDouble();
     task_.touchFlowSpeed = values.value(QStringLiteral("touchFlowSpeed"), task_.touchFlowSpeed).toDouble();
-    emit videoChanged();
-    emit gameplayChanged();
 }
 
 void ExportSession::stopAudition()
@@ -731,6 +608,12 @@ void ExportSession::startExport()
     if (engine() == nullptr) {
         return;
     }
+    ++pagePrepareGeneration_;
+    if (!hasSeededTask_) {
+        seedFromDifficulty(selectedDifficultyId_);
+        syncAudition();
+    }
+    adoptPreviewRenderSettings();
     if (activeTab_ == QLatin1String("batch")) {
         savePreferences();
         batchCancellationRequested_ = false;
@@ -934,71 +817,6 @@ void ExportSession::applyFontImport(const QString& selectedPath)
     // Match the established card-font picker: an imported font becomes the
     // title/display choice while the body selection remains independent.
     setIntroFontDisplayPath(result.path);
-}
-
-void ExportSession::importHudFont()
-{
-    if (uiRequests_ == nullptr) {
-        return;
-    }
-    miacode::FileRequest request;
-    request.title = qtTrId("dialog.video_export.option.import_hud_font");
-    request.nameFilters = QStringList{QStringLiteral("Font Files (*.ttf *.otf)")};
-    uiRequests_->requestFile(request, [this](const QString& path) {
-        applyHudFontImport(path);
-    });
-}
-
-void ExportSession::applyHudFontImport(const QString& selectedPath)
-{
-    if (selectedPath.isEmpty()) {
-        return;
-    }
-    const miacode::video_export::FontImportResult result =
-        miacode::video_export::importFontFileIntoLibrary(selectedPath);
-    if (result.path.isEmpty()) {
-        if (uiRequests_ != nullptr) {
-            uiRequests_->postNotice(
-                miacode::NoticeSeverity::Warning,
-                qtTrId("dialog.video_export.option.import_hud_font"),
-                result.failure == miacode::video_export::FontImportFailure::CopyFailed
-                    ? qtTrId("card_font.copy_failed")
-                    : qtTrId("card_font.invalid_font"));
-        }
-        return;
-    }
-    fontLibraryOptionsCacheValid_ = false;
-    emit fontLibraryChanged();
-    setHudFontPath(result.path);
-}
-
-void ExportSession::resetHudFont()
-{
-    setHudFontPath(QString());
-}
-
-void ExportSession::openSkinDirectory()
-{
-    if (preview() == nullptr) {
-        return;
-    }
-    const QString skinRoot = preview()->resolveSkinRootDir();
-    if (!skinRoot.isEmpty()) {
-        QDir().mkpath(skinRoot);
-        QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
-    }
-}
-
-void ExportSession::openJudgeLineDirectory()
-{
-    if (preview() == nullptr) {
-        return;
-    }
-    const QString outlineDir = preview()->resolveCustomOutlineDir();
-    if (!outlineDir.isEmpty()) {
-        QDir().mkpath(outlineDir);
-        QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
-    }
 }
 
 void ExportSession::applyIntroSoundImport(const QString& selectedPath)
@@ -1266,62 +1084,6 @@ void ExportSession::setSizePresetIndex(int index)
     savePreferences();
 }
 
-void ExportSession::setBackgroundBrightnessOuter(double value)
-{
-    task_.backgroundBrightnessOuter = value;
-    emit videoChanged();
-    applyLivePreviewSettings();
-}
-
-void ExportSession::setBackgroundBrightnessInner(double value)
-{
-    task_.backgroundBrightnessInner = value;
-    emit videoChanged();
-    applyLivePreviewSettings();
-}
-
-void ExportSession::setLayoutSquareScale(double value)
-{
-    task_.layoutSquareScale = value;
-    emit videoChanged();
-    applyLivePreviewSettings();
-}
-
-void ExportSession::setBackgroundScaleModeIndex(int index)
-{
-    PreviewBackgroundScaleMode next = PreviewBackgroundScaleMode::FillCrop;
-    switch (index) {
-    case 1:
-        next = PreviewBackgroundScaleMode::FitContain;
-        break;
-    case 2:
-        next = PreviewBackgroundScaleMode::SquareFitContain;
-        break;
-    case 3:
-        next = PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
-        break;
-    default:
-        break;
-    }
-    task_.backgroundScaleMode = next;
-    emit videoChanged();
-    applyLivePreviewSettings();
-}
-
-void ExportSession::setSmoothBrightness(bool value)
-{
-    task_.smoothBrightness = value;
-    emit videoChanged();
-    applyLivePreviewSettings();
-}
-
-void ExportSession::setShowTimestamp(bool value)
-{
-    task_.showTimestamp = value;
-    emit videoChanged();
-    applyLivePreviewSettings();
-}
-
 void ExportSession::setShowObjectStatsHud(bool value)
 {
     task_.showObjectStatsHud = value;
@@ -1350,107 +1112,6 @@ void ExportSession::setClockCountEnabled(bool value)
     emit videoChanged();
     syncAudition();
     savePreferences();
-}
-
-void ExportSession::setTapFlowSpeed(double value)
-{
-    if (!qIsFinite(value)) {
-        return;
-    }
-    task_.tapFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(value);
-    emit gameplayChanged();
-    applyLivePreviewSettings();
-}
-
-void ExportSession::setTouchFlowSpeed(double value)
-{
-    if (!qIsFinite(value)) {
-        return;
-    }
-    task_.touchFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(value);
-    emit gameplayChanged();
-    applyLivePreviewSettings();
-}
-
-void ExportSession::setSkinIndex(int index)
-{
-    if (preview() == nullptr) {
-        return;
-    }
-    const QStringList names = preview()->availableSkinDirectoryNames();
-    if (index < 0 || index >= names.size()) {
-        return;
-    }
-    const QString skinDirectoryName = names.at(index);
-    // The owner decides whether this is a real change; the window reacts by
-    // re-applying the skin to every surface and persisting it.
-    if (!appearance_->setSkinDirectory(skinDirectoryName)) {
-        return;
-    }
-    emit skinChanged();
-}
-
-void ExportSession::setSkinJudgeEffectIndex(int index)
-{
-    if (preview() == nullptr) {
-        return;
-    }
-    const auto style = index == 1 ? PreviewJudgeEffectStyle::Starry : PreviewJudgeEffectStyle::Standard;
-    if (!appearance_->setJudgeEffectStyle(style)) {
-        return;
-    }
-    emit skinChanged();
-}
-
-void ExportSession::setOutlineIndex(int index)
-{
-    if (preview() == nullptr) {
-        return;
-    }
-    PreviewOutlineVariant variant = PreviewOutlineVariant::Line;
-    switch (index) {
-    case 0:
-        variant = PreviewOutlineVariant::Point;
-        break;
-    case 2:
-        variant = PreviewOutlineVariant::JudgeArea;
-        break;
-    case 3:
-        variant = PreviewOutlineVariant::JudgeAreaLabeled;
-        break;
-    case 1:
-    default:
-        break;
-    }
-    preview()->applyOutlineVariant(variant, /*useAutoSelection=*/false, /*persistState=*/true);
-    emit skinChanged();
-}
-
-void ExportSession::setHudFontAreaIndex(int index)
-{
-    const auto choices = miacode::preview::scene::previewHudFontAreaChoices();
-    if (choices.isEmpty()) return;
-    const int normalized = qBound(0, index, choices.size() - 1);
-    const int nextAreaId = miacode::preview::scene::previewHudFontAreaId(
-        choices.at(normalized).area);
-    if (hudFontAreaId_ == nextAreaId) {
-        return;
-    }
-    hudFontAreaId_ = nextAreaId;
-    emit hudFontChanged();
-}
-
-void ExportSession::setHudFontPath(const QString& path)
-{
-    const auto area = miacode::preview::scene::previewHudFontAreaFromId(hudFontAreaId_);
-    if (miacode::preview::scene::previewHudCustomFontPath(area) == path) {
-        return;
-    }
-    miacode::preview::scene::setPreviewHudCustomFontPath(area, path);
-    if (preview() != nullptr) {
-        preview()->refreshSurfaces();
-    }
-    emit hudFontChanged();
 }
 
 void ExportSession::setIntroEnabled(bool value)

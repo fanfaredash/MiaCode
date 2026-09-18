@@ -99,37 +99,14 @@ ApplicationWindow {
         property var presetOptions: ["Fast", "High quality"]
         property int sizePresetIndex: 0
         property var sizePresetOptions: ["Standard"]
-        property real backgroundBrightnessOuter: 0.5
-        property real backgroundBrightnessInner: 0.2
-        property real layoutSquareScale: 0.95
-        property int backgroundScaleModeIndex: 0
-        property var backgroundScaleModeOptions: ["Fill"]
-        property bool smoothBrightness: true
-        property bool showTimestamp: true
         property bool showObjectStatsHud: false
         property bool showChartInfoHud: false
         property bool fixHudTextLayout: false
         property bool clockCountEnabled: false
-        property real tapFlowSpeed: 7.5
-        property real touchFlowSpeed: 7.5
         property var fontLibraryOptions: [
             { label: "Default font", path: "", family: "" },
             { label: "Example Font (example.ttf)", path: "/fonts/example.ttf", family: "Example Font" }
         ]
-        property var skinOptions: [{ id: "skin", label: "Standard" }, { id: "skinDX", label: "DX" }]
-        property int skinIndex: 0
-        property var skinJudgeEffectOptions: ["Standard", "Starry"]
-        property int skinJudgeEffectIndex: 0
-        property var outlineOptions: ["Point", "Line", "Area", "Labeled area"]
-        property int outlineIndex: 1
-        property var hudFontAreaOptions: [
-            { label: "Chart info", sample: "Title / Artist" },
-            { label: "Timestamp", sample: "12:34:567" }
-        ]
-        property int hudFontAreaIndex: 0
-        property string hudFontPath: ""
-        property string hudFontSample: "Title / Artist"
-        property int hudFontImportRequests: 0
         property bool introEnabled: true
         property int introBackgroundModeIndex: 0
         property string introCustomBackgroundPath: ""
@@ -193,10 +170,6 @@ ApplicationWindow {
             introFontDisplayPath = ""
             introFontBodyPath = ""
         }
-        function openSkinDirectory() {}
-        function openJudgeLineDirectory() {}
-        function importHudFont() { hudFontImportRequests += 1 }
-        function resetHudFont() { hudFontPath = "" }
         function setExportStartToCurrentPreview() {}
         function setExportEndToCurrentPreview() {}
         function setExportRangeSeconds(start, end) {
@@ -252,6 +225,85 @@ ApplicationWindow {
     }
 
     QtObject {
+        id: previewSettings
+        objectName: "fakePreviewSettings"
+        property var values: ({
+            brightnessOuter: 50,
+            brightnessInner: 20,
+            layoutSquareScale: 95,
+            layoutSquareScaleMin: 50,
+            layoutSquareScaleMax: 100,
+            layoutSquareScaleStep: 5,
+            scaleMode: 0,
+            smoothBrightness: true,
+            showTimestamp: true,
+            touchPadAuthoringShortcut: false,
+            forceLabeledJudgeLineWhenPaused: false,
+            showDebugInfo: false,
+            tapFlowSpeed: 7.5,
+            touchFlowSpeed: 7.5,
+            flowSpeedMin: 0,
+            flowSpeedMax: 12,
+            flowSpeedStep: 0.25,
+            slideEarlierOnTop: 0,
+            centerDisplay: 0,
+            tapJudgeTextDistance: 0
+        })
+        property var labels: ({
+            brightnessOuter: "Outer",
+            brightnessInner: "Inner",
+            layoutSquareScale: "Scale",
+            scaleMode: "Scale mode",
+            smoothBrightness: "Smooth",
+            showTimestamp: "Timestamp",
+            touchPadAuthoringShortcut: "Touch pad",
+            forceLabeledJudgeLineWhenPaused: "Labeled",
+            showDebugInfo: "Debug",
+            tapFlowSpeed: "Tap flow",
+            touchFlowSpeed: "Touch flow",
+            slideEarlierOnTop: "Slide stack",
+            centerDisplay: "Center",
+            tapJudgeTextDistance: "Judge text",
+            judgeEffect: "Judge effect"
+        })
+        property var scaleModeOptions: [{ value: 0, label: "Fill" }]
+        property var slideStackOrderOptions: [{ value: 0, label: "Default" }]
+        property var centerDisplayOptions: [{ value: 0, label: "Default" }]
+        property var tapJudgeTextDistanceOptions: [{ value: 0, label: "Default" }]
+        property var judgeEffectOptions: []
+        property var skinOptions: [{ id: "skin", label: "Standard" }, { id: "skinDX", label: "DX" }]
+        property int skinIndex: 0
+        property var skinJudgeEffectOptions: ["Standard", "Starry"]
+        property int skinJudgeEffectIndex: 0
+        property var outlineOptions: [
+            { id: "point", label: "Point" },
+            { id: "line", label: "Line" },
+            { id: "area", label: "Area" },
+            { id: "area_labeled", label: "Labeled area" },
+            { id: "1.maimai.png", label: "1.maimai" }
+        ]
+        property int outlineIndex: 1
+        property var hudFontAreaOptions: [
+            { label: "Chart info", sample: "Title / Artist" },
+            { label: "Timestamp", sample: "12:34:567" }
+        ]
+        property int hudFontAreaIndex: 0
+        property string hudFontPath: ""
+        property string hudFontSample: "Title / Artist"
+        property int hudFontImportRequests: 0
+        property var fontLibraryOptions: [
+            { label: "Default font", path: "", family: "" },
+            { label: "Example Font (example.ttf)", path: "/fonts/example.ttf", family: "Example Font" }
+        ]
+        function setValue(key, value) { values[key] = value }
+        function refresh() {}
+        function openSkinDirectory() {}
+        function openJudgeLineDirectory() {}
+        function importHudFont() { hudFontImportRequests += 1 }
+        function resetHudFont() { hudFontPath = "" }
+    }
+
+    QtObject {
         id: pages
         property var exportSession: session
     }
@@ -260,6 +312,7 @@ ApplicationWindow {
         anchors.fill: parent
         pages: pages
         previewSession: previewSession
+        previewSettings: previewSettings
     }
 
     // The shell hosts one of these for every page; instantiate it directly so
@@ -352,6 +405,7 @@ bool verifyRealExportPageControls(QTextStream& err)
     QCoreApplication::processEvents();
 
     QObject* session = root->findChild<QObject*>(QStringLiteral("fakeExportSession"));
+    QObject* previewSettings = root->findChild<QObject*>(QStringLiteral("fakePreviewSettings"));
     QObject* combo = root->findChild<QObject*>(QStringLiteral("introSoundCombo"));
     QObject* importButton = root->findChild<QObject*>(QStringLiteral("introSoundImportButton"));
     QObject* volumeSlider = root->findChild<QObject*>(QStringLiteral("introSoundVolumeSlider"));
@@ -359,18 +413,11 @@ bool verifyRealExportPageControls(QTextStream& err)
     QObject* bodyFontCombo = root->findChild<QObject*>(QStringLiteral("introBodyFontCombo"));
     QObject* introFontImportButton = root->findChild<QObject*>(QStringLiteral("introFontImportButton"));
     QObject* introFontResetButton = root->findChild<QObject*>(QStringLiteral("introFontResetButton"));
-    QObject* skinCombo = root->findChild<QObject*>(QStringLiteral("exportSkinCombo"));
-    QObject* hudAreaCombo = root->findChild<QObject*>(QStringLiteral("hudFontAreaCombo"));
-    QObject* hudFontCombo = root->findChild<QObject*>(QStringLiteral("hudFontCombo"));
-    QObject* hudFontImportButton = root->findChild<QObject*>(QStringLiteral("hudFontImportButton"));
-    QObject* hudFontResetButton = root->findChild<QObject*>(QStringLiteral("hudFontResetButton"));
     bool ok = require(
-        session != nullptr && combo != nullptr && importButton != nullptr && volumeSlider != nullptr
-            && displayFontCombo != nullptr && bodyFontCombo != nullptr
-            && introFontImportButton != nullptr && introFontResetButton != nullptr
-            && skinCombo != nullptr && hudAreaCombo != nullptr && hudFontCombo != nullptr
-            && hudFontImportButton != nullptr && hudFontResetButton != nullptr,
-        QStringLiteral("the real ExportVideoPage creates the font, skin and HUD controls"),
+        session != nullptr && previewSettings != nullptr && combo != nullptr && importButton != nullptr
+            && volumeSlider != nullptr && displayFontCombo != nullptr && bodyFontCombo != nullptr
+            && introFontImportButton != nullptr && introFontResetButton != nullptr,
+        QStringLiteral("the real ExportVideoPage creates the intro font and sound controls"),
         err);
     if (!ok) {
         return false;
@@ -438,6 +485,17 @@ bool verifyRealExportPageControls(QTextStream& err)
 
     session->setProperty("settingsTab", QStringLiteral("skin"));
     QCoreApplication::processEvents();
+    QObject* skinCombo = root->findChild<QObject*>(QStringLiteral("previewSkinCombo"));
+    QObject* hudAreaCombo = root->findChild<QObject*>(QStringLiteral("previewHudFontAreaCombo"));
+    QObject* hudFontCombo = root->findChild<QObject*>(QStringLiteral("previewHudFontCombo"));
+    QObject* hudFontImportButton = root->findChild<QObject*>(QStringLiteral("previewHudFontImportButton"));
+    QObject* hudFontResetButton = root->findChild<QObject*>(QStringLiteral("previewHudFontResetButton"));
+    if (!require(skinCombo != nullptr && hudAreaCombo != nullptr && hudFontCombo != nullptr
+                     && hudFontImportButton != nullptr && hudFontResetButton != nullptr,
+                 QStringLiteral("opening the skin tab creates the shared appearance form"),
+                 err)) {
+        return false;
+    }
     skinCombo->setProperty("currentIndex", 1);
     QMetaObject::invokeMethod(skinCombo, "activated", Q_ARG(int, 1));
     hudAreaCombo->setProperty("currentIndex", 1);
@@ -445,17 +503,17 @@ bool verifyRealExportPageControls(QTextStream& err)
     hudFontCombo->setProperty("currentIndex", 1);
     QMetaObject::invokeMethod(hudFontCombo, "activated", Q_ARG(int, 1));
     ok &= require(
-        session->property("skinIndex").toInt() == 1
-            && session->property("hudFontAreaIndex").toInt() == 1
-            && session->property("hudFontPath").toString() == QStringLiteral("/fonts/example.ttf"),
+        previewSettings->property("skinIndex").toInt() == 1
+            && previewSettings->property("hudFontAreaIndex").toInt() == 1
+            && previewSettings->property("hudFontPath").toString() == QStringLiteral("/fonts/example.ttf"),
         QStringLiteral("the export skin tab writes the shared preview skin and HUD font state"), err);
     QMetaObject::invokeMethod(hudFontImportButton, "clicked");
     ok &= require(
-        session->property("hudFontImportRequests").toInt() == 1,
-        QStringLiteral("the export HUD import button uses the v2 export session action"), err);
+        previewSettings->property("hudFontImportRequests").toInt() == 1,
+        QStringLiteral("the export HUD import button uses the shared preview settings action"), err);
     QMetaObject::invokeMethod(hudFontResetButton, "clicked");
     ok &= require(
-        session->property("hudFontPath").toString().isEmpty(),
+        previewSettings->property("hudFontPath").toString().isEmpty(),
         QStringLiteral("the export HUD reset action restores the default font"), err);
 
     session->setProperty("introEnabled", false);

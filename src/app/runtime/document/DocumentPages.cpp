@@ -183,8 +183,6 @@ void miacode::runtime::DocumentSessionHost::performSwitchToExportField()
     state_.currentFieldDirty_ = false;
     updateDirtyState();
     session_.updateWindowTitle();
-    // The expensive part — building the embedded video panel — happens inside
-    // onPageEntered.
     if (ui_.qmlExportSession_ != nullptr) {
         ui_.qmlExportSession_->enter(previousActiveDifficultyId);
     }

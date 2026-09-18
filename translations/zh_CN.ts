@@ -2695,6 +2695,10 @@ Line %2 · double-click to rename</source>
         <source>The chart is empty; there is nothing to package.</source>
         <translation>谱面为空，没有可打包的内容。</translation>
     </message>
+    <message id="export_page.center">
+        <source>Export Center</source>
+        <translation>导出中心</translation>
+    </message>
     <message id="export_page.export_cover">
         <source>Export Cover</source>
         <translation>封面导出</translation>
@@ -5172,6 +5176,10 @@ Error: %1</source>
     <message id="video_export.export_video">
         <source>Export Video</source>
         <translation>导出视频</translation>
+    </message>
+    <message id="video_export.filename">
+        <source>File Name</source>
+        <translation>文件名</translation>
     </message>
     <message id="video_export.gameplay">
         <source>Gameplay</source>

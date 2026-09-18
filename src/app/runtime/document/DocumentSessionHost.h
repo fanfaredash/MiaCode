@@ -190,8 +190,8 @@ private:
     // Applies the mode the workspace now reports to the dirty state, window
     // title and field-commit anchor after a designer transaction.
     void refreshAfterDesignerTransaction();
-    // The heavy body of switchToExportField(), run one event-loop tick later so
-    // the busy spinner can paint before the build blocks the UI thread.
+    // Completes the export-page switch inline. Chart seed and audition are
+    // queued inside ExportSession::enter so the QML page can show first.
     void performSwitchToExportField();
     void setChartBottomTabsMode(bool enabled);
 

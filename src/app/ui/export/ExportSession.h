@@ -51,40 +51,14 @@ class ExportSession final : public QObject
     Q_PROPERTY(int sizePresetIndex READ sizePresetIndex WRITE setSizePresetIndex NOTIFY outputChanged)
     Q_PROPERTY(QVariantList sizePresetOptions READ sizePresetOptions NOTIFY localeLabelsChanged)
 
-    // Video
-    Q_PROPERTY(double backgroundBrightnessOuter READ backgroundBrightnessOuter WRITE setBackgroundBrightnessOuter NOTIFY videoChanged)
-    Q_PROPERTY(double backgroundBrightnessInner READ backgroundBrightnessInner WRITE setBackgroundBrightnessInner NOTIFY videoChanged)
-    Q_PROPERTY(double layoutSquareScale READ layoutSquareScale WRITE setLayoutSquareScale NOTIFY videoChanged)
-    Q_PROPERTY(int backgroundScaleModeIndex READ backgroundScaleModeIndex WRITE setBackgroundScaleModeIndex NOTIFY videoChanged)
-    Q_PROPERTY(QVariantList backgroundScaleModeOptions READ backgroundScaleModeOptions NOTIFY localeLabelsChanged)
-    Q_PROPERTY(bool smoothBrightness READ smoothBrightness WRITE setSmoothBrightness NOTIFY videoChanged)
-    Q_PROPERTY(bool showTimestamp READ showTimestamp WRITE setShowTimestamp NOTIFY videoChanged)
     Q_PROPERTY(bool showObjectStatsHud READ showObjectStatsHud WRITE setShowObjectStatsHud NOTIFY videoChanged)
     Q_PROPERTY(bool showChartInfoHud READ showChartInfoHud WRITE setShowChartInfoHud NOTIFY videoChanged)
     Q_PROPERTY(bool fixHudTextLayout READ fixHudTextLayout WRITE setFixHudTextLayout NOTIFY videoChanged)
     Q_PROPERTY(bool clockCountEnabled READ clockCountEnabled WRITE setClockCountEnabled NOTIFY videoChanged)
 
-    // Gameplay (task-local)
-    Q_PROPERTY(double tapFlowSpeed READ tapFlowSpeed WRITE setTapFlowSpeed NOTIFY gameplayChanged)
-    Q_PROPERTY(double touchFlowSpeed READ touchFlowSpeed WRITE setTouchFlowSpeed NOTIFY gameplayChanged)
-
     // Shared portable font library for the intro difficulty card. File selection
     // remains QML-native through UiRequestService; no Widgets surface is used.
     Q_PROPERTY(QVariantList fontLibraryOptions READ fontLibraryOptions NOTIFY fontLibraryChanged)
-
-    // The export page deliberately mirrors the global preview skin/HUD controls
-    // from PreviewSettingsDialog. Both v2 entry points write the same owner-live
-    // preview state; neither routes through a legacy dialog.
-    Q_PROPERTY(QVariantList skinOptions READ skinOptions NOTIFY skinChanged)
-    Q_PROPERTY(int skinIndex READ skinIndex WRITE setSkinIndex NOTIFY skinChanged)
-    Q_PROPERTY(QVariantList skinJudgeEffectOptions READ skinJudgeEffectOptions NOTIFY localeLabelsChanged)
-    Q_PROPERTY(int skinJudgeEffectIndex READ skinJudgeEffectIndex WRITE setSkinJudgeEffectIndex NOTIFY skinChanged)
-    Q_PROPERTY(QVariantList outlineOptions READ outlineOptions NOTIFY localeLabelsChanged)
-    Q_PROPERTY(int outlineIndex READ outlineIndex WRITE setOutlineIndex NOTIFY skinChanged)
-    Q_PROPERTY(QVariantList hudFontAreaOptions READ hudFontAreaOptions NOTIFY localeLabelsChanged)
-    Q_PROPERTY(int hudFontAreaIndex READ hudFontAreaIndex WRITE setHudFontAreaIndex NOTIFY hudFontChanged)
-    Q_PROPERTY(QString hudFontPath READ hudFontPath WRITE setHudFontPath NOTIFY hudFontChanged)
-    Q_PROPERTY(QString hudFontSample READ hudFontSample NOTIFY hudFontChanged)
 
     // Intro
     Q_PROPERTY(bool introEnabled READ introEnabled WRITE setIntroEnabled NOTIFY introChanged)
@@ -148,32 +122,12 @@ public:
     int sizePresetIndex() const;
     QVariantList sizePresetOptions() const;
 
-    double backgroundBrightnessOuter() const { return task_.backgroundBrightnessOuter; }
-    double backgroundBrightnessInner() const { return task_.backgroundBrightnessInner; }
-    double layoutSquareScale() const { return task_.layoutSquareScale; }
-    int backgroundScaleModeIndex() const;
-    QVariantList backgroundScaleModeOptions() const;
-    bool smoothBrightness() const { return task_.smoothBrightness; }
-    bool showTimestamp() const { return task_.showTimestamp; }
     bool showObjectStatsHud() const { return task_.showObjectStatsHud; }
     bool showChartInfoHud() const { return task_.showChartInfoHud; }
     bool fixHudTextLayout() const { return task_.fixHudTextLayout; }
     bool clockCountEnabled() const { return task_.clockCountEnabled; }
 
-    double tapFlowSpeed() const { return task_.tapFlowSpeed; }
-    double touchFlowSpeed() const { return task_.touchFlowSpeed; }
-
     QVariantList fontLibraryOptions() const;
-    QVariantList skinOptions() const;
-    int skinIndex() const;
-    QVariantList skinJudgeEffectOptions() const;
-    int skinJudgeEffectIndex() const;
-    QVariantList outlineOptions() const;
-    int outlineIndex() const;
-    QVariantList hudFontAreaOptions() const;
-    int hudFontAreaIndex() const;
-    QString hudFontPath() const;
-    QString hudFontSample() const;
 
     bool introEnabled() const { return task_.intro.enabled; }
     int introBackgroundModeIndex() const;
@@ -215,10 +169,6 @@ public:
     Q_INVOKABLE void importIntroSound();
     Q_INVOKABLE void importIntroFont();
     Q_INVOKABLE void resetIntroFonts();
-    Q_INVOKABLE void openSkinDirectory();
-    Q_INVOKABLE void openJudgeLineDirectory();
-    Q_INVOKABLE void importHudFont();
-    Q_INVOKABLE void resetHudFont();
     Q_INVOKABLE void browseBatchOutputDirectory();
     Q_INVOKABLE void addChartDirectories();
     Q_INVOKABLE void removeChartDirectory(int index);
@@ -250,23 +200,10 @@ public:
     void setAudioBitrateKbps(int kbps);
     void setPresetIndex(int index);
     void setSizePresetIndex(int index);
-    void setBackgroundBrightnessOuter(double value);
-    void setBackgroundBrightnessInner(double value);
-    void setLayoutSquareScale(double value);
-    void setBackgroundScaleModeIndex(int index);
-    void setSmoothBrightness(bool value);
-    void setShowTimestamp(bool value);
     void setShowObjectStatsHud(bool value);
     void setShowChartInfoHud(bool value);
     void setFixHudTextLayout(bool value);
     void setClockCountEnabled(bool value);
-    void setTapFlowSpeed(double value);
-    void setTouchFlowSpeed(double value);
-    void setSkinIndex(int index);
-    void setSkinJudgeEffectIndex(int index);
-    void setOutlineIndex(int index);
-    void setHudFontAreaIndex(int index);
-    void setHudFontPath(const QString& path);
     void setIntroEnabled(bool value);
     void setIntroBackgroundModeIndex(int index);
     void setIntroCustomBackgroundPath(const QString& path);
@@ -294,10 +231,7 @@ signals:
     void outputChanged();
     void localeLabelsChanged();
     void videoChanged();
-    void gameplayChanged();
     void fontLibraryChanged();
-    void skinChanged();
-    void hudFontChanged();
     void introChanged();
     void introSoundOptionsChanged();
     void rangeChanged();
@@ -323,7 +257,6 @@ private:
     void applyOwnerLiveFields(VideoExportTask* task) const;
     void applyIntroSoundImport(const QString& selectedPath);
     void applyFontImport(const QString& selectedPath);
-    void applyHudFontImport(const QString& selectedPath);
     void addChartDirectory(const QString& path);
 
     miacode::UiRequestService* uiRequests_ = nullptr;
@@ -351,6 +284,9 @@ private:
     bool pushingSharedSettings_ = false;
     bool exportRunning_ = false;
     bool hasSeededTask_ = false;
+    // enter() queues seed one tick later; leave/selectDifficulty bump this
+    // so a stale tick cannot land after the page is gone.
+    quint64 pagePrepareGeneration_ = 0;
     bool batchExportRunning_ = false;
     bool batchCancellationRequested_ = false;
     mutable QVariantList fontLibraryOptionsCache_;
@@ -370,7 +306,6 @@ private:
     double pendingRangeStartSeconds_ = 0.0;
     double pendingRangeEndSeconds_ = 0.0;
     int resolutionIndex_ = 1;
-    int hudFontAreaId_ = 0;
     QStringList chartDirectories_;
     QList<int> batchSelectedDifficultyIds_;
     QString batchOutputDirectory_;

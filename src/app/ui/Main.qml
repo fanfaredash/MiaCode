@@ -17,7 +17,7 @@ ApplicationWindow {
     readonly property var chartDropBridge: applicationContext.chartDropBridge
 
     width: 1280
-    height: 720
+    height: 800
     minimumWidth: Math.ceil(mainView.minimumWidth)
     minimumHeight: Math.max(480, Math.ceil(mainView.minimumHeight))
     // C++ explicitly shows this only after MainWindow has registered the root

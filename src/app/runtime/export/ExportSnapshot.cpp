@@ -401,28 +401,30 @@ IntroBannerSpec miacode::runtime::VideoExportHost::buildIntroBannerSpecForDiffic
         /*fullRangeExport=*/true);
 }
 
-QVector<TimelineNoteMarker> miacode::runtime::VideoExportHost::buildParsedMarkersForDifficulty(int difficultyId) const
+QVector<TimelineNoteMarker> miacode::runtime::VideoExportHost::parseAndPublishTimelineForDifficulty(int difficultyId)
 {
-    // Parse + &first-shift markers for an arbitrary difficulty of the LIVE
-    // document — the export-page launch path for a non-active difficulty.
-    // Mirrors the worker-side rebuild (buildVideoExportTaskFromSnapshot) so
-    // the seed/dialog sees the same markers the worker will re-derive.
-    const SimaiDifficultyData* difficulty = session_.applicationServices_.workspace().document().difficulty(difficultyId);
+    const SimaiDifficultyData* difficulty =
+        session_.applicationServices_.workspace().document().difficulty(difficultyId);
     if (difficulty == nullptr || difficulty->chart.trimmed().isEmpty()) {
         return {};
     }
     const miacode::simai::SimaiTimingMetadata timingMetadata =
         miacode::simai::buildTimingMetadata(session_.applicationServices_.workspace().document());
-    const SimaiNativeParseResult parsedTimeline = SimaiNativeParser::parseForTimeline(
-        difficulty->chart,
-        timingMetadata);
-    if (parsedTimeline.noteMarkers.isEmpty()) {
-        return {};
-    }
+    const SimaiNativeParseResult parseResult =
+        SimaiNativeParser::parseForTimeline(difficulty->chart, timingMetadata);
     bool firstOk = false;
-    const double firstSeconds = parsedDocumentFirstSeconds(session_.applicationServices_.workspace().document().first, &firstOk);
-    return shiftedNoteMarkers(
-        parsedTimeline.noteMarkers, firstOk ? firstSeconds : 0.0, NonFiniteHandling::Propagate);
+    const double firstSeconds =
+        parsedDocumentFirstSeconds(session_.applicationServices_.workspace().document().first, &firstOk);
+    const TimelinePreviewRefreshState previewState =
+        buildTimelinePreviewRefreshState(parseResult, firstOk ? firstSeconds : 0.0);
+    session_.lastTimelineParseDifficultyId_ = difficultyId;
+    session_.lastTimelineParseChartText_ = difficulty->chart;
+    session_.lastTimelineParseTimingMetadata_ = timingMetadata;
+    session_.lastTimelineParseResult_ = parseResult;
+    session_.latestTimelineNoteMarkers_ = previewState.shiftedNoteMarkers;
+    session_.latestTimelineNoteMarkerSignature_ = previewState.noteMarkerSignature;
+    session_.latestTimelinePreviewSnapshotReady_ = true;
+    return previewState.shiftedNoteMarkers;
 }
 
 void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int difficultyId)
@@ -448,34 +450,29 @@ void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int di
 
     const miacode::simai::SimaiTimingMetadata timingMetadata =
         miacode::simai::buildTimingMetadata(session_.applicationServices_.workspace().document());
-    const SimaiNativeParseResult parseResult =
-        SimaiNativeParser::parseForTimeline(difficulty->chart, timingMetadata);
     bool firstOk = false;
     const double firstSeconds = parsedDocumentFirstSeconds(session_.applicationServices_.workspace().document().first, &firstOk);
     const double effectiveFirst = firstOk ? firstSeconds : 0.0;
-    const TimelinePreviewRefreshState previewState =
-        buildTimelinePreviewRefreshState(parseResult, effectiveFirst);
-    // Preview note markers + "snapshot ready" — the same state a slow-refresh
-    // publishes for a real difficulty, so preparePreviewStartState accepts it.
-    session_.latestTimelineNoteMarkers_ = previewState.shiftedNoteMarkers;
-    session_.latestTimelineNoteMarkerSignature_ = previewState.noteMarkerSignature;
-    session_.latestTimelinePreviewRevision_ = session_.timelineRevision_;
-    session_.latestTimelinePreviewSnapshotReady_ = true;
-    session_.scene_->setNoteMarkers(previewState.shiftedNoteMarkers);
-    // The export audition installs these markers itself, outside the editor
-    // timeline refresh path. Keep the cache aligned with the scene owner so
-    // returning to the editor compares its target markers against B, not the
-    // chart that was open before export.
-    session_.lastPreviewNoteMarkerSignature_ = previewState.noteMarkerSignature;
 
-    // Bottom-timeline model feeds previewDurationSeconds() (slider range) even
-    // though the strip itself is hidden on the export page (bottom-tab OFF).
+    TimelinePreviewRefreshState previewState;
+    if (!liveTimelineCoversDifficulty(difficultyId)) {
+        parseAndPublishTimelineForDifficulty(difficultyId);
+    }
+    previewState.shiftedNoteMarkers = session_.latestTimelineNoteMarkers_;
+    previewState.noteMarkerSignature = session_.latestTimelineNoteMarkerSignature_;
     session_.timelineQuickModel_.rebuildFromText(difficulty->chart, effectiveFirst, timingMetadata);
     if (session_.timelineQuickStateBridge_ != nullptr) {
         session_.timelineQuickStateBridge_->setTimelineData(session_.timelineQuickModel_.snapshot());
     }
-    // Decide the playhead for the freshly-installed audition.
-    const double durationSeconds = session_.previewDurationSeconds();
+    session_.latestTimelinePreviewRevision_ = session_.timelineRevision_;
+    session_.latestTimelinePreviewSnapshotReady_ = true;
+    session_.scene_->setNoteMarkers(previewState.shiftedNoteMarkers);
+    session_.lastPreviewNoteMarkerSignature_ = previewState.noteMarkerSignature;
+
+    const double durationSeconds = session_.previewPlaybackEndSeconds();
+    if (session_.timelineQuickStateBridge_ != nullptr) {
+        session_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(durationSeconds);
+    }
     const auto clampToDuration = [durationSeconds](double second) {
         return durationSeconds > 0.0 ? qBound(0.0, second, durationSeconds) : qMax(0.0, second);
     };
@@ -581,14 +578,9 @@ bool miacode::runtime::VideoExportHost::buildVideoExportSnapshot(
     }
 
     session_.refreshTimelineMetadata();
-    // Marker sanity gate: the live timeline only covers the ACTIVE difficulty,
-    // so an explicit non-active target (export-page launch) validates by
-    // parsing that difficulty directly — the worker re-parses the same text.
-    const bool usesActiveTimeline =
-        session_.hasActiveDifficulty() && resolvedDifficultyId == session_.activeDifficultyId_;
-    const bool hasMarkers = usesActiveTimeline
+    const bool hasMarkers = liveTimelineCoversDifficulty(resolvedDifficultyId)
         ? !session_.latestTimelineNoteMarkers_.isEmpty()
-        : !buildParsedMarkersForDifficulty(resolvedDifficultyId).isEmpty();
+        : !parseAndPublishTimelineForDifficulty(resolvedDifficultyId).isEmpty();
     if (!hasMarkers) {
         if (errorMessage != nullptr) {
             *errorMessage = qtTrId("dialog.video_export.error.no_markers");
@@ -1037,6 +1029,7 @@ bool miacode::runtime::VideoExportHost::exportPreviewVideoFromCli(
     for (const TimelineNoteMarker& marker : session_.latestTimelineNoteMarkers_) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
     }
+    ensureExportTrackDuration();
     // Unified content-duration policy = max(chartEnd + tail, music).
     const double unifiedExportEndSecond = miacode::content_duration::totalContentDurationSeconds(
         lastMarkerEndSecond, session_.previewTrackDurationSeconds_);

@@ -291,6 +291,7 @@ Item {
                 analysisSession: root.analysisSession
                 preferences: root.preferences
                 previewSession: root.previewSession
+                previewSettings: root.applicationContext.previewSettings
                 commands: root.commands
                 timelineSession: root.timelineSession
                 preferencesModel: root.preferencesModel

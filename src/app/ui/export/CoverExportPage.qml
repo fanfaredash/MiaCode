@@ -254,28 +254,16 @@ Rectangle {
 
         Flow {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: 4
             Repeater {
                 model: root.session ? root.session.difficulties : []
-                delegate: ChromeRow {
-                    id: badge
+                delegate: AppTab {
                     required property var modelData
-                    implicitHeight: 28
-                    implicitWidth: badgeLabel.implicitWidth + leftPadding + rightPadding
-                    checkable: true
-                    checked: root.session && root.session.selectedDifficultyId === modelData.id
-                    selected: badge.checked
+                    panelTab: true
+                    text: modelData.name
+                    difficultyId: modelData.id
+                    active: root.session && root.session.selectedDifficultyId === modelData.id
                     onClicked: if (root.session) root.session.selectDifficulty(modelData.id)
-                    contentItem: Text {
-                        id: badgeLabel
-                        text: badge.modelData.name
-                        color: badge.checked ? Theme.colors.text.active : Theme.colors.text.secondary
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.secondaryFontSize
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
                 }
             }
         }

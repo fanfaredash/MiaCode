@@ -58,15 +58,10 @@ bool verifyQmlFontContract(QTextStream& err)
 
     for (const QString& contract : {
              QStringLiteral("Q_PROPERTY(QVariantList fontLibraryOptions"),
-             QStringLiteral("Q_PROPERTY(QVariantList skinOptions"),
-             QStringLiteral("Q_PROPERTY(int hudFontAreaIndex"),
-             QStringLiteral("Q_PROPERTY(QString hudFontPath"),
              QStringLiteral("Q_PROPERTY(QString introFontDisplayPath"),
              QStringLiteral("Q_PROPERTY(QString introFontBodyPath"),
              QStringLiteral("Q_INVOKABLE void importIntroFont()"),
              QStringLiteral("Q_INVOKABLE void resetIntroFonts()"),
-             QStringLiteral("Q_INVOKABLE void importHudFont()"),
-             QStringLiteral("Q_INVOKABLE void resetHudFont()"),
          }) {
         ok &= require(header.contains(contract),
                       QStringLiteral("ExportSession exposes %1").arg(contract), err);
@@ -82,27 +77,20 @@ bool verifyQmlFontContract(QTextStream& err)
         implementation.contains(QStringLiteral("fontLibraryEntries("))
             && implementation.contains(QStringLiteral("importFontFileIntoLibrary(selectedPath)"))
             && implementation.contains(QStringLiteral("refreshIntroState()"))
-            && implementation.contains(QStringLiteral("setPreviewHudCustomFontPath(area, path)"))
-            && implementation.contains(QStringLiteral("preview()->refreshSurfaces()"))
             && playbackSurfaceContract.contains(
                 QStringLiteral("void miacode::runtime::PlaybackCoordinator::refreshSurfaces()"))
             && playbackSurfaceContract.contains(QStringLiteral("scene_->update()")),
         QStringLiteral("the export session uses the shared library and redraws the live preview"),
         err);
     ok &= require(
-        implementation.contains(QStringLiteral("previewHudFontAreaChoices()"))
-            && previewSettingsImplementation.contains(
-                QStringLiteral("previewHudFontAreaChoices()"))
-            && implementation.contains(QStringLiteral("QStringLiteral(\"areaId\")"))
+        previewSettingsImplementation.contains(QStringLiteral("previewHudFontAreaChoices()"))
             && previewSettingsImplementation.contains(QStringLiteral("QStringLiteral(\"areaId\")"))
             && previewHudStateHeader.contains(QStringLiteral("CenterDisplay"))
             && previewHudStateImplementation.contains(
                 QStringLiteral("hud_font_area.center_display"))
-            && !implementation.contains(
-                QStringLiteral("static_cast<miacode::preview::scene::PreviewHudFontArea>(hudFontAreaIndex_)"))
             && !previewSettingsImplementation.contains(
                 QStringLiteral("static_cast<miacode::preview::scene::PreviewHudFontArea>(hudFontAreaIndex_)")),
-        QStringLiteral("export and preview settings share areaId mapping, including CenterDisplay, without index-to-enum casts"),
+        QStringLiteral("preview settings share areaId mapping, including CenterDisplay, without index-to-enum casts"),
         err);
     ok &= require(
         !implementation.contains(QStringLiteral("QFileDialog"))
@@ -113,19 +101,20 @@ bool verifyQmlFontContract(QTextStream& err)
         fontLibraryHeader.contains(QStringLiteral("FontImportResult importFontFileIntoLibrary"))
             && fontLibraryImplementation.contains(QStringLiteral("FontImportResult importFontFileIntoLibrary")),
         QStringLiteral("the reusable font library owns validation and portable copying"), err);
+    const QString appearancePages = readSource(
+        QStringLiteral("src/app/ui/preview/PreviewAppearancePages.qml"));
+    ok &= require(!appearancePages.isEmpty(),
+                  QStringLiteral("the shared appearance pages source is readable"), err);
     for (const QString& control : {
              QStringLiteral("introDisplayFontCombo"),
              QStringLiteral("introBodyFontCombo"),
              QStringLiteral("introFontImportButton"),
-             QStringLiteral("exportSkinCombo"),
-             QStringLiteral("hudFontAreaCombo"),
-             QStringLiteral("hudFontCombo"),
-             QStringLiteral("hudFontImportButton"),
-             QStringLiteral("hudFontResetButton"),
          }) {
         ok &= require(page.contains(control),
                       QStringLiteral("the v2 export page owns %1").arg(control), err);
     }
+    ok &= require(page.contains(QStringLiteral("PreviewAppearancePages")),
+                  QStringLiteral("the export page hosts the shared video/gameplay/skin form"), err);
     ok &= require(page.contains(QStringLiteral("id: \"skin\"")),
                   QStringLiteral("global skin and HUD settings have a v2 export-page entry"), err);
 
@@ -156,9 +145,11 @@ bool verifyQmlFontContract(QTextStream& err)
              QStringLiteral("previewHudFontImportButton"),
              QStringLiteral("previewHudFontResetButton"),
          }) {
-        ok &= require(previewSettingsDialog.contains(control),
-                      QStringLiteral("Preview Settings owns %1").arg(control), err);
+        ok &= require(appearancePages.contains(control),
+                      QStringLiteral("the shared appearance form owns %1").arg(control), err);
     }
+    ok &= require(previewSettingsDialog.contains(QStringLiteral("PreviewAppearancePages")),
+                  QStringLiteral("Preview Settings hosts the shared appearance form"), err);
 
     // The export page and Preview Settings both write the one live preview render state,
     // so each has to hear the other's writes. Without that, the dialog keeps showing the

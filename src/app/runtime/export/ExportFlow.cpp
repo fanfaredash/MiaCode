@@ -16,7 +16,6 @@
 #include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "app/ui/export/ExportSession.h"
-#include "app/ui/export/ExportSession.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/video_export/VideoExportController.h"
 #include "tools/video_export/VideoExportPreferences.h"
@@ -351,21 +350,25 @@ void miacode::runtime::VideoExportHost::applySharedExportTaskSettings(const Vide
 VideoExportTask miacode::runtime::VideoExportHost::buildVideoExportSeedTask(int difficultyId)
 {
     const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : session_.activeDifficultyId_;
-    // The live timeline markers / muri report belong to the ACTIVE difficulty.
-    // An export-page launch targeting another difficulty parses that chart
-    // directly instead (the same parse the worker re-runs from the snapshot).
-    const bool usesActiveTimeline =
-        session_.hasActiveDifficulty() && resolvedDifficultyId == session_.activeDifficultyId_;
+    // The live timeline markers / muri report belong to whichever difficulty
+    // lastTimelineParse* describes. An export-page launch targeting another
+    // difficulty parses that chart directly instead (the same parse the worker
+    // re-runs from the snapshot).
 
     session_.refreshTimelineMetadata();
+    ensureExportTrackDuration();
 
     QVector<TimelineNoteMarker> seedMarkers;
     MuriAnalysisReport seedMuriReport;
-    if (usesActiveTimeline) {
+    // Page switch clears activeDifficultyId_ before seeding, so "is this the
+    // live editor difficulty?" cannot be the only reuse gate. Match the last
+    // timeline parse instead: workspace → export of the chart already on
+    // screen must not parse and run muri again.
+    if (liveTimelineCoversDifficulty(resolvedDifficultyId)) {
         seedMarkers = session_.latestTimelineNoteMarkers_;
         seedMuriReport = session_.muriAnalysisReport_;
     } else {
-        seedMarkers = buildParsedMarkersForDifficulty(resolvedDifficultyId);
+        seedMarkers = parseAndPublishTimelineForDifficulty(resolvedDifficultyId);
         seedMuriReport = MuriAnalyzer::analyze(
             seedMarkers,
             session_.muriRenderOptions_,
@@ -528,8 +531,8 @@ void miacode::runtime::VideoExportHost::endExportPreviewSession()
 void miacode::runtime::VideoExportHost::onExportPreviewVideo(int difficultyId)
 {
     MC_OP("miacode::runtime::VideoExportHost::onExportPreviewVideo");
-    // Select the tab BEFORE switching: switchToExportField defers the page
-    // build one event-loop tick, so a tab set afterwards would race it.
+    // Tab is chosen before enter() queues the first seed, which reads
+    // activeTab_ when the audition starts.
     if (session_.qmlExportSession_ != nullptr) {
         session_.qmlExportSession_->setActiveTab(QStringLiteral("export"));
     }
@@ -537,17 +540,14 @@ void miacode::runtime::VideoExportHost::onExportPreviewVideo(int difficultyId)
         _mc_op_.fail(QStringLiteral("export field unavailable"));
         return;
     }
-    // The page seeds itself from the difficulty that was active on entry, which
-    // is what the caller resolved in every reachable case. Honour an explicit
-    // request anyway, queued behind the deferred page build.
+    // enter() queues seed one tick later and reads selectedDifficultyId_ then.
+    // Set the requested id now so that tick is the only parse.
     if (!SimaiDocument::isDifficultyId(difficultyId)) {
         return;
     }
-    QTimer::singleShot(0, &session_, [this, difficultyId]() {
-        if (session_.qmlExportSession_ != nullptr) {
-            session_.qmlExportSession_->selectDifficulty(difficultyId);
-        }
-    });
+    if (session_.qmlExportSession_ != nullptr) {
+        session_.qmlExportSession_->selectDifficulty(difficultyId);
+    }
 }
 
 void miacode::runtime::VideoExportHost::onBatchExportPreviewVideo(int difficultyId)
@@ -556,8 +556,8 @@ void miacode::runtime::VideoExportHost::onBatchExportPreviewVideo(int difficulty
     Q_UNUSED(difficultyId);
     // The Tools menu follows the same embedded page route as clicking the
     // Batch Export sub-nav. It deliberately never constructs a modal dialog.
-    // Select the tab BEFORE switching: switchToExportField defers the page
-    // build one event-loop tick, so a tab set afterwards would race it.
+    // Tab is chosen before enter() queues the first seed, which reads
+    // activeTab_ when the audition starts.
     if (session_.qmlExportSession_ != nullptr) {
         session_.qmlExportSession_->setActiveTab(QStringLiteral("batch"));
     }
@@ -718,6 +718,32 @@ bool miacode::runtime::VideoExportHost::runBatchExport(
         callbacks.progressChanged(100, QString());
     }
     return true;
+}
+
+void miacode::runtime::VideoExportHost::ensureExportTrackDuration()
+{
+    if (session_.previewTrackDurationSeconds_ > 0.0) {
+        return;
+    }
+    session_.previewTrackDurationSeconds_ =
+        probeAudioDurationSeconds(session_.resolveDefaultTrackPath());
+}
+
+bool miacode::runtime::VideoExportHost::liveTimelineCoversDifficulty(int difficultyId) const
+{
+    if (difficultyId <= 0 || !session_.latestTimelinePreviewSnapshotReady_
+        || session_.latestTimelineNoteMarkers_.isEmpty()
+        || session_.lastTimelineParseDifficultyId_ != difficultyId) {
+        return false;
+    }
+    const SimaiDifficultyData* difficulty =
+        session_.applicationServices_.workspace().document().difficulty(difficultyId);
+    if (difficulty == nullptr || session_.lastTimelineParseChartText_ != difficulty->chart) {
+        return false;
+    }
+    const miacode::simai::SimaiTimingMetadata timingMetadata =
+        miacode::simai::buildTimingMetadata(session_.applicationServices_.workspace().document());
+    return session_.lastTimelineParseTimingMetadata_ == timingMetadata;
 }
 
 VideoExportTask miacode::runtime::VideoExportHost::buildVideoExportSeedTaskPublic(int difficultyId)

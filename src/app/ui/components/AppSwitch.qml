@@ -14,6 +14,11 @@ Switch {
     font.pixelSize: root.sectionTitle ? Theme.sectionTitleFontSize : Theme.uiFontSize
     font.bold: root.sectionTitle
     hoverEnabled: true
+    leftPadding: 0
+    rightPadding: 0
+    topPadding: 0
+    bottomPadding: 0
+    implicitHeight: Theme.controlMinHeight
 
     indicator: Rectangle {
         implicitWidth: 36

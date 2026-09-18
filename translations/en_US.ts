@@ -2695,6 +2695,10 @@ Line %2 · double-click to rename</translation>
         <source>The chart is empty; there is nothing to package.</source>
         <translation>The chart is empty; there is nothing to package.</translation>
     </message>
+    <message id="export_page.center">
+        <source>Export Center</source>
+        <translation>Export Center</translation>
+    </message>
     <message id="export_page.export_cover">
         <source>Export Cover</source>
         <translation>Export Cover</translation>
@@ -5172,6 +5176,10 @@ Error: %1</translation>
     <message id="video_export.export_video">
         <source>Export Video</source>
         <translation>Export Video</translation>
+    </message>
+    <message id="video_export.filename">
+        <source>File Name</source>
+        <translation>File Name</translation>
     </message>
     <message id="video_export.gameplay">
         <source>Gameplay</source>

@@ -16,6 +16,7 @@ Item {
     required property var analysisSession
     required property var preferences
     required property var previewSession
+    required property var previewSettings
     required property var commands
     required property var timelineSession
     required property var preferencesModel
@@ -266,6 +267,7 @@ Item {
                         visible: root.exportVideoActive
                         pages: root.pages
                         previewSession: root.previewSession
+                        previewSettings: root.previewSettings
                     }
 
                     LatencyPage {

@@ -2695,6 +2695,10 @@ Line %2 · double-click to rename</source>
         <source>The chart is empty; there is nothing to package.</source>
         <translation>譜面が空で、パッケージ化する内容がありません。</translation>
     </message>
+    <message id="export_page.center">
+        <source>Export Center</source>
+        <translation>出力センター</translation>
+    </message>
     <message id="export_page.export_cover">
         <source>Export Cover</source>
         <translation>カバー出力</translation>
@@ -5172,6 +5176,10 @@ Error: %1</source>
     <message id="video_export.export_video">
         <source>Export Video</source>
         <translation>動画を出力</translation>
+    </message>
+    <message id="video_export.filename">
+        <source>File Name</source>
+        <translation>ファイル名</translation>
     </message>
     <message id="video_export.gameplay">
         <source>Gameplay</source>

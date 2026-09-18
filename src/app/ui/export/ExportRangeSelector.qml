@@ -25,7 +25,7 @@ Item {
                                                           Number(exportSession.exportEndSeconds) || 0))
     readonly property real playheadSeconds: Math.max(0, Math.min(totalSeconds,
                                                                   Number(previewSession.positionSeconds) || 0))
-    readonly property real timestampBandHeight: 20
+    readonly property real timestampBandHeight: 0
     // What the overlay reads out. Hovering asks "what is under my pointer";
     // dragging asks "where is the thing I am moving", and those are not the
     // same second — grabbing the middle of the range and pushing it left put
@@ -34,7 +34,7 @@ Item {
     readonly property real displaySecond: draggingTarget.length > 0 ? dragPreviewSecond
                                                                     : hoverSecond
 
-    implicitHeight: timestampBandHeight + lane.height + 22
+    implicitHeight: timestampBandHeight + lane.height + Theme.captionFontSize + 6
     Layout.fillWidth: true
 
     function formatSecond(second) {
@@ -97,7 +97,7 @@ Item {
         objectName: "exportRangeTimestamp"
         x: Math.max(0, Math.min(root.width - width,
                                 lane.xForSecond(root.displaySecond) - width * 0.5))
-        y: 0
+        y: -height
         visible: mouseArea.containsMouse || root.draggingTarget.length > 0
         text: root.formatSecond(root.displaySecond)
         color: Theme.colors.text.primary
@@ -121,13 +121,13 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         y: root.timestampBandHeight
-        height: 24
+        height: 16
 
         readonly property real sideInset: 10
-        readonly property real trackY: 9
+        readonly property real trackY: 5
         readonly property real trackHeight: 6
-        readonly property real handleWidth: 12
-        readonly property real handleHeight: 22
+        readonly property real handleWidth: 14
+        readonly property real handleHeight: 14
         readonly property real handleHitRadius: handleWidth * 0.5 + 3
         readonly property real minimumVisualSelectionWidth: handleWidth * 3
         readonly property real actualStartX: xForSecond(root.startSeconds)

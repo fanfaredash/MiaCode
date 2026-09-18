@@ -272,10 +272,11 @@ void CoverExportSession::rebuildDifficultyList()
 void CoverExportSession::selectDifficulty(int difficultyId)
 {
     const int next = containsDifficulty(difficultyId) ? difficultyId : 0;
-    if (selectedDifficultyId_ != next) {
-        selectedDifficultyId_ = next;
-        emit selectedDifficultyIdChanged();
+    if (selectedDifficultyId_ == next) {
+        return;
     }
+    selectedDifficultyId_ = next;
+    emit selectedDifficultyIdChanged();
     if (pageSessionActive_ && next > 0) {
         seedFromDifficulty(next);
     }

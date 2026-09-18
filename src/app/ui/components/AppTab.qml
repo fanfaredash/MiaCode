@@ -24,16 +24,10 @@ Item {
     signal closeRequested()
 
     implicitHeight: compact ? Theme.compactControlHeight
-                            : panelTab ? 28 : Theme.workspaceHeaderHeight
+                            : panelTab ? Theme.controlMinHeight : Theme.workspaceHeaderHeight
     implicitWidth: panelTab
         ? contentRow.implicitWidth + contentRow.anchors.leftMargin + contentRow.anchors.rightMargin
         : preferredTabWidth
-
-    FontMetrics {
-        id: tabMetrics
-        font.family: Theme.uiFont
-        font.pixelSize: root.panelTab ? Theme.secondaryFontSize : Theme.uiFontSize
-    }
 
     AbstractButton {
         id: tabButton
@@ -70,7 +64,7 @@ Item {
                     Layout.preferredWidth: implicitWidth
                     Layout.preferredHeight: implicitHeight
                     Layout.alignment: Qt.AlignVCenter
-                    visible: !root.panelTab && root.difficultyId > 0
+                    visible: root.difficultyId > 0
                     difficultyId: root.difficultyId
                 }
 
@@ -166,7 +160,7 @@ Item {
 
         background: HoverChrome {
             stateColors: root.panelTab ? Theme.colors.popupState : Theme.colors.state
-            contentHeight: Math.ceil(tabMetrics.height)
+            contentHeight: label.implicitHeight
             selected: root.active
             hovered: tabButton.hovered && !closeButton.hovered
             pressed: tabButton.down
