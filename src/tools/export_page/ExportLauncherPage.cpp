@@ -14,10 +14,14 @@
 #include <QElapsedTimer>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QImage>
 #include <QLabel>
+#include <QPixmap>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSignalBlocker>
 #include <QStackedWidget>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -63,6 +67,44 @@ void appendEmbeddedPanelDiag(
 
 }  // namespace
 
+class CoverPreviewLabel final : public QLabel
+{
+public:
+    using QLabel::QLabel;
+
+    void setImage(const QImage& image, const QString& fallback)
+    {
+        image_ = image;
+        fallback_ = fallback;
+        updatePixmap();
+    }
+
+protected:
+    void resizeEvent(QResizeEvent* event) override
+    {
+        QLabel::resizeEvent(event);
+        updatePixmap();
+    }
+
+private:
+    void updatePixmap()
+    {
+        if (image_.isNull()) {
+            clear();
+            setText(fallback_);
+            return;
+        }
+        const qreal dpr = devicePixelRatioF();
+        QPixmap pixmap = QPixmap::fromImage(image_).scaled(
+            size() * dpr, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        pixmap.setDevicePixelRatio(dpr);
+        setPixmap(pixmap);
+    }
+
+    QImage image_;
+    QString fallback_;
+};
+
 ExportLauncherPage::ExportLauncherPage(MainWindow* owner, QWidget* parent)
     : QWidget(parent)
     , owner_(owner)
@@ -90,6 +132,13 @@ void ExportLauncherPage::applyThemeStyles()
     // revealing a stale ancestor. The embedded video panel is re-themed in place
     // by MainWindow::applyUiTheme() forwarding to its applyThemeStyles().
     setStyleSheet(UiTheme::exportLauncherPageStyleSheet());
+    if (coverPreviewLabel_ != nullptr) {
+        const auto& colors = UiTheme::colors();
+        coverPreviewLabel_->setStyleSheet(QStringLiteral(
+            "QLabel { background: %1; color: %2; border: 1px solid %3; border-radius: 8px; }")
+            .arg(colors.canvasBg.name(QColor::HexRgb), colors.textSecondary.name(QColor::HexRgb),
+                 colors.borderSoft.name(QColor::HexRgb)));
+    }
 }
 
 void ExportLauncherPage::buildUi()
@@ -178,13 +227,32 @@ void ExportLauncherPage::buildUi()
     videoPanelHostLayout_->addStretch(0);
     subPageStack_->addWidget(videoPanelHost_);
 
-    // [1] 封面 — dialog launcher (the composer remains modal).
+    // [1] 封面 — current composition preview with composer and direct export actions.
     coverCard_ = makePane(
         subPageStack_,
         UiText::text(QStringLiteral("export_page.open_composer")));
+    auto* coverLayout = qobject_cast<QVBoxLayout*>(coverCard_.frame->layout());
+    delete coverLayout->takeAt(coverLayout->count() - 1);
+    coverPreviewLabel_ = new CoverPreviewLabel(coverCard_.frame);
+    coverPreviewLabel_->setObjectName(QStringLiteral("CoverPagePreview"));
+    coverPreviewLabel_->setAlignment(Qt::AlignCenter);
+    coverPreviewLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+    coverPreviewLabel_->setImage({}, UiText::text(QStringLiteral("export_page.cover_preview_unavailable")));
+    coverLayout->insertWidget(1, coverPreviewLabel_, 2);
+    auto* coverButtonRow = qobject_cast<QHBoxLayout*>(coverLayout->itemAt(2)->layout());
+    coverExportButton_ = new QPushButton(UiText::text(QStringLiteral("cover.export_cover")), coverCard_.frame);
+    coverExportButton_->setProperty("role", "paneAction");
+    coverExportButton_->setCursor(Qt::PointingHandCursor);
+    delete coverButtonRow->takeAt(coverButtonRow->count() - 1);
+    coverButtonRow->insertStretch(0, 1);
+    coverButtonRow->addWidget(coverExportButton_);
+    coverLayout->addStretch(1);
     connect(coverCard_.actionButton, &QPushButton::clicked,
             this, &ExportLauncherPage::onExportCoverClicked);
+    connect(coverExportButton_, &QPushButton::clicked,
+            this, &ExportLauncherPage::onExportCurrentCoverClicked);
     subPageStack_->addWidget(coverCard_.frame);
+    applyThemeStyles();
 
     // [2] 批量导出 — embedded settings panel, matching the video page's
     // fixed-frame host. It intentionally owns a separate panel instance: a
@@ -335,6 +403,7 @@ void ExportLauncherPage::refreshFromDocument()
     rebuildDifficultyBadges();
     updatePaneStates();
     syncEmbeddedVideoPanel();
+    refreshCoverPreview();
 }
 
 void ExportLauncherPage::rebuildDifficultyBadges()
@@ -377,6 +446,7 @@ void ExportLauncherPage::setSelectedDifficulty(int difficultyId)
     }
     updatePaneStates();
     syncEmbeddedVideoPanel();
+    refreshCoverPreview();
 }
 
 void ExportLauncherPage::setCardEnabled(LauncherCard& card, bool enabled, const QString& disabledReason)
@@ -394,7 +464,12 @@ void ExportLauncherPage::updatePaneStates()
 {
     const bool hasChartBody = documentHasChartBody();
     const QString noChartReason = UiText::text(QStringLiteral("export_page.no_difficulty_has_chart_content"));
-    setCardEnabled(coverCard_, hasChartBody, noChartReason);
+    const bool coverAvailable = difficultyHasChartBody(selectedDifficultyId_);
+    setCardEnabled(coverCard_, coverAvailable,
+                   UiText::text(QStringLiteral("export_page.the_selected_difficulty_has_no")));
+    if (coverExportButton_ != nullptr) {
+        coverExportButton_->setEnabled(coverAvailable);
+    }
     if (batchUnavailableLabel_ != nullptr && !hasChartBody) {
         batchUnavailableLabel_->setText(noChartReason);
     }
@@ -418,6 +493,35 @@ void ExportLauncherPage::setCurrentSubPage(int subPage)
         subPageStack_->setCurrentIndex(currentSubPage_);
     }
     syncEmbeddedVideoPanel();
+    refreshCoverPreview();
+}
+
+void ExportLauncherPage::refreshCoverPreview()
+{
+    if (coverPreviewQueued_) {
+        return;
+    }
+    coverPreviewQueued_ = true;
+    QTimer::singleShot(0, this, [this] {
+        coverPreviewQueued_ = false;
+        if (coverPreviewLabel_ == nullptr || !pageSessionActive_ || currentSubPage_ != SubPageCover) {
+            return;
+        }
+        if (owner_.isNull() || owner_->exportSection_ == nullptr
+            || !difficultyHasChartBody(selectedDifficultyId_)) {
+            coverPreviewLabel_->setImage({}, UiText::text(QStringLiteral("export_page.cover_preview_unavailable")));
+            return;
+        }
+        QString error;
+        const QSize displaySize = coverPreviewLabel_->size();
+        const QSize renderSize = (displaySize * coverPreviewLabel_->devicePixelRatioF())
+            .expandedTo(QSize(1024, 1024));
+        const QImage image = owner_->exportSection_->renderCoverPagePreview(
+            selectedDifficultyId_, renderSize, &error);
+        coverPreviewLabel_->setImage(
+            image, UiText::text(QStringLiteral("export_page.cover_preview_unavailable")));
+        coverPreviewLabel_->setToolTip(error);
+    });
 }
 
 void ExportLauncherPage::openBatchExportSubPage()
@@ -440,6 +544,8 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
         return;
     }
     const bool videoSubPageActive = pageSessionActive_ && currentSubPage_ == SubPageVideo;
+    const bool videoPreviewActive = pageSessionActive_
+        && (currentSubPage_ == SubPageVideo || currentSubPage_ == SubPageCover);
     const bool batchSubPageActive = pageSessionActive_ && currentSubPage_ == SubPageBatch;
     const bool targetAvailable = difficultyHasChartBody(selectedDifficultyId_);
 
@@ -476,7 +582,7 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
         return;
     }
 
-    if (!videoSubPageActive && !embeddedVideoPanel_.isNull()) {
+    if (!videoPreviewActive && !embeddedVideoPanel_.isNull()) {
         embeddedVideoPanel_.clear();
         owner_->exportSection_->destroyEmbeddedVideoExportPanel();
     }
@@ -499,7 +605,7 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
         return;
     }
 
-    if (videoSubPageActive) {
+    if (videoPreviewActive) {
         if (!embeddedBatchPanel_.isNull()) {
             embeddedBatchPanel_.clear();
             owner_->exportSection_->destroyEmbeddedBatchExportPanel();
@@ -526,9 +632,9 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
             }
             return;
         }
-        // Keep the range for the lifetime of the Export hub. Switching between
-        // its sub-pages destroys/recreates this panel; the range is consumed
-        // only by onPageLeft(), and is applied only to the originating chart.
+        // Keep the range for the lifetime of the Export hub. The video panel
+        // remains alive on the cover page so the right-side audition stays put;
+        // batch/ZIP or page exit still tears it down.
         if (videoUnavailableLabel_ != nullptr) {
             videoUnavailableLabel_->hide();
         }
@@ -587,6 +693,13 @@ void ExportLauncherPage::onExportCoverClicked()
         return;
     }
     owner_->exportSection_->onExportCover(selectedDifficultyId_);
+}
+
+void ExportLauncherPage::onExportCurrentCoverClicked()
+{
+    if (!owner_.isNull() && owner_->exportSection_ != nullptr) {
+        owner_->exportSection_->exportCoverFromPage(selectedDifficultyId_);
+    }
 }
 
 void ExportLauncherPage::onBatchExportClicked()

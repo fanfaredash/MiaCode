@@ -536,8 +536,14 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   tried and reverted: the quick-shell workspace surface can be ~700 logical px total and the
   embedded 6-tab panel needs the full content width; the panel's 560px dialog minimum is also
   dropped in embedded mode.) Four entries: **视频导出 (IN-PAGE — see "Embedded video panel"
-  below)** / 封面导出 (dialog launcher pane) / **批量导出 (IN-PAGE — see "Embedded batch panel"
-  below)** / 打包ZIP (in-page action pane). Only the cover and ZIP entries are action-button panes.
+  below)** / 封面导出 (current-cover preview, composer and direct-export actions) /
+  **批量导出 (IN-PAGE — see "Embedded batch panel" below)** / 打包ZIP (in-page action pane).
+  The cover pane renders the saved composition for its selected difficulty through
+  `CoverStudioPanel::renderCoverPreview`; its direct-export button uses that same task and
+  composition through `CoverStudioPanel::exportCover`. Badge changes and composer close refresh
+  the preview. The video panel's audition session remains active on the cover sub-page so
+  the right-side preview stays visible; switching to batch/ZIP or leaving Export ends it.
+  The ZIP entry remains an action-button pane.
   **Embedded video panel (E-C):** NOT a separate panel class — `VideoExportDialog` itself gained
   an embedded mode (`setEmbeddedPanelMode(true)`: **`setWindowFlags(Qt::Widget)` — MANDATORY:
   QLayout only strips the Qt::Dialog window flag when it has to reparent, so a panel constructed

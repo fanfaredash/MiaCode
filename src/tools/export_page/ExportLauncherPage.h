@@ -19,6 +19,8 @@ class FlowLayout;
 
 namespace miacode::export_page {
 
+class CoverPreviewLabel;
+
 // Central-area "Export" hub page wired into MainWindow::editorStack_ — the
 // phase-2 hybrid form (E-C) of the export-page migration. Fixed-frame layout: a difficulty badge row + an
 // underline-style HORIZONTAL sub-nav row pinned on top (a left nav column
@@ -32,11 +34,10 @@ namespace miacode::export_page {
 //              VideoExportDialog panel (6-tab settings filling the height +
 //              a pinned 开始导出 footer; no in-panel transport — the
 //              preview-area transport is the only seek/progress surface).
-//   封面导出 — dialog launcher pane (composer dialog unchanged).
-//   批量导出 — dialog launcher pane (queue dialog unchanged).
+//   封面导出 — current-cover preview, composer launcher, and direct export.
+//   批量导出 — embedded queue settings panel.
 //   打包 ZIP — in-page action pane (onPackAsZip, existing progress popup).
-// All panes are action-button-only (descriptions/mode chips removed by
-// product decision 2026-06-12).
+// Descriptions/mode chips were removed by product decision 2026-06-12.
 //
 // While this page is current, MainWindow keeps activeDifficultyId_ == 0,
 // so NOTHING here may gate on hasActiveDifficulty() — availability is
@@ -73,6 +74,7 @@ public:
 
     // Tools-menu route: show the same embedded batch panel as the Export hub.
     void openBatchExportSubPage();
+    void refreshCoverPreview();
 
     int selectedDifficultyId() const { return selectedDifficultyId_; }
     int menuActionDifficultyId() const;
@@ -109,6 +111,7 @@ private:
 
     void setCurrentSubPage(int subPage);
     void onExportCoverClicked();
+    void onExportCurrentCoverClicked();
     void onBatchExportClicked();
     void onPackAsZipClicked();
 
@@ -141,6 +144,9 @@ private:
     QPointer<QWidget> embeddedBatchPanel_;
 
     LauncherCard coverCard_;
+    CoverPreviewLabel* coverPreviewLabel_ = nullptr;
+    QPushButton* coverExportButton_ = nullptr;
+    bool coverPreviewQueued_ = false;
     LauncherCard zipCard_;
 };
 

@@ -2,6 +2,8 @@
 
 #include "../../MainWindow.h"
 
+class QImage;
+
 class MainWindow::ExportSection {
 public:
     ExportSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
@@ -17,6 +19,8 @@ public:
     // Export-page card / Tools menu → 导出封面: opens the cover composer
     // directly (no video-export dialog in between).
     void onExportCover(int difficultyId = 0);
+    QImage renderCoverPagePreview(int difficultyId, const QSize& maximumSize, QString* errorMessage);
+    void exportCoverFromPage(int difficultyId);
     // Batch export is inherently multi-difficulty; the explicit id only
     // seeds the dialog's default difficulty token.
     void onBatchExportPreviewVideo(int difficultyId = 0);

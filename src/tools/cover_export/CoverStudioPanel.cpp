@@ -2020,6 +2020,12 @@ miacode::cover_export::CoverExportResult CoverStudioPanel::exportCover(const QSt
         model_, buildInputs(), currentSize(), outputDirectory);
 }
 
+QImage CoverStudioPanel::renderCoverPreview(const QSize& previewSize, QString* errorMessage)
+{
+    return renderCoverComposite(model_, buildInputs(),
+                                currentSize().scaled(previewSize, Qt::KeepAspectRatio), errorMessage);
+}
+
 miacode::cover_export::CoverExportResult CoverStudioPanel::exportBatchCover(
     const QJsonObject& preset, const QString& outputDirectory, const QString& fileStem,
     QStringList* frameAdjustments)

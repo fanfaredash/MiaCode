@@ -60,6 +60,7 @@ public:
     // Render the composed cover at the chosen size and save it under
     // outputDirectory (PNG when transparent, JPG otherwise).
     miacode::cover_export::CoverExportResult exportCover(const QString& outputDirectory);
+    QImage renderCoverPreview(const QSize& previewSize, QString* errorMessage = nullptr);
     miacode::cover_export::CoverExportResult exportBatchCover(
         const QJsonObject& preset, const QString& outputDirectory, const QString& fileStem,
         QStringList* frameAdjustments = nullptr);

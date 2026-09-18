@@ -92,6 +92,22 @@ QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLi
     return sanitized.isEmpty() ? fallback : sanitized;
 }
 
+QSize coverSeedSize()
+{
+    const QJsonObject videoPrefs = miacode::video_export::loadDialogPreferences();
+    const QSize size(videoPrefs.value(QStringLiteral("resolution_width")).toInt(1024),
+                     videoPrefs.value(QStringLiteral("resolution_height")).toInt(1024));
+    return size.isValid() ? size : QSize(1024, 1024);
+}
+
+QString coverOutputDirectory(const VideoExportTask& task)
+{
+    const QFileInfo chartInfo(task.chartPath);
+    return !chartInfo.absoluteDir().path().isEmpty()
+        ? chartInfo.absoluteDir().absolutePath()
+        : QDir::currentPath();
+}
+
 QString appendMp4SuffixIfMissing(QString outputPath)
 {
     outputPath = QDir::cleanPath(QDir::fromNativeSeparators(outputPath.trimmed()));
@@ -1288,23 +1304,52 @@ void MainWindow::ExportSection::onExportCover(int difficultyId)
 
     // Seed size: the video-export dialog's persisted resolution (the cover
     // dialog's own app preferences override it when present).
-    const QJsonObject videoPrefs = miacode::video_export::loadDialogPreferences();
-    QSize seedSize(videoPrefs.value(QStringLiteral("resolution_width")).toInt(1024),
-                   videoPrefs.value(QStringLiteral("resolution_height")).toInt(1024));
-    if (seedSize.width() <= 0 || seedSize.height() <= 0) {
-        seedSize = QSize(1024, 1024);
-    }
+    const QSize seedSize = coverSeedSize();
 
     // The cover lands next to the chart (the same base the video export resolves
     // relative output paths against).
-    const QFileInfo chartInfo(task.chartPath);
-    const QString outputDirectory = !chartInfo.absoluteDir().path().isEmpty()
-        ? chartInfo.absoluteDir().absolutePath()
-        : QDir::currentPath();
+    const QString outputDirectory = coverOutputDirectory(task);
     auto* window = new miacode::cover_export::CoverStudioWindow(
         task, seedSize, outputDirectory, UiDialogs::effectiveParentWidget(&owner_));
     window->setAttribute(Qt::WA_DeleteOnClose, true);
+    if (owner_.exportPage_ != nullptr) {
+        QObject::connect(window, &QObject::destroyed, owner_.exportPage_,
+                         &miacode::export_page::ExportLauncherPage::refreshCoverPreview);
+    }
     window->show();
+}
+
+QImage MainWindow::ExportSection::renderCoverPagePreview(
+    int difficultyId, const QSize& maximumSize, QString* errorMessage)
+{
+    if (!SimaiDocument::isDifficultyId(difficultyId)
+        || owner_.document_.difficulty(difficultyId) == nullptr
+        || owner_.previewCanvas_ == nullptr) {
+        return {};
+    }
+    const VideoExportTask task = buildVideoExportSeedTask(difficultyId);
+    miacode::cover_export::CoverStudioPanel panel(task, coverSeedSize());
+    return panel.renderCoverPreview(maximumSize, errorMessage);
+}
+
+void MainWindow::ExportSection::exportCoverFromPage(int difficultyId)
+{
+    if (!SimaiDocument::isDifficultyId(difficultyId)
+        || owner_.document_.difficulty(difficultyId) == nullptr
+        || owner_.previewCanvas_ == nullptr) {
+        return;
+    }
+    const VideoExportTask task = buildVideoExportSeedTask(difficultyId);
+    miacode::cover_export::CoverStudioPanel panel(task, coverSeedSize());
+    const auto result = panel.exportCover(coverOutputDirectory(task));
+    UiDialogs::showMessageBox(
+        result.success ? QMessageBox::Information : QMessageBox::Warning,
+        UiDialogs::effectiveParentWidget(&owner_),
+        UiText::text(QStringLiteral("cover.export_cover")),
+        result.success
+            ? UiText::text(QStringLiteral("cover.cover_export_completed"))
+                + QStringLiteral("\n\n") + QDir::toNativeSeparators(result.outputPath)
+            : UiText::text(QStringLiteral("cover.cover_export_failed_1")).arg(result.errorMessage));
 }
 
 void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
