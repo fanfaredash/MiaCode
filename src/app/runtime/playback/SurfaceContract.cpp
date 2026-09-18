@@ -414,10 +414,30 @@ QString miacode::runtime::PlaybackCoordinator::resolveCustomOutlineDir() const
     return resolvePreviewCustomOutlineDir();
 }
 
+QStringList miacode::runtime::PlaybackCoordinator::availableCustomOutlineFileNames() const
+{
+    return availablePreviewCustomOutlineFileNames();
+}
+
+QString miacode::runtime::PlaybackCoordinator::customOutlineDisplayName(const QString& fileName) const
+{
+    return previewCustomOutlineDisplayName(fileName);
+}
+
+QString miacode::runtime::PlaybackCoordinator::currentCustomOutlineFileName() const
+{
+    return preview_.currentPreviewCustomOutlineFileName();
+}
+
 void miacode::runtime::PlaybackCoordinator::applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                                                   bool persistState)
 {
     preview_.applyPreviewOutlineVariant(variant, useAutoSelection, persistState);
+}
+
+void miacode::runtime::PlaybackCoordinator::applyCustomOutlineFileName(const QString& fileName, bool persistState)
+{
+    preview_.applyPreviewCustomOutlineFileName(fileName, persistState);
 }
 
 QVariantMap miacode::runtime::PlaybackCoordinator::renderSettings() const

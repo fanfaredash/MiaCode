@@ -40,8 +40,12 @@ public:
     QString resolveSkinDir() const override;
     QString resolveSkinRootDir() const override;
     QString resolveCustomOutlineDir() const override;
+    QStringList availableCustomOutlineFileNames() const override;
+    QString customOutlineDisplayName(const QString& fileName) const override;
+    QString currentCustomOutlineFileName() const override;
     void applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                              bool persistState) override;
+    void applyCustomOutlineFileName(const QString& fileName, bool persistState) override;
     QVariantMap renderSettings() const override;
     void setRenderSetting(const QString& key, const QVariant& value) override;
     void refreshSurfaces() override;

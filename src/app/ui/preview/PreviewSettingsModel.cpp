@@ -9,7 +9,6 @@
 
 #include <QDesktopServices>
 #include <QDir>
-#include <QFileInfo>
 #include <QUrl>
 #include <QCoreApplication>
 
@@ -28,6 +27,38 @@ QVariantMap option(const QVariant& value, const char* labelKey)
         {QStringLiteral("value"), value},
         {QStringLiteral("label"), text(labelKey)},
     };
+}
+
+constexpr int kBuiltinOutlineCount = 4;
+
+int indexForOutlineVariant(PreviewOutlineVariant variant)
+{
+    switch (variant) {
+    case PreviewOutlineVariant::Point:
+        return 0;
+    case PreviewOutlineVariant::JudgeArea:
+        return 2;
+    case PreviewOutlineVariant::JudgeAreaLabeled:
+        return 3;
+    case PreviewOutlineVariant::Line:
+    default:
+        return 1;
+    }
+}
+
+PreviewOutlineVariant outlineVariantForIndex(int index)
+{
+    switch (index) {
+    case 0:
+        return PreviewOutlineVariant::Point;
+    case 2:
+        return PreviewOutlineVariant::JudgeArea;
+    case 3:
+        return PreviewOutlineVariant::JudgeAreaLabeled;
+    case 1:
+    default:
+        return PreviewOutlineVariant::Line;
+    }
 }
 
 }  // namespace
@@ -226,12 +257,34 @@ int PreviewSettingsModel::skinJudgeEffectIndex() const
 
 QVariantList PreviewSettingsModel::outlineOptions() const
 {
-    return QVariantList{
-        text("dialog.render_settings.gameplay.judge_line.point"),
-        text("dialog.render_settings.gameplay.judge_line.line"),
-        text("dialog.render_settings.gameplay.judge_line.area"),
-        text("dialog.render_settings.gameplay.judge_line.area_labeled"),
+    QVariantList list{
+        QVariantMap{
+            {QStringLiteral("id"), QStringLiteral("point")},
+            {QStringLiteral("label"), text("dialog.render_settings.gameplay.judge_line.point")},
+        },
+        QVariantMap{
+            {QStringLiteral("id"), QStringLiteral("line")},
+            {QStringLiteral("label"), text("dialog.render_settings.gameplay.judge_line.line")},
+        },
+        QVariantMap{
+            {QStringLiteral("id"), QStringLiteral("area")},
+            {QStringLiteral("label"), text("dialog.render_settings.gameplay.judge_line.area")},
+        },
+        QVariantMap{
+            {QStringLiteral("id"), QStringLiteral("area_labeled")},
+            {QStringLiteral("label"), text("dialog.render_settings.gameplay.judge_line.area_labeled")},
+        },
     };
+    if (surface() == nullptr) {
+        return list;
+    }
+    for (const QString& name : surface()->availableCustomOutlineFileNames()) {
+        list.append(QVariantMap{
+            {QStringLiteral("id"), name},
+            {QStringLiteral("label"), surface()->customOutlineDisplayName(name)},
+        });
+    }
+    return list;
 }
 
 int PreviewSettingsModel::outlineIndex() const
@@ -239,17 +292,16 @@ int PreviewSettingsModel::outlineIndex() const
     if (surface() == nullptr) {
         return 1;
     }
-    switch (appearance_->outlineVariant()) {
-    case PreviewOutlineVariant::Point:
-        return 0;
-    case PreviewOutlineVariant::JudgeArea:
-        return 2;
-    case PreviewOutlineVariant::JudgeAreaLabeled:
-        return 3;
-    case PreviewOutlineVariant::Line:
-    default:
-        return 1;
+    const QString custom = surface()->currentCustomOutlineFileName();
+    if (!custom.isEmpty()) {
+        const QStringList names = surface()->availableCustomOutlineFileNames();
+        for (int i = 0; i < names.size(); ++i) {
+            if (names.at(i).compare(custom, Qt::CaseInsensitive) == 0) {
+                return kBuiltinOutlineCount + i;
+            }
+        }
     }
+    return indexForOutlineVariant(appearance_->outlineVariant());
 }
 
 QVariantList PreviewSettingsModel::fontLibraryOptions() const
@@ -335,22 +387,18 @@ void PreviewSettingsModel::setOutlineIndex(int index)
     if (surface() == nullptr) {
         return;
     }
-    PreviewOutlineVariant variant = PreviewOutlineVariant::Line;
-    switch (index) {
-    case 0:
-        variant = PreviewOutlineVariant::Point;
-        break;
-    case 2:
-        variant = PreviewOutlineVariant::JudgeArea;
-        break;
-    case 3:
-        variant = PreviewOutlineVariant::JudgeAreaLabeled;
-        break;
-    case 1:
-    default:
-        break;
+    if (index >= kBuiltinOutlineCount) {
+        const QStringList names = surface()->availableCustomOutlineFileNames();
+        const int customIndex = index - kBuiltinOutlineCount;
+        if (customIndex < 0 || customIndex >= names.size()) {
+            return;
+        }
+        surface()->applyCustomOutlineFileName(names.at(customIndex), true);
+        emit skinChanged();
+        return;
     }
-    surface()->applyOutlineVariant(variant, /*useAutoSelection=*/false, /*persistState=*/true);
+    surface()->applyOutlineVariant(
+        outlineVariantForIndex(index), /*useAutoSelection=*/false, /*persistState=*/true);
     emit skinChanged();
 }
 

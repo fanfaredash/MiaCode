@@ -62,6 +62,8 @@ public:
     virtual QString resolvePreviewSkinDir() const = 0;
     virtual void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                                              bool persistState) = 0;
+    virtual QString currentPreviewCustomOutlineFileName() const = 0;
+    virtual void applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState) = 0;
 };
 
 }  // namespace miacode

@@ -447,7 +447,6 @@ private:
     PreviewOutlineVariant effectivePreviewOutlineVariant() const;
     QString resolvePreviewCustomOutlinePath() const;
     QStringList availablePreviewCustomOutlineFileNames() const;
-    void applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState);
     PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;
     QString previewSkinVariantStorageValue() const;
     void refreshPreviewFrameRateTimers();
@@ -487,6 +486,8 @@ public:
     QString resolvePreviewSkinDir() const override;
     void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                                     bool persistState) override;
+    QString currentPreviewCustomOutlineFileName() const override;
+    void applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState) override;
     // No default on persistState so one-argument calls stay unambiguous.
     void setMuriRenderMode(RenderMode mode, bool persistState);
     void onPreferences();

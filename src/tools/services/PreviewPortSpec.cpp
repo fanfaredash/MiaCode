@@ -77,6 +77,15 @@ public:
         ++applyPreviewOutlineVariantCount;
     }
 
+    QString currentPreviewCustomOutlineFileName() const override { return customOutlineFileName; }
+
+    void applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState) override
+    {
+        lastCustomOutlineFileName = fileName;
+        lastCustomOutlinePersistState = persistState;
+        ++applyPreviewCustomOutlineFileNameCount;
+    }
+
     int ensurePreviewStageMediaRouteInitializedCount = 0;
     int syncPreviewStageMediaRouteChartPathCount = 0;
     QString lastChartPath;
@@ -93,6 +102,10 @@ public:
     bool lastUseAutoSelection = false;
     bool lastPersistState = false;
     int applyPreviewOutlineVariantCount = 0;
+    QString customOutlineFileName = QStringLiteral("1.maimai.png");
+    QString lastCustomOutlineFileName;
+    bool lastCustomOutlinePersistState = false;
+    int applyPreviewCustomOutlineFileNameCount = 0;
 };
 
 bool verifyImplementableWithoutSessionOrAWindow(QTextStream& err)
@@ -145,6 +158,15 @@ bool verifyImplementableWithoutSessionOrAWindow(QTextStream& err)
                       && preview.lastUseAutoSelection
                       && !preview.lastPersistState,
                   QStringLiteral("applyPreviewOutlineVariant reaches the implementation with all three arguments"), err);
+
+    ok &= require(contract.currentPreviewCustomOutlineFileName() == QStringLiteral("1.maimai.png"),
+                  QStringLiteral("currentPreviewCustomOutlineFileName reads through to the implementation"), err);
+
+    contract.applyPreviewCustomOutlineFileName(QStringLiteral("8.DX.png"), false);
+    ok &= require(preview.applyPreviewCustomOutlineFileNameCount == 1
+                      && preview.lastCustomOutlineFileName == QStringLiteral("8.DX.png")
+                      && !preview.lastCustomOutlinePersistState,
+                  QStringLiteral("applyPreviewCustomOutlineFileName reaches the implementation with both arguments"), err);
 
     return ok;
 }

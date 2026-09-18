@@ -287,11 +287,12 @@ AppDialog {
                     color: Theme.colors.text.secondary
                     Layout.preferredWidth: 120
                 }
-                AppComboBox {
+                    AppComboBox {
                     id: previewOutlineCombo
                     objectName: "previewOutlineCombo"
                     Layout.fillWidth: true
                     model: root.previewSettings.outlineOptions
+                    textRole: "label"
                     currentIndex: root.previewSettings.outlineIndex
                     Accessible.name: qsTrId("dialog.render_settings.gameplay.judge_line")
                     onActivated: root.previewSettings.outlineIndex = currentIndex

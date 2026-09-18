@@ -167,5 +167,7 @@ QString resolvePreviewSkinRootDir();
 QString resolvePreviewCustomOutlineDir();
 QStringList availablePreviewSkinDirectoryNames();
 QString previewSkinDisplayName(const QString& directoryName);
+QStringList availablePreviewCustomOutlineFileNames();
+QString previewCustomOutlineDisplayName(const QString& fileName);
 
 }  // namespace miacode::runtime::shared

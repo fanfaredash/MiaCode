@@ -711,20 +711,14 @@ QString miacode::runtime::StageMediaHost::effectivePreviewCustomOutlinePath() co
     return resolvePreviewCustomOutlinePath();
 }
 
+QString miacode::runtime::StageMediaHost::currentPreviewCustomOutlineFileName() const
+{
+    return state_.previewCustomOutlineFileName_;
+}
+
 QStringList miacode::runtime::StageMediaHost::availablePreviewCustomOutlineFileNames() const
 {
-    const QString root = resolvePreviewCustomOutlineDir();
-    if (root.isEmpty()) {
-        return {};
-    }
-    const QDir dir(root);
-    const QFileInfoList entries = dir.entryInfoList(QStringList{QStringLiteral("*.png")}, QDir::Files, QDir::Name | QDir::IgnoreCase);
-    QStringList names;
-    names.reserve(entries.size());
-    for (const QFileInfo& entry : entries) {
-        names.append(entry.fileName());
-    }
-    return names;
+    return miacode::runtime::shared::availablePreviewCustomOutlineFileNames();
 }
 
 void miacode::runtime::StageMediaHost::applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState)
@@ -1017,6 +1011,11 @@ QString Session::resolvePreviewCustomOutlinePath() const
 QStringList Session::availablePreviewCustomOutlineFileNames() const
 {
     return stageMedia_->availablePreviewCustomOutlineFileNames();
+}
+
+QString Session::currentPreviewCustomOutlineFileName() const
+{
+    return stageMedia_->currentPreviewCustomOutlineFileName();
 }
 
 void Session::applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState)

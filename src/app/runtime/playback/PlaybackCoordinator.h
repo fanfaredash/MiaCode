@@ -297,8 +297,12 @@ public:
     QString resolveSkinDir() const;
     QString resolveSkinRootDir() const;
     QString resolveCustomOutlineDir() const;
+    QStringList availableCustomOutlineFileNames() const;
+    QString customOutlineDisplayName(const QString& fileName) const;
+    QString currentCustomOutlineFileName() const;
     void applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                              bool persistState);
+    void applyCustomOutlineFileName(const QString& fileName, bool persistState);
     QVariantMap renderSettings() const;
     void setRenderSetting(const QString& key, const QVariant& value);
     void refreshSurfaces();

@@ -42,14 +42,13 @@ class PreviewSettingsModel final : public QObject
     // values behind one control.
     Q_PROPERTY(QVariantList judgeEffectOptions READ judgeEffectOptions NOTIFY localeLabelsChanged)
 
-    // 皮肤 is a global preview concern, not an export-page setting. The model
-    // writes through MainWindow's owner-live preview path and keeps the HUD
-    // font picker on the shell's native request boundary.
+    // Skin, judge line and HUD fonts live on the shared appearance owner.
+    // Preview Settings and the export page host the same form over this model.
     Q_PROPERTY(QVariantList skinOptions READ skinOptions NOTIFY skinChanged)
     Q_PROPERTY(int skinIndex READ skinIndex WRITE setSkinIndex NOTIFY skinChanged)
     Q_PROPERTY(QVariantList skinJudgeEffectOptions READ skinJudgeEffectOptions NOTIFY localeLabelsChanged)
     Q_PROPERTY(int skinJudgeEffectIndex READ skinJudgeEffectIndex WRITE setSkinJudgeEffectIndex NOTIFY skinChanged)
-    Q_PROPERTY(QVariantList outlineOptions READ outlineOptions NOTIFY localeLabelsChanged)
+    Q_PROPERTY(QVariantList outlineOptions READ outlineOptions NOTIFY skinChanged)
     Q_PROPERTY(int outlineIndex READ outlineIndex WRITE setOutlineIndex NOTIFY skinChanged)
     Q_PROPERTY(QVariantList fontLibraryOptions READ fontLibraryOptions NOTIFY fontLibraryChanged)
     Q_PROPERTY(QVariantList hudFontAreaOptions READ hudFontAreaOptions NOTIFY localeLabelsChanged)

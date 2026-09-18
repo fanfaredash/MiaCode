@@ -76,7 +76,11 @@ public:
     QString resolveSkinDir() const override { return {}; }
     QString resolveSkinRootDir() const override { return {}; }
     QString resolveCustomOutlineDir() const override { return {}; }
+    QStringList availableCustomOutlineFileNames() const override { return {}; }
+    QString customOutlineDisplayName(const QString&) const override { return {}; }
+    QString currentCustomOutlineFileName() const override { return {}; }
     void applyOutlineVariant(PreviewOutlineVariant, bool, bool) override {}
+    void applyCustomOutlineFileName(const QString&, bool) override {}
     QVariantMap renderSettings() const override { return {}; }
     void setRenderSetting(const QString&, const QVariant&) override {}
     void refreshSurfaces() override {}

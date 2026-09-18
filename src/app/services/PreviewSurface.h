@@ -73,10 +73,15 @@ public:
     virtual QString resolveSkinDir() const = 0;
     virtual QString resolveSkinRootDir() const = 0;
     virtual QString resolveCustomOutlineDir() const = 0;
+    virtual QStringList availableCustomOutlineFileNames() const = 0;
+    virtual QString customOutlineDisplayName(const QString& fileName) const = 0;
+    virtual QString currentCustomOutlineFileName() const = 0;
     // Applying an outline variant is not just storing it: it may pick one
-    // automatically for the chart, and it persists.
+    // automatically for the chart, and it persists. A custom PNG from the
+    // outlines directory overlays that variant until a built-in choice clears it.
     virtual void applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                                      bool persistState) = 0;
+    virtual void applyCustomOutlineFileName(const QString& fileName, bool persistState) = 0;
 
     // ---- render settings, as a value map the settings page renders ----
     virtual QVariantMap renderSettings() const = 0;

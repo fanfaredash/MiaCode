@@ -141,11 +141,33 @@ QString PlaybackPreviewSurfaceAdapter::resolveCustomOutlineDir() const
     return coordinator_ != nullptr ? coordinator_->resolveCustomOutlineDir() : QString();
 }
 
+QStringList PlaybackPreviewSurfaceAdapter::availableCustomOutlineFileNames() const
+{
+    return coordinator_ != nullptr ? coordinator_->availableCustomOutlineFileNames() : QStringList();
+}
+
+QString PlaybackPreviewSurfaceAdapter::customOutlineDisplayName(const QString& fileName) const
+{
+    return coordinator_ != nullptr ? coordinator_->customOutlineDisplayName(fileName) : QString();
+}
+
+QString PlaybackPreviewSurfaceAdapter::currentCustomOutlineFileName() const
+{
+    return coordinator_ != nullptr ? coordinator_->currentCustomOutlineFileName() : QString();
+}
+
 void PlaybackPreviewSurfaceAdapter::applyOutlineVariant(
     PreviewOutlineVariant variant, bool useAutoSelection, bool persistState)
 {
     if (coordinator_ != nullptr) {
         coordinator_->applyOutlineVariant(variant, useAutoSelection, persistState);
+    }
+}
+
+void PlaybackPreviewSurfaceAdapter::applyCustomOutlineFileName(const QString& fileName, bool persistState)
+{
+    if (coordinator_ != nullptr) {
+        coordinator_->applyCustomOutlineFileName(fileName, persistState);
     }
 }
 

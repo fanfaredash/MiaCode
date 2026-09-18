@@ -80,6 +80,8 @@ public:
     void preparePreviewForShutdown() override {}
     QString resolvePreviewSkinDir() const override { return {}; }
     void applyPreviewOutlineVariant(PreviewOutlineVariant, bool, bool) override {}
+    QString currentPreviewCustomOutlineFileName() const override { return {}; }
+    void applyPreviewCustomOutlineFileName(const QString&, bool) override {}
 };
 
 bool verifyCoordinatorConstructs(QTextStream& err)

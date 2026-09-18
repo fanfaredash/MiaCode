@@ -399,4 +399,29 @@ QString previewSkinDisplayName(const QString& directoryName)
     return normalized;
 }
 
+QStringList availablePreviewCustomOutlineFileNames()
+{
+    const QString root = resolvePreviewCustomOutlineDir();
+    if (root.isEmpty()) {
+        return {};
+    }
+
+    const QDir dir(root);
+    const QFileInfoList entries = dir.entryInfoList(
+        QStringList{QStringLiteral("*.png")},
+        QDir::Files,
+        QDir::Name | QDir::IgnoreCase);
+    QStringList names;
+    names.reserve(entries.size());
+    for (const QFileInfo& entry : entries) {
+        names.append(entry.fileName());
+    }
+    return names;
+}
+
+QString previewCustomOutlineDisplayName(const QString& fileName)
+{
+    return QFileInfo(fileName).completeBaseName();
+}
+
 }  // namespace miacode::runtime::shared

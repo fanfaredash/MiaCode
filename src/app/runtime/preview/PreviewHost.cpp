@@ -154,11 +154,33 @@ QString PreviewHost::resolveCustomOutlineDir() const
     return legacySurface_ != nullptr ? legacySurface_->resolveCustomOutlineDir() : QString();
 }
 
+QStringList PreviewHost::availableCustomOutlineFileNames() const
+{
+    return legacySurface_ != nullptr ? legacySurface_->availableCustomOutlineFileNames() : QStringList();
+}
+
+QString PreviewHost::customOutlineDisplayName(const QString& fileName) const
+{
+    return legacySurface_ != nullptr ? legacySurface_->customOutlineDisplayName(fileName) : QString();
+}
+
+QString PreviewHost::currentCustomOutlineFileName() const
+{
+    return legacySurface_ != nullptr ? legacySurface_->currentCustomOutlineFileName() : QString();
+}
+
 void PreviewHost::applyOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection,
                                        bool persistState)
 {
     if (legacySurface_ != nullptr) {
         legacySurface_->applyOutlineVariant(variant, useAutoSelection, persistState);
+    }
+}
+
+void PreviewHost::applyCustomOutlineFileName(const QString& fileName, bool persistState)
+{
+    if (legacySurface_ != nullptr) {
+        legacySurface_->applyCustomOutlineFileName(fileName, persistState);
     }
 }
 

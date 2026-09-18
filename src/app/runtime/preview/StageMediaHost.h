@@ -80,6 +80,7 @@ public:
     QString resolvePreviewCustomOutlineDir() const;
     QString resolvePreviewCustomOutlinePath() const;
     QString effectivePreviewCustomOutlinePath() const;
+    QString currentPreviewCustomOutlineFileName() const;
     QStringList availablePreviewCustomOutlineFileNames() const;
     void applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState);
     Session::PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;
