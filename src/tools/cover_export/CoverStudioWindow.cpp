@@ -47,7 +47,6 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
-#include <initializer_list>
 
 namespace miacode::cover_export {
 namespace {
@@ -73,86 +72,6 @@ QString formatPreviewZoom(qreal zoom)
     return QStringLiteral("%1%").arg(qRound(zoom * 100.0));
 }
 
-QJsonObject makeLayer(const QString& key,
-                      const QString& kind,
-                      qreal nx,
-                      qreal ny,
-                      qreal sizeFraction,
-                      int z,
-                      bool visible = true)
-{
-    QJsonObject layer;
-    layer.insert(QStringLiteral("key"), key);
-    layer.insert(QStringLiteral("kind"), kind);
-    layer.insert(QStringLiteral("nx"), nx);
-    layer.insert(QStringLiteral("ny"), ny);
-    layer.insert(QStringLiteral("sizeFraction"), sizeFraction);
-    layer.insert(QStringLiteral("z"), z);
-    layer.insert(QStringLiteral("visible"), visible);
-    layer.insert(QStringLiteral("locked"), false);
-    layer.insert(QStringLiteral("opacity"), 1.0);
-    if (kind == QStringLiteral("chartFrame")) {
-        layer.insert(QStringLiteral("label"), QStringLiteral("Chart frame"));
-        layer.insert(QStringLiteral("frameSeconds"), 0.0);
-        layer.insert(QStringLiteral("frameBgEnabled"), true);
-        layer.insert(QStringLiteral("frameBgBrightness"), 0.8);
-        layer.insert(QStringLiteral("frameStyle"), QString());
-    } else {
-        layer.insert(QStringLiteral("label"), QStringLiteral("Difficulty card"));
-    }
-    return layer;
-}
-
-QJsonObject makePresetComposition(std::initializer_list<QJsonObject> layers)
-{
-    QJsonArray arr;
-    for (const QJsonObject& layer : layers) {
-        arr.append(layer);
-    }
-    QJsonObject layout;
-    layout.insert(QStringLiteral("layers"), arr);
-
-    QJsonObject root;
-    root.insert(QStringLiteral("kind"), QStringLiteral("miacode-cover-composition"));
-    root.insert(QStringLiteral("version"), miacode::cover_export::CoverCompositionState::kCurrentVersion);
-    root.insert(QStringLiteral("layout"), layout);
-    return root;
-}
-
-QList<miacode::cover_export::CoverUserPreset> builtInPresets()
-{
-    using miacode::cover_export::CoverUserPreset;
-    return {
-        CoverUserPreset{
-            UiText::text(QStringLiteral("cover.centered_card_default")),
-            makePresetComposition({
-                makeLayer(QStringLiteral("card"), QStringLiteral("card"), 0.5, 0.5, 0.85, 0, true),
-            }),
-        },
-        CoverUserPreset{
-            UiText::text(QStringLiteral("cover.card_chart_frame")),
-            makePresetComposition({
-                makeLayer(QStringLiteral("chartFrame"), QStringLiteral("chartFrame"), 0.32, 0.5, 0.82, 0, true),
-                makeLayer(QStringLiteral("card"), QStringLiteral("card"), 0.64, 0.5, 0.78, 1, true),
-            }),
-        },
-        CoverUserPreset{
-            UiText::text(QStringLiteral("cover.dual_chart_frame_collage")),
-            makePresetComposition({
-                makeLayer(QStringLiteral("card"), QStringLiteral("card"), 0.5, 0.5, 0.85, 0, false),
-                makeLayer(QStringLiteral("chartFrame"), QStringLiteral("chartFrame"), 0.30, 0.40, 0.56, 1, true),
-                makeLayer(QStringLiteral("chartFrame2"), QStringLiteral("chartFrame"), 0.66, 0.60, 0.56, 2, true),
-            }),
-        },
-        CoverUserPreset{
-            UiText::text(QStringLiteral("cover.pure_chart_frame")),
-            makePresetComposition({
-                makeLayer(QStringLiteral("card"), QStringLiteral("card"), 0.5, 0.5, 0.85, 0, false),
-                makeLayer(QStringLiteral("chartFrame"), QStringLiteral("chartFrame"), 0.5, 0.5, 0.92, 1, true),
-            }),
-        },
-    };
-}
 
 }  // namespace
 
@@ -519,7 +438,7 @@ void CoverStudioWindow::rebuildPresetMenu(QMenu* menu)
         });
     };
 
-    for (const miacode::cover_export::CoverUserPreset& preset : builtInPresets()) {
+    for (const miacode::cover_export::CoverUserPreset& preset : CoverCompositionState::builtInPresets()) {
         addPresetAction(preset);
     }
     const QList<miacode::cover_export::CoverUserPreset> userPresets =

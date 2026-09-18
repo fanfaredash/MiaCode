@@ -21,6 +21,7 @@
 #include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/cover_export/CoverStudioWindow.h"
+#include "tools/cover_export/CoverStudioPanel.h"
 #include "tools/export_page/ExportLauncherPage.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/video_export/BatchExportPanel.h"
@@ -1329,6 +1330,8 @@ void MainWindow::ExportSection::handleBatchExportConfirmed()
     const QStringList chartDirectories = panel->chartDirectories();
     const QList<int> selectedDifficultyIds = panel->selectedDifficultyIds();
     const QString outputDirectory = panel->outputDirectory();
+    const bool exportCovers = panel->batchCoverEnabled();
+    const QJsonObject coverPreset = exportCovers ? panel->selectedCoverPreset() : QJsonObject();
     VideoExportTask requestedTask = panel->requestedTaskTemplate();
     // The injected Gameplay/Video-extra widgets mutate the live preview
     // owner. Re-source those fields just as the embedded single-export path
@@ -1438,6 +1441,9 @@ void MainWindow::ExportSection::handleBatchExportConfirmed()
     progress.show();
 
     QStringList exportedFiles;
+    QStringList exportedCovers;
+    QStringList failedCovers;
+    QStringList adjustedFrames;
     bool canceled = false;
     int successCount = 0;
     const int totalJobs = qMax(1, jobs.size());
@@ -1474,10 +1480,33 @@ void MainWindow::ExportSection::handleBatchExportConfirmed()
                 break;
             }
             failedCharts.append(job.displayName + QStringLiteral(" - ") + failureText);
-            continue;
+        } else {
+            ++successCount;
+            exportedFiles.append(QFileInfo(snapshot.outputPath).fileName());
         }
-        ++successCount;
-        exportedFiles.append(QFileInfo(snapshot.outputPath).fileName());
+        if (exportCovers) {
+            VideoExportTask coverTask;
+            QString coverError;
+            if (!buildVideoExportTaskFromSnapshot(snapshot, &coverTask, &coverError)) {
+                failedCovers.append(job.displayName + QStringLiteral(" - ") + coverError);
+                continue;
+            }
+            miacode::cover_export::CoverStudioPanel coverPanel(
+                coverTask, QSize(snapshot.outputWidth, snapshot.outputHeight), nullptr, true);
+            QStringList itemAdjustments;
+            const QString coverStem = QFileInfo(snapshot.outputPath).completeBaseName()
+                + QStringLiteral("_cover");
+            const auto coverResult = coverPanel.exportBatchCover(
+                coverPreset, outputDirectory, coverStem, &itemAdjustments);
+            if (coverResult.success) {
+                exportedCovers.append(QFileInfo(coverResult.outputPath).fileName());
+                for (const QString& adjustment : itemAdjustments) {
+                    adjustedFrames.append(job.displayName + QStringLiteral(" - ") + adjustment);
+                }
+            } else {
+                failedCovers.append(job.displayName + QStringLiteral(" - ") + coverResult.errorMessage);
+            }
+        }
     }
     progress.setValue(100);
     progress.hide();
@@ -1495,11 +1524,25 @@ void MainWindow::ExportSection::handleBatchExportConfirmed()
         return details.size() > 3000 ? details.left(3000) + QStringLiteral("\n...") : details;
     };
     const QString successDetails = shortenDetails(exportedFiles.join(QLatin1Char('\n')));
-    if (failedCharts.isEmpty()) {
+    const QString coverDetails = exportCovers
+        ? QStringLiteral("\n\n")
+            + UiText::text(QStringLiteral("dialog.batch_export.cover_result"))
+                .arg(exportedCovers.size()).arg(failedCovers.size())
+            + (exportedCovers.isEmpty() ? QString()
+                : QStringLiteral("\n") + shortenDetails(exportedCovers.join(QLatin1Char('\n'))))
+            + (adjustedFrames.isEmpty() ? QString()
+                : QStringLiteral("\n")
+                    + UiText::text(QStringLiteral("dialog.batch_export.cover_adjusted"))
+                    + QStringLiteral("\n") + shortenDetails(adjustedFrames.join(QLatin1Char('\n'))))
+            + (failedCovers.isEmpty() ? QString()
+                : QStringLiteral("\n") + shortenDetails(failedCovers.join(QLatin1Char('\n'))))
+        : QString();
+    if (failedCharts.isEmpty() && failedCovers.isEmpty()) {
         UiDialogs::showMessageBox(
             QMessageBox::Information, &owner_, UiText::text(QStringLiteral("dialog.batch_export.title")),
             UiText::text(QStringLiteral("dialog.batch_export.message.success")).arg(successCount)
-                + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + successDetails));
+                + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + successDetails)
+                + coverDetails);
         return;
     }
     UiDialogs::showMessageBox(
@@ -1510,5 +1553,7 @@ void MainWindow::ExportSection::handleBatchExportConfirmed()
                 : QStringLiteral("\n\n")
                     + UiText::text(QStringLiteral("dialog.batch_export.message.output_files"))
                     + QStringLiteral("\n") + successDetails)
-            + QStringLiteral("\n\n") + shortenDetails(failedCharts.join(QLatin1Char('\n'))));
+            + (failedCharts.isEmpty() ? QString()
+                : QStringLiteral("\n\n") + shortenDetails(failedCharts.join(QLatin1Char('\n'))))
+            + coverDetails);
 }

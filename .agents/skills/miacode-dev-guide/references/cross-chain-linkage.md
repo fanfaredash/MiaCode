@@ -328,6 +328,11 @@ export settings (and shared timing offsets, static Muri thresholds) must be adde
 serialization sides; worker protocol changes reflect in both `main.cpp` and MainWindow worker-event
 handling.
 
+Optional batch covers stay in the GUI process after the per-chart snapshot is built. They use
+`buildVideoExportTaskFromSnapshot` for that chart's notes, metadata, duration, and skin, then
+`CoverStudioPanel::exportBatchCover` with the frozen preset. This is a companion output, not a
+new video-worker snapshot field; cover failures must not change the video result.
+
 `audioBitrateKbps` and `sizePreset` are part of this boundary. Single and batch snapshot builders
 must copy both fields; `VideoExportSnapshot::{toJson,fromJson}` must serialize them; and
 `buildVideoExportTaskFromSnapshot` must restore them before `exportPreparedTask`. The

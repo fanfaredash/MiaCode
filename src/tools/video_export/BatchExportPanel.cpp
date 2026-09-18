@@ -5,11 +5,13 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
+#include "tools/cover_export/CoverCompositionState.h"
 #include "tools/video_export/BatchExportTaskLayout.h"
 #include "tools/video_export/VideoExportDialog.h"
 
 #include <QAbstractItemView>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -37,6 +39,22 @@
 #include <utility>
 
 namespace {
+
+class CoverPresetComboBox final : public QComboBox
+{
+public:
+    using QComboBox::QComboBox;
+    std::function<void()> refreshPresets;
+
+protected:
+    void showPopup() override
+    {
+        if (refreshPresets) {
+            refreshPresets();
+        }
+        QComboBox::showPopup();
+    }
+};
 
 QSettings exportDialogSettingsStore()
 {
@@ -302,6 +320,46 @@ QWidget* BatchExportPanel::buildBatchOutputControls()
     directoryToolsLayout->addWidget(clearButton, 0);
     directoryToolsLayout->addStretch(1);
     layout->addWidget(directoryTools, 0);
+
+    auto* coverSection = new QWidget(content);
+    auto* coverSectionLayout = new QVBoxLayout(coverSection);
+    coverSectionLayout->setContentsMargins(0, 0, 0, 0);
+    coverSectionLayout->setSpacing(6);
+    auto* coverLabel = new QLabel(
+        UiText::text(QStringLiteral("dialog.batch_export.export_cover")), coverSection);
+    coverSectionLayout->addWidget(coverLabel, 0);
+    auto* presetCombo = new CoverPresetComboBox(coverSection);
+    coverPresetCombo_ = presetCombo;
+    coverPresetCombo_->setObjectName(QStringLiteral("BatchCoverPresetCombo"));
+    coverPresetCombo_->setProperty("miacode.combo_text_alignment", static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
+    presetCombo->refreshPresets = [this] {
+        const QString selectedName = coverPresetCombo_->currentText();
+        const QJsonObject selectedPreset = selectedCoverPreset_;
+        coverPresetCombo_->clear();
+        coverPresetCombo_->addItem(UiText::text(QStringLiteral("dialog.batch_export.no_cover")));
+        for (const auto& preset : miacode::cover_export::CoverCompositionState::builtInPresets()) {
+            coverPresetCombo_->addItem(preset.name, preset.composition);
+        }
+        for (const auto& preset : miacode::cover_export::CoverCompositionState::loadUserPresets()) {
+            coverPresetCombo_->addItem(preset.name, preset.composition);
+        }
+        for (int index = 1; index < coverPresetCombo_->count(); ++index) {
+            if (coverPresetCombo_->itemText(index) == selectedName
+                && coverPresetCombo_->itemData(index).toJsonObject() == selectedPreset) {
+                coverPresetCombo_->setCurrentIndex(index);
+                break;
+            }
+        }
+        selectedCoverPreset_ = coverPresetCombo_->currentData().toJsonObject();
+        UiTheme::styleDialogComboBox(coverPresetCombo_, 12);
+    };
+    connect(coverPresetCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
+        selectedCoverPreset_ = coverPresetCombo_->currentData().toJsonObject();
+    });
+    presetCombo->refreshPresets();
+    coverSectionLayout->addWidget(coverPresetCombo_, 0);
+    coverLabel->setBuddy(coverPresetCombo_);
+    layout->addWidget(coverSection, 0);
     layout->addStretch(1);
     return content;
 }
@@ -358,6 +416,16 @@ QList<int> BatchExportPanel::selectedDifficultyIds() const
         }
     }
     return result;
+}
+
+bool BatchExportPanel::batchCoverEnabled() const
+{
+    return !selectedCoverPreset_.isEmpty();
+}
+
+QJsonObject BatchExportPanel::selectedCoverPreset() const
+{
+    return selectedCoverPreset_;
 }
 
 bool BatchExportPanel::prepareRequestedTask(QString* errorMessage)
@@ -437,6 +505,9 @@ void BatchExportPanel::applyThemeStyles()
     }
     if (outputDirectoryEdit_ != nullptr) {
         outputDirectoryEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
+    }
+    if (coverPresetCombo_ != nullptr) {
+        UiTheme::styleDialogComboBox(coverPresetCombo_, 12);
     }
     if (chartDirectoryList_ != nullptr) {
         chartDirectoryList_->setStyleSheet(UiTheme::batchExportChartDirectoryListStyleSheet());

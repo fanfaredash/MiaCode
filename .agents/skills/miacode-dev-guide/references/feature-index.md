@@ -583,7 +583,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   it must never recreate the panel or overwrite the user's checked export difficulties. Tools →
   Batch Export routes to this subpage. Count-in and intro signals follow the same audition bridge
   as single export, and batch output tasks are rebuilt per chart/difficulty by the existing
-  snapshot pipeline.
+  snapshot pipeline. The Task tab can optionally export a cover beside each video: its preset
+  selector at the bottom of the Task tab has a no-cover default followed by shared built-in/user
+  presets from `CoverCompositionState`. `handleBatchExportConfirmed` freezes the selected composition,
+  rebuilds the per-chart cover task from each video snapshot, and renders through
+  `CoverStudioPanel::exportBatchCover` without reading or writing the last single-cover
+  composition. Visible chart-frame times are independently bounded to each chart's final
+  renderable frame and reported; cover failures are separate from video failures.
   **Inline export progress (STATUS-BAR ONLY — 2026-06-13 redesign; supersedes the A3 "ride the
   PLAYBACK bar" amendment):** a panel-launched export creates NO `QProgressDialog` (every
   dialog-update site in `MainWindow.ExportWorker.cpp` is null-guarded). Progress (percent · stage ·

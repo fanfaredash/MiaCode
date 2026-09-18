@@ -41,6 +41,10 @@ struct CoverCompositionState {
     // [{ name, version, composition }]. Preset compositions are normally
     // size-agnostic (no size object), so applying them keeps the current canvas.
     static QList<CoverUserPreset> loadUserPresets();
+    static QList<CoverUserPreset> builtInPresets();
+    static bool prepareBatchPreset(const QJsonObject& preset, double durationSeconds,
+                                   bool chartFrameAvailable, QJsonObject* prepared,
+                                   QStringList* frameAdjustments, QString* errorMessage);
     static void saveUserPreset(const QString& name, const QJsonObject& composition);
     static void removeUserPreset(const QString& name);
     static void renameUserPreset(const QString& oldName, const QString& newName);

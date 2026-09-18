@@ -460,6 +460,43 @@ bool testImageAndTextLayers(QTextStream& err)
     return true;
 }
 
+bool testBatchPresetFrameBounds(QTextStream& err)
+{
+    const auto presets = CoverCompositionState::builtInPresets();
+    if (!require(presets.size() == 4, QStringLiteral("built-in cover presets are shared"), err)) return false;
+    QJsonObject preset = presets.at(2).composition;
+    QJsonObject layout = preset.value(QStringLiteral("layout")).toObject();
+    QJsonArray layers = layout.value(QStringLiteral("layers")).toArray();
+    QJsonObject first = layers.at(1).toObject();
+    first.insert(QStringLiteral("frameSeconds"), 3.0);
+    layers[1] = first;
+    QJsonObject second = layers.at(2).toObject();
+    second.insert(QStringLiteral("frameSeconds"), 30.0);
+    layers[2] = second;
+    layout.insert(QStringLiteral("layers"), layers);
+    preset.insert(QStringLiteral("layout"), layout);
+
+    QJsonObject prepared;
+    QStringList adjustments;
+    QString error;
+    if (!require(CoverCompositionState::prepareBatchPreset(
+            preset, 5.0, true, &prepared, &adjustments, &error),
+            QStringLiteral("multi-frame preset is prepared"), err)) return false;
+    const QJsonArray resultLayers = prepared.value(QStringLiteral("layout")).toObject()
+        .value(QStringLiteral("layers")).toArray();
+    if (!require(qAbs(resultLayers.at(1).toObject().value(QStringLiteral("frameSeconds")).toDouble() - 3.0) < 0.001,
+                 QStringLiteral("in-range frame time is preserved"), err)) return false;
+    if (!require(resultLayers.at(2).toObject().value(QStringLiteral("frameSeconds")).toDouble() < 5.0
+            && adjustments.size() == 1,
+            QStringLiteral("out-of-range second frame is clamped and reported"), err)) return false;
+    if (!require(!CoverCompositionState::prepareBatchPreset(
+            preset, 5.0, false, &prepared, nullptr, &error),
+            QStringLiteral("unrenderable chart frames fail the cover"), err)) return false;
+    return require(CoverCompositionState::prepareBatchPreset(
+            presets.constFirst().composition, 0.0, false, &prepared, nullptr, &error),
+            QStringLiteral("card-only cover does not require chart frames"), err);
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -482,6 +519,7 @@ int main(int argc, char** argv)
     if (!testMoveByViewRows(err)) return 1;
     if (!testImageAndTextLayers(err)) return 1;
     if (!testCoverPresetPersistence(err)) return 1;
+    if (!testBatchPresetFrameBounds(err)) return 1;
     QFile::remove(UiText::preferencesFilePath());
     return 0;
 }

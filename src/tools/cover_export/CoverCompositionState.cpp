@@ -4,6 +4,10 @@
 
 #include <QJsonArray>
 
+#include <initializer_list>
+#include <cmath>
+#include <QFileInfo>
+
 namespace miacode::cover_export {
 namespace {
 
@@ -12,6 +16,35 @@ constexpr char kCompositionKind[] = "miacode-cover-composition";
 QString normalizedPresetName(QString name)
 {
     return name.trimmed();
+}
+
+QJsonObject makePresetLayer(const QString& key, const QString& kind,
+                            qreal nx, qreal ny, qreal sizeFraction, int z, bool visible)
+{
+    QJsonObject layer{{QStringLiteral("key"), key}, {QStringLiteral("kind"), kind},
+                      {QStringLiteral("nx"), nx}, {QStringLiteral("ny"), ny},
+                      {QStringLiteral("sizeFraction"), sizeFraction}, {QStringLiteral("z"), z},
+                      {QStringLiteral("visible"), visible}, {QStringLiteral("locked"), false},
+                      {QStringLiteral("opacity"), 1.0}};
+    if (kind == QStringLiteral("chartFrame")) {
+        layer.insert(QStringLiteral("label"), QStringLiteral("Chart frame"));
+        layer.insert(QStringLiteral("frameSeconds"), 0.0);
+        layer.insert(QStringLiteral("frameBgEnabled"), true);
+        layer.insert(QStringLiteral("frameBgBrightness"), 0.8);
+        layer.insert(QStringLiteral("frameStyle"), QString());
+    } else {
+        layer.insert(QStringLiteral("label"), QStringLiteral("Difficulty card"));
+    }
+    return layer;
+}
+
+QJsonObject makePresetComposition(std::initializer_list<QJsonObject> layers)
+{
+    QJsonArray array;
+    for (const QJsonObject& layer : layers) array.append(layer);
+    return {{QStringLiteral("kind"), QStringLiteral("miacode-cover-composition")},
+            {QStringLiteral("version"), CoverCompositionState::kCurrentVersion},
+            {QStringLiteral("layout"), QJsonObject{{QStringLiteral("layers"), array}}}};
 }
 
 QJsonObject migrateLayoutV1ToV2(const QJsonObject& root)
@@ -214,6 +247,69 @@ void CoverCompositionState::clearRecentFiles()
     app.insert(QStringLiteral("cover_export"), cover);
     root.insert(QStringLiteral("app"), app);
     UiText::savePreferencesObject(root);
+}
+
+QList<CoverUserPreset> CoverCompositionState::builtInPresets()
+{
+    const auto layer = makePresetLayer;
+    return {
+        {UiText::text(QStringLiteral("cover.centered_card_default")),
+         makePresetComposition({layer(QStringLiteral("card"), QStringLiteral("card"), 0.5, 0.5, 0.85, 0, true)})},
+        {UiText::text(QStringLiteral("cover.card_chart_frame")),
+         makePresetComposition({layer(QStringLiteral("chartFrame"), QStringLiteral("chartFrame"), 0.32, 0.5, 0.82, 0, true),
+                                layer(QStringLiteral("card"), QStringLiteral("card"), 0.64, 0.5, 0.78, 1, true)})},
+        {UiText::text(QStringLiteral("cover.dual_chart_frame_collage")),
+         makePresetComposition({layer(QStringLiteral("card"), QStringLiteral("card"), 0.5, 0.5, 0.85, 0, false),
+                                layer(QStringLiteral("chartFrame"), QStringLiteral("chartFrame"), 0.30, 0.40, 0.56, 1, true),
+                                layer(QStringLiteral("chartFrame2"), QStringLiteral("chartFrame"), 0.66, 0.60, 0.56, 2, true)})},
+        {UiText::text(QStringLiteral("cover.pure_chart_frame")),
+         makePresetComposition({layer(QStringLiteral("card"), QStringLiteral("card"), 0.5, 0.5, 0.85, 0, false),
+                                layer(QStringLiteral("chartFrame"), QStringLiteral("chartFrame"), 0.5, 0.5, 0.92, 1, true)})},
+    };
+}
+
+bool CoverCompositionState::prepareBatchPreset(const QJsonObject& preset,
+                                                double durationSeconds,
+                                                bool chartFrameAvailable,
+                                                QJsonObject* prepared,
+                                                QStringList* frameAdjustments,
+                                                QString* errorMessage)
+{
+    CoverCompositionState state;
+    if (!fromJson(preset, &state, errorMessage)) return false;
+    const QJsonObject background = state.background;
+    if (background.value(QStringLiteral("mode")).toString() == QStringLiteral("custom")
+        && !QFileInfo::exists(background.value(QStringLiteral("customPath")).toString())) {
+        if (errorMessage != nullptr) *errorMessage = QStringLiteral("custom cover background is missing");
+        return false;
+    }
+    QJsonArray layers = state.layout.value(QStringLiteral("layers")).toArray();
+    const double lastFrameSeconds = qMax(0.0, durationSeconds - 1.0 / 60.0);
+    for (QJsonValueRef value : layers) {
+        QJsonObject layer = value.toObject();
+        if (layer.value(QStringLiteral("kind")).toString() != QStringLiteral("chartFrame")
+            || !layer.value(QStringLiteral("visible")).toBool(true)) continue;
+        if (!chartFrameAvailable || durationSeconds <= 0.0) {
+            if (errorMessage != nullptr) *errorMessage = QStringLiteral("chart frame is unavailable for this difficulty");
+            return false;
+        }
+        const double requested = layer.value(QStringLiteral("frameSeconds")).toDouble();
+        if (!std::isfinite(requested)) {
+            if (errorMessage != nullptr) *errorMessage = QStringLiteral("chart frame time is invalid");
+            return false;
+        }
+        const double bounded = qBound(0.0, requested, lastFrameSeconds);
+        if (frameAdjustments != nullptr && !qFuzzyCompare(requested + 1.0, bounded + 1.0)) {
+            frameAdjustments->append(QStringLiteral("%1: %2s → %3s")
+                .arg(layer.value(QStringLiteral("key")).toString())
+                .arg(requested, 0, 'f', 2).arg(bounded, 0, 'f', 2));
+        }
+        layer.insert(QStringLiteral("frameSeconds"), bounded);
+        value = layer;
+    }
+    state.layout.insert(QStringLiteral("layers"), layers);
+    if (prepared != nullptr) *prepared = state.toJson();
+    return true;
 }
 
 QList<CoverUserPreset> CoverCompositionState::loadUserPresets()

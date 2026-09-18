@@ -6,6 +6,7 @@
 #include <QIcon>
 #include <QSize>
 #include <QString>
+#include <QStringList>
 #include <QVariantMap>
 
 #include <memory>
@@ -52,12 +53,16 @@ public:
     // `task` supplies the difficulty-card banner (task.intro), the parsed note
     // markers + skin dir + render settings the chart-frame renderer needs, and the
     // content duration for the frame-picker range.
-    CoverStudioPanel(const VideoExportTask& task, const QSize& initialSize, QWidget* parent = nullptr);
+    CoverStudioPanel(const VideoExportTask& task, const QSize& initialSize, QWidget* parent = nullptr,
+                     bool batchMode = false);
     ~CoverStudioPanel() override;
 
     // Render the composed cover at the chosen size and save it under
     // outputDirectory (PNG when transparent, JPG otherwise).
     miacode::cover_export::CoverExportResult exportCover(const QString& outputDirectory);
+    miacode::cover_export::CoverExportResult exportBatchCover(
+        const QJsonObject& preset, const QString& outputDirectory, const QString& fileStem,
+        QStringList* frameAdjustments = nullptr);
 
 protected:
     // Intercepts ←/→ on the frame slider for the held-seek (below).

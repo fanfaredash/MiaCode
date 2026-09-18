@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QList>
+#include <QJsonObject>
 #include <QStringList>
 #include <QWidget>
 
@@ -9,6 +10,7 @@
 #include "tools/video_export/VideoExportController.h"
 
 class QCheckBox;
+class QComboBox;
 class QLineEdit;
 class QListWidget;
 class QPushButton;
@@ -54,6 +56,8 @@ public:
     QStringList chartDirectories() const;
     QString outputDirectory() const;
     QList<int> selectedDifficultyIds() const;
+    bool batchCoverEnabled() const;
+    QJsonObject selectedCoverPreset() const;
     VideoExportTask requestedTaskTemplate() const { return requestedTaskTemplate_; }
     bool prepareRequestedTask(QString* errorMessage = nullptr);
 
@@ -99,6 +103,8 @@ private:
     QListWidget* chartDirectoryList_ = nullptr;
     QLineEdit* outputDirectoryEdit_ = nullptr;
     QList<QCheckBox*> difficultyChecks_;
+    QComboBox* coverPresetCombo_ = nullptr;
+    QJsonObject selectedCoverPreset_;
     QPushButton* startExportButton_ = nullptr;
     VideoExportTask requestedTaskTemplate_;
 };

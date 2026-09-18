@@ -193,7 +193,8 @@ QVariantMap loadBannerTemplate()
 
 namespace miacode::cover_export {
 
-CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& initialSize, QWidget* parent)
+CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& initialSize,
+                                   QWidget* parent, bool batchMode)
     : QWidget(parent)
     , banner_(task.intro)
 {
@@ -695,17 +696,19 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     // App-level preference restore: reopen with the last edited composition.
     // The final state is saved on export and again while closing. Silent —
     // fallback notices are suppressed; the explicit 导入布局 path stays interactive.
-    const QJsonObject savedPreferences = miacode::cover_export::CoverCompositionState::loadPreferences();
-    if (!savedPreferences.isEmpty()) {
-        applyCompositionJson(savedPreferences, /*interactive=*/false);
+    if (!batchMode) {
+        const QJsonObject savedPreferences = miacode::cover_export::CoverCompositionState::loadPreferences();
+        if (!savedPreferences.isEmpty()) {
+            applyCompositionJson(savedPreferences, /*interactive=*/false);
+        }
+        restoreSharedCardModePreference();
+        pushInputs();
+        compositionPersistenceGuard_ = std::make_unique<miacode::cover_export::CoverCompositionPersistenceGuard>(
+            [this]() { return exportCompositionJson(); },
+            [](const QJsonObject& payload) {
+                return miacode::cover_export::CoverCompositionState::savePreferences(payload);
+            });
     }
-    restoreSharedCardModePreference();
-    pushInputs();
-    compositionPersistenceGuard_ = std::make_unique<miacode::cover_export::CoverCompositionPersistenceGuard>(
-        [this]() { return exportCompositionJson(); },
-        [](const QJsonObject& payload) {
-            return miacode::cover_export::CoverCompositionState::savePreferences(payload);
-        });
 }
 
 void CoverStudioPanel::persistCompositionNow()
@@ -2015,6 +2018,26 @@ miacode::cover_export::CoverExportResult CoverStudioPanel::exportCover(const QSt
     }
     return miacode::cover_export::exportCoverComposite(
         model_, buildInputs(), currentSize(), outputDirectory);
+}
+
+miacode::cover_export::CoverExportResult CoverStudioPanel::exportBatchCover(
+    const QJsonObject& preset, const QString& outputDirectory, const QString& fileStem,
+    QStringList* frameAdjustments)
+{
+    CoverExportResult result;
+    QJsonObject prepared;
+    if (!CoverCompositionState::prepareBatchPreset(preset, contentDurationSeconds_,
+            chartFrameAvailable_, &prepared, frameAdjustments, &result.errorMessage)) {
+        return result;
+    }
+    applyCompositionJson(prepared, /*interactive=*/false);
+    for (CoverLayer* layer : model_->visibleChartFrameLayers()) {
+        if (layer->imageRevision() < 0) {
+            result.errorMessage = QStringLiteral("failed to render chart frame: %1").arg(layer->key());
+            return result;
+        }
+    }
+    return exportCoverComposite(model_, buildInputs(), currentSize(), outputDirectory, fileStem);
 }
 
 void CoverStudioPanel::syncControlEnabled()

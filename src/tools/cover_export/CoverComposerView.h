@@ -171,6 +171,7 @@ QImage renderCoverComposite(CoverLayoutModel* model,
 CoverExportResult exportCoverComposite(CoverLayoutModel* model,
                                        const CoverComposerInputs& inputs,
                                        const QSize& fullSize,
-                                       const QString& outputDirectory);
+                                       const QString& outputDirectory,
+                                       const QString& fileStem = QStringLiteral("card"));
 
 }  // namespace miacode::cover_export
