@@ -4449,9 +4449,13 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>One &amp;field=value per line</source>
         <translation>每行一个 &amp;字段=值</translation>
     </message>
+    <message id="qml.open_chart_info_or_add_a_difficulty">
+        <source>Open metadata, or add a difficulty</source>
+        <translation>打开谱面信息，或添加一个难度</translation>
+    </message>
     <message id="qml.open_metadata_or_a_difficulty_from_the_sidebar">
         <source>Open metadata or a difficulty from the sidebar</source>
-        <translation>从左侧打开元数据或难度</translation>
+        <translation>从左侧打开谱面信息或难度</translation>
     </message>
     <message id="qml.open_playback_speed_presets">
         <source>Open playback-speed presets</source>

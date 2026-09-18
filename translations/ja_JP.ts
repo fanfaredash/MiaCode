@@ -4449,9 +4449,13 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>One &amp;field=value per line</source>
         <translation>1 行に 1 つの &amp;field=value</translation>
     </message>
+    <message id="qml.open_chart_info_or_add_a_difficulty">
+        <source>Open metadata, or add a difficulty</source>
+        <translation>譜面情報を開くか、難易度を追加してください</translation>
+    </message>
     <message id="qml.open_metadata_or_a_difficulty_from_the_sidebar">
         <source>Open metadata or a difficulty from the sidebar</source>
-        <translation>サイドバーからメタデータまたは難易度を開いてください</translation>
+        <translation>左側から譜面情報または難易度を開いてください</translation>
     </message>
     <message id="qml.open_playback_speed_presets">
         <source>Open playback-speed presets</source>

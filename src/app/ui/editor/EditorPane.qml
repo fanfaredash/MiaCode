@@ -464,7 +464,9 @@ Item {
     Label {
         anchors.centerIn: parent
         visible: root.documentSession.hasDocument && !root.viewState.hasActiveEditor
-        text: qsTrId("qml.open_metadata_or_a_difficulty_from_the_sidebar")
+        text: root.documentSession.difficulties.length > 0
+              ? qsTrId("qml.open_metadata_or_a_difficulty_from_the_sidebar")
+              : qsTrId("qml.open_chart_info_or_add_a_difficulty")
         color: Theme.colors.text.secondary
         font.family: Theme.uiFont
         font.pixelSize: Theme.uiFontSize

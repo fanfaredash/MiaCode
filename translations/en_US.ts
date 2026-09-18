@@ -4449,6 +4449,10 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>One &amp;field=value per line</source>
         <translation>One &amp;field=value per line</translation>
     </message>
+    <message id="qml.open_chart_info_or_add_a_difficulty">
+        <source>Open metadata, or add a difficulty</source>
+        <translation>Open metadata, or add a difficulty</translation>
+    </message>
     <message id="qml.open_metadata_or_a_difficulty_from_the_sidebar">
         <source>Open metadata or a difficulty from the sidebar</source>
         <translation>Open metadata or a difficulty from the sidebar</translation>
