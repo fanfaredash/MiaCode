@@ -223,10 +223,6 @@ double miacode::runtime::StageMediaHost::previewStageMediaRouteCurrentPlaybackSe
 
 void miacode::runtime::StageMediaHost::startPreviewStageMediaRoutePlayback(double second)
 {
-    if (!previewStageMediaRouteHasVideo()) {
-        return;
-    }
-
     if (state_.previewStageMediaHost_ != nullptr) {
         state_.previewStageMediaHost_->startPlayback(second);
     }
@@ -245,10 +241,6 @@ void miacode::runtime::StageMediaHost::syncPreviewStageMediaRoutePlayback(double
 
 void miacode::runtime::StageMediaHost::pausePreviewStageMediaRoutePlayback()
 {
-    if (!previewStageMediaRouteHasVideo()) {
-        return;
-    }
-
     if (state_.previewStageMediaHost_ != nullptr) {
         state_.previewStageMediaHost_->pausePlayback();
     }

@@ -236,9 +236,6 @@ bool miacode::runtime::PlaybackCoordinator::previewStageMediaRouteHasVideo() con
 
 void miacode::runtime::PlaybackCoordinator::pausePreviewStageMediaRoutePlayback()
 {
-    if (!previewStageMediaRouteHasVideo()) {
-        return;
-    }
     if (state_.previewStageMediaHost_ != nullptr) {
         state_.previewStageMediaHost_->pausePlayback();
     }

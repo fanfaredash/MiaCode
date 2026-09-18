@@ -214,6 +214,7 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
 #ifdef MIACODE_USE_QTAVPLAYER
     initializeBackendObjects();
     if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
+        transportPlaying_ = true;
         return;
     }
 
@@ -306,6 +307,7 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
 #else
     initializeBackendObjects();
     if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
+        transportPlaying_ = true;
         return;
     }
 
@@ -791,9 +793,13 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
 
     lastTimelineSecond_ = qMax(0.0, seconds);
     if (!videoPlaybackPendingStart_) {
+        if (!videoPlaybackActive_) {
+            startPlayback(seconds);
+            return;
+        }
         const bool wasPlaying = player_->state() == QAVPlayer::PlayingState;
         bool transitioned = false;
-        if (videoPlaybackActive_ && !wasPlaying) {
+        if (!wasPlaying) {
             player_->play();
             transitioned = true;
         }
@@ -853,9 +859,13 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
 
     lastTimelineSecond_ = qMax(0.0, seconds);
     if (!videoPlaybackPendingStart_) {
+        if (!videoPlaybackActive_) {
+            startPlayback(seconds);
+            return;
+        }
         const bool wasPlaying = playerPlaybackState(player_) == QMediaPlayer::PlayingState;
         bool transitioned = false;
-        if (videoPlaybackActive_ && !wasPlaying) {
+        if (!wasPlaying) {
             player_->play();
             transitioned = true;
         }

@@ -534,7 +534,7 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
     state_.previewStartupCanvasPresented_ = state_.scene_ == nullptr;
     state_.previewStartupStrongGroupCommitted_ = false;
     state_.previewStartupResumeFromPause_ = resumeFromPause;
-    state_.previewStartupVideoPrepareStarted_ = hasVideoMedia;
+    state_.previewStartupVideoPrepareStarted_ = state_.previewStageMediaHost_ != nullptr;
     state_.previewStartupVideoPrepared_ = false;
     state_.previewStartupVideoStarted_ = false;
     state_.previewStartupAudioGeneration_ = 0;
@@ -644,9 +644,10 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
         }
         state_.scene_->setPlayheadSeconds(visualStartSecond, true);
     }
-    if (hasVideoMedia && state_.previewStageMediaHost_ != nullptr) {
+    if (state_.previewStageMediaHost_ != nullptr) {
         // The stage-media callback stays on the GUI thread and remains part of
-        // the existing strong-group prepare/commit handshake.
+        // the existing strong-group prepare/commit handshake. Hide-PV still
+        // needs this so transportPlaying_ is armed and a later unhide can play.
         state_.previewStageMediaHost_->preparePlaybackStart(visualStartSecond, playbackTxn);
     }
     appendPreviewPlaybackLog(
