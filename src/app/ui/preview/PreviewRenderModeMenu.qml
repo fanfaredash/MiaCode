@@ -7,23 +7,8 @@ AppStickyPopup {
     id: root
 
     required property var previewSession
-    minimumWidth: 180
-
-    // The parameter sliders need the timeline brightness menu's 220 px of track.
-    readonly property int parameterRowWidth: 220
-    readonly property real rowWidth: Math.max(
-        180,
-        regularRow.implicitWidth,
-        muriRow.implicitWidth,
-        smoothSwitch.implicitWidth,
-        root.previewSession.muriCheckEnabled
-            ? root.parameterRowWidth + muriParameters.leftPadding + muriParameters.rightPadding
-            : 0
-    )
 
     contentItem: Column {
-        id: body
-        width: root.rowWidth
         spacing: 0
 
         component ModeRow: ChromeRow {
@@ -34,13 +19,20 @@ AppStickyPopup {
             required property bool active
 
             implicitHeight: 28
-            implicitWidth: 12 + 10 + modeLabel.implicitWidth + leftPadding + rightPadding
+            implicitWidth: Math.ceil(12 + 10 + labelMetrics.advanceWidth + leftPadding + rightPadding)
             leftPadding: 12
             rightPadding: 16
             selected: modeRow.active
             Accessible.name: modeRow.label
             Accessible.checkable: true
             Accessible.checked: modeRow.active
+
+            TextMetrics {
+                id: labelMetrics
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+                text: modeRow.label
+            }
 
             contentItem: Item {
                 Text {
@@ -68,11 +60,8 @@ AppStickyPopup {
                     font.pixelSize: Theme.uiFontSize
                 }
             }
-
         }
 
-        // Same layout as the timeline brightness menu's rows: title and live value
-        // on one line, the slider under it.
         component ParameterRow: Column {
             id: parameterRow
 
@@ -86,8 +75,24 @@ AppStickyPopup {
 
             spacing: 4
 
+            TextMetrics {
+                id: titleMetrics
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.compactFontSize
+                font.weight: Font.DemiBold
+                text: parameterRow.title
+            }
+
+            TextMetrics {
+                id: valueMetrics
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.compactFontSize
+                text: parameterRow.valueText
+            }
+
             Item {
                 width: parent.width
+                implicitWidth: titleMetrics.advanceWidth + 8 + valueMetrics.advanceWidth
                 implicitHeight: Math.max(parameterTitle.implicitHeight, parameterValue.implicitHeight)
 
                 Text {
@@ -124,8 +129,6 @@ AppStickyPopup {
                 value: parameterRow.value
                 onMoved: parameterRow.edited(Math.round(value))
 
-                // Dragging replaces the value binding; take the stored (possibly
-                // clamped) value back once the handle is released.
                 Connections {
                     target: root.previewSession
                     function onMuriParametersChanged() {
@@ -138,16 +141,14 @@ AppStickyPopup {
         }
 
         ModeRow {
-            id: regularRow
-            width: body.width
+            width: parent.width
             label: qsTrId("qml.normal_rendering")
             active: !root.previewSession.muriCheckEnabled
             onClicked: root.previewSession.setMuriCheckEnabled(false)
         }
 
         ModeRow {
-            id: muriRow
-            width: body.width
+            width: parent.width
             label: qsTrId("qml.muri_analysis")
             active: root.previewSession.muriCheckEnabled
             onClicked: root.previewSession.setMuriCheckEnabled(true)
@@ -171,7 +172,7 @@ AppStickyPopup {
         AppSwitch {
             id: smoothSwitch
             visible: !root.previewSession.muriCheckEnabled
-            width: body.width
+            width: parent.width
             leftPadding: 12
             rightPadding: 16
             text: qsTrId("qml.smooth_star_clear_animation")
@@ -194,7 +195,7 @@ AppStickyPopup {
         Column {
             id: muriParameters
             visible: root.previewSession.muriCheckEnabled
-            width: body.width
+            width: parent.width
             spacing: 8
             leftPadding: 12
             rightPadding: 16
@@ -202,12 +203,12 @@ AppStickyPopup {
             bottomPadding: 8
 
             readonly property var ranges: root.previewSession.muriParameterRanges
-            readonly property real rowContentWidth: width - leftPadding - rightPadding
+            readonly property real rowContentWidth: Math.max(0, width - leftPadding - rightPadding)
 
             ParameterRow {
+                id: handRow
                 width: muriParameters.rowContentWidth
                 title: qsTrId("qml.hand_radius")
-                // Shown as a share of the default hand (30 px = 100%).
                 valueText: qsTrId("qml.1").arg(Math.round(
                     root.previewSession.muriHandRadiusPx * 100 / muriParameters.ranges.handRadiusDefault))
                 from: muriParameters.ranges.handRadiusMin
@@ -218,6 +219,7 @@ AppStickyPopup {
             }
 
             ParameterRow {
+                id: tapRow
                 width: muriParameters.rowContentWidth
                 title: qsTrId("validation.tap_on_slide_threshold")
                 valueText: qsTrId("qml.milliseconds_value").arg(root.previewSession.muriTapOnSlideThresholdMs)

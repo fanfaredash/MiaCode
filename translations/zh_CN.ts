@@ -4590,8 +4590,8 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <translation>Simai 文件 (*.txt *.simai)</translation>
     </message>
     <message id="qml.smooth_star_clear_animation">
-        <source>Smooth star-clear animation</source>
-        <translation>平滑星星消去动画</translation>
+        <source>Smooth slide rendering</source>
+        <translation>平滑星星渲染</translation>
     </message>
     <message id="qml.software_decoding">
         <source>Software decoding</source>

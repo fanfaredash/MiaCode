@@ -26,11 +26,17 @@ MenuItem {
     // insert it into Menu and render the binding.
     property string shortcutText: ""
     property int difficultyId: 0
-    implicitWidth: Math.ceil(label.implicitWidth + chromeWidth
+    implicitWidth: Math.ceil(labelMetrics.advanceWidth + chromeWidth
                              + (shortcutLabel.text.length > 0 ? shortcutLabel.implicitWidth + row.spacing : 0))
     readonly property real chromeWidth: leftPadding + rightPadding
                                         + (checkable ? 12 + row.spacing : 0)
                                         + (difficultyId > 0 ? Theme.difficultySwatchSize + row.spacing : 0)
+
+    TextMetrics {
+        id: labelMetrics
+        font: root.font
+        text: root.text
+    }
 
     readonly property color labelColor: {
         if (!root.enabled)

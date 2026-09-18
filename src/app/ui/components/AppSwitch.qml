@@ -19,6 +19,15 @@ Switch {
     topPadding: 0
     bottomPadding: 0
     implicitHeight: Theme.controlMinHeight
+    implicitWidth: Math.ceil(leftPadding + rightPadding
+                             + (indicator ? indicator.implicitWidth : 0)
+                             + (root.text.length > 0 ? spacing + labelMetrics.advanceWidth : 0))
+
+    TextMetrics {
+        id: labelMetrics
+        font: root.font
+        text: root.text
+    }
 
     indicator: Rectangle {
         implicitWidth: 36

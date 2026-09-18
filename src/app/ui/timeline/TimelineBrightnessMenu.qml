@@ -1,13 +1,11 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import MiaCode.UI
 
 AppStickyPopup {
     id: root
 
     required property var stateBridge
-    minimumWidth: 180
     openAbove: true
 
     readonly property int brightnessPercentMin: 20
@@ -25,26 +23,46 @@ AppStickyPopup {
         return Math.max(root.brightnessPercentMin, Math.min(root.brightnessPercentMax, stepped)) / 100
     }
 
-    contentItem: ColumnLayout {
+    contentItem: Column {
         spacing: 8
-        width: 220
 
-        component BrightnessRow: ColumnLayout {
+        component BrightnessRow: Column {
             id: row
 
             required property string title
             required property real brightness
             signal brightnessEdited(real value)
 
+            width: parent.width
             spacing: 4
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
+            TextMetrics {
+                id: titleMetrics
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.compactFontSize
+                font.weight: Font.DemiBold
+                text: row.title
+            }
+
+            TextMetrics {
+                id: valueMetrics
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.compactFontSize
+                text: valueLabel.text
+            }
+
+            Item {
+                width: parent.width
+                implicitWidth: titleMetrics.advanceWidth + 8 + valueMetrics.advanceWidth
+                implicitHeight: Math.max(titleLabel.implicitHeight, valueLabel.implicitHeight)
 
                 Text {
-                    Layout.fillWidth: true
+                    id: titleLabel
+                    anchors.left: parent.left
+                    anchors.right: valueLabel.left
+                    anchors.rightMargin: 8
                     text: row.title
+                    elide: Text.ElideRight
                     color: Theme.colors.text.primary
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.compactFontSize
@@ -52,6 +70,8 @@ AppStickyPopup {
                 }
 
                 Text {
+                    id: valueLabel
+                    anchors.right: parent.right
                     text: qsTrId("qml.1").arg(Math.round(row.brightness * 100))
                     color: Theme.colors.text.secondary
                     font.family: Theme.uiFont
@@ -62,7 +82,7 @@ AppStickyPopup {
 
             AppSlider {
                 id: slider
-                Layout.fillWidth: true
+                width: parent.width
                 from: root.brightnessPercentMin
                 to: root.brightnessPercentMax
                 stepSize: root.brightnessPercentStep
@@ -87,14 +107,12 @@ AppStickyPopup {
         }
 
         BrightnessRow {
-            Layout.fillWidth: true
             title: qsTrId("shell.timeline_waveform_brightness")
             brightness: root.stateBridge ? root.stateBridge.waveformBrightness : 0.5
             onBrightnessEdited: value => root.stateBridge.waveformBrightness = value
         }
 
         BrightnessRow {
-            Layout.fillWidth: true
             title: qsTrId("shell.timeline_measure_line_brightness")
             brightness: root.stateBridge ? root.stateBridge.measureLineBrightness : 1.0
             onBrightnessEdited: value => root.stateBridge.measureLineBrightness = value

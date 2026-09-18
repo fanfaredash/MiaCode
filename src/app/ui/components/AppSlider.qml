@@ -3,26 +3,33 @@ import QtQuick.Controls
 import MiaCode.UI
 
 // Shared slider — geometry mirrors v1 formSliderStyleSheet.
+// Control 会把 background 拉到整颗滑条的尺寸，轨道必须画在内层，不能写在
+// background 根上，否则轨道会变成整块色条。
 Slider {
     id: root
 
     hoverEnabled: true
+    implicitHeight: 24
+    padding: 0
 
-    background: Rectangle {
-        x: root.leftPadding
-        y: root.topPadding + root.availableHeight / 2 - height / 2
+    background: Item {
         implicitWidth: 200
-        implicitHeight: 6
-        width: root.availableWidth
-        height: 6
-        radius: 3
-        color: Theme.overlayColor(Theme.colors.border.control)
+        implicitHeight: 24
 
         Rectangle {
-            width: root.visualPosition * parent.width
-            height: parent.height
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            height: 6
             radius: 3
-            color: Theme.colors.accent.primary
+            color: Theme.overlayColor(Theme.colors.border.control)
+
+            Rectangle {
+                width: root.visualPosition * parent.width
+                height: parent.height
+                radius: 3
+                color: Theme.colors.accent.primary
+            }
         }
     }
 

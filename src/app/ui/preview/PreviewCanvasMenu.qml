@@ -8,17 +8,12 @@ AppStickyPopup {
     required property var preferences
     required property var previewSession
     openAbove: true
-    minimumWidth: 180
 
     readonly property var mediaHost: root.previewSession ? root.previewSession.mediaHost : null
 
     contentItem: Column {
-        id: body
-        width: Math.max(180, freeAspectItem.implicitWidth, hidePvItem.implicitWidth)
-
         AppMenuItem {
-            id: freeAspectItem
-            width: body.width
+            width: parent.width
             text: qsTrId("preview.canvas.free_aspect")
             checkable: true
             checked: root.preferences && root.preferences.previewCanvasFreeAspect
@@ -32,7 +27,7 @@ AppStickyPopup {
 
         AppMenuItem {
             id: hidePvItem
-            width: body.width
+            width: parent.width
             text: qsTrId("preview.canvas.hide_pv")
             checkable: true
             enabled: !!(root.mediaHost && root.mediaHost.chartHasVideoBackground)
