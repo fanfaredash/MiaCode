@@ -78,6 +78,12 @@ MiaCode 是一款全功能的跨平台 maimai 谱面创作工具。项目基于 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1
 ```
+### ArchLinux
+
+-git版本已由@Small_Fox0305开发者发布并维护至AUR 执行以下命令即可安装
+```bash
+yay -S mia-code-git
+```
 
 ## 仓库结构
 
