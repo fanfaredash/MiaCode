@@ -73,6 +73,53 @@ bool PreviewStageMediaHost::hasVideoMedia() const
     return mediaKind_ == MediaKind::Video;
 }
 
+bool PreviewStageMediaHost::chartHasVideoBackground() const
+{
+    if (chartPath_.isEmpty()) {
+        return false;
+    }
+    QString resolved = miacode::chart_assets::resolveChartVideoPath(
+        chartPath_, chartVideoOverridePath_);
+    if (resolved.isEmpty()) {
+        resolved = resolveMediaPath(chartPath_);
+    }
+    return miacode::chart_assets::isVideoBackgroundPath(resolved);
+}
+
+bool PreviewStageMediaHost::hidePv() const
+{
+    return hidePv_;
+}
+
+void PreviewStageMediaHost::setHidePv(bool hide)
+{
+    if (hidePv_ == hide) {
+        return;
+    }
+    hidePv_ = hide;
+    emit hidePvChanged();
+    if (chartPath_.isEmpty()) {
+        return;
+    }
+    const double restoreSecond = qMax(0.0, observedPlayheadSecond_);
+    const bool restorePlaying = videoPlaybackActive_ || transportPlaying_;
+    const QString chart = chartPath_;
+    const QString override = chartVideoOverridePath_;
+    chartPath_.clear();
+    mediaStamp_.clear();
+    setChartPath(chart, override);
+    observedPlayheadSecond_ = restoreSecond;
+    lastTimelineSecond_ = restoreSecond;
+    if (mediaKind_ != MediaKind::Video) {
+        return;
+    }
+    if (restorePlaying) {
+        startPlayback(restoreSecond);
+    } else {
+        setPlayheadSeconds(restoreSecond);
+    }
+}
+
 
 QImage PreviewStageMediaHost::currentBackgroundImage() const
 {
@@ -202,11 +249,7 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath,
     // heuristic; fall back to the legacy resolver for image-only backgrounds.
     QString resolvedPath;
     if (!normalizedChartPath.isEmpty()) {
-        resolvedPath = miacode::chart_assets::resolveChartVideoPath(
-            normalizedChartPath, chartVideoOverridePath);
-        if (resolvedPath.isEmpty()) {
-            resolvedPath = resolveMediaPath(normalizedChartPath);
-        }
+        resolvedPath = resolveStageMediaPath(normalizedChartPath, chartVideoOverridePath);
     }
     const QString mediaStamp = miacode::fs::fileContentStamp(resolvedPath);
     if (normalizedChartPath == chartPath_
@@ -418,6 +461,21 @@ QString PreviewStageMediaHost::resolveMediaPath(const QString& chartPath) const
     // was shadowed by the stale cached path. Always resolve live; same-content
     // re-decode is avoided by the content-stamp check in setChartPath().
     return miacode::chart_assets::resolveBackgroundMediaPath(chartPath);
+}
+
+QString PreviewStageMediaHost::resolveStageMediaPath(
+    const QString& chartPath, const QString& chartVideoOverridePath) const
+{
+    QString resolved = miacode::chart_assets::resolveChartVideoPath(
+        chartPath, chartVideoOverridePath);
+    if (resolved.isEmpty()) {
+        resolved = resolveMediaPath(chartPath);
+    }
+    if (!hidePv_ || !miacode::chart_assets::isVideoBackgroundPath(resolved)) {
+        return resolved;
+    }
+    return miacode::chart_assets::resolveBackgroundMediaPath(
+        chartPath, /*includeVideoCandidates=*/false);
 }
 
 

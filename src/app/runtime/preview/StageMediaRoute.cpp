@@ -13,6 +13,7 @@
 #include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
+#include "preferences/PreferenceDocument.h"
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
@@ -327,6 +328,12 @@ void miacode::runtime::StageMediaHost::ensurePreviewStageMediaHostInitialized()
     // setter early-returns when the value is unchanged, which would skip the
     // initial host hand-off when the cached value equals the default (false).
     state_.previewStageMediaHost_->setVideoDecodePreference(session_.currentVideoDecodePrefersSoftware());
+    {
+        const QJsonObject ui = PreferenceDocument::loadPreferencesObject()
+                                   .value(QLatin1String("ui")).toObject();
+        state_.previewStageMediaHost_->setHidePv(
+            ui.value(QLatin1String("preview_hide_pv")).toBool(false));
+    }
     QObject::connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::mediaStateChanged, &session_, [this]() {
         applyPreviewStageMediaRouteVisualSettings();
         refreshQuickShellPreviewCompositeSurfaceState();

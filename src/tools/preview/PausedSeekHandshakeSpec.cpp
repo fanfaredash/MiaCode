@@ -47,6 +47,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -141,6 +142,31 @@ int main(int argc, char** argv)
               "with (PlaybackCoordinator::handlePausedPreviewMediaSeekCompleted checks this "
               "against state_.pausedSeekMediaSubmittedGeneration_ and drops stale acks)");
     }
+
+    QTemporaryDir hidePvDir;
+    check(hidePvDir.isValid(), "hide-pv fixture dir");
+    const QString hideChart = QDir(hidePvDir.path()).filePath(QStringLiteral("chart.txt"));
+    const QString hideVideo = QDir(hidePvDir.path()).filePath(QStringLiteral("pv.mp4"));
+    const QString hideStill = QDir(hidePvDir.path()).filePath(QStringLiteral("bg.png"));
+    check(writeFile(hideChart, QByteArrayLiteral("&title=hide\n")), "hide-pv chart written");
+    check(writeFile(hideVideo, QByteArrayLiteral("pv")), "hide-pv pv.mp4 written");
+    check(writeFile(hideStill, QByteArrayLiteral("png")), "hide-pv bg.png written");
+
+    PreviewStageMediaHost hideHost;
+    hideHost.setChartPath(hideChart);
+    check(hideHost.hasVideoMedia(), "pv.mp4 sibling plays as video");
+    check(hideHost.chartHasVideoBackground(), "chart reports a video background file");
+    hideHost.setHidePv(true);
+    check(!hideHost.hasVideoMedia(), "hide PV loads the still background");
+    check(hideHost.chartHasVideoBackground(), "hide PV still reports the video file");
+    check(hideHost.imageSource().toLocalFile() == QFileInfo(hideStill).absoluteFilePath(),
+          "hide PV resolves to bg.png");
+    hideHost.setObservedPlayheadSecond(12.5);
+    hideHost.setHidePv(true);
+    hideHost.setHidePv(false);
+    check(hideHost.hasVideoMedia(), "turning hide PV off restores video");
+    check(qAbs(hideHost.currentPlaybackSecond() - 12.5) < 0.05,
+          "turning hide PV off seeks the video to the current playhead");
 
     QTextStream(stdout) << (g_failures == 0 ? "ALL PASS\n"
                                             : QStringLiteral("%1 FAILURE(S)\n").arg(g_failures));

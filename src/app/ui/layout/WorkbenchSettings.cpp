@@ -25,6 +25,7 @@ constexpr auto kBottomPanelVisible = "bottom_panel_visible";
 constexpr auto kBottomPanelHeightRatio = "bottom_panel_height_ratio";
 constexpr auto kPreviewWidthRatio = "preview_width_ratio";
 constexpr auto kPreviewCanvasFreeAspect = "preview_canvas_free_aspect";
+constexpr auto kPreviewHidePv = "preview_hide_pv";
 constexpr auto kFontSize = "ui_font_size";
 constexpr auto kEditorScrollPastEnd = "editor_scroll_past_end";
 constexpr auto kEditorSelectionBeatDisplay = "editor_selection_beat_display";
@@ -99,6 +100,7 @@ WorkbenchSettings::WorkbenchSettings(QObject* parent)
                                 kPreviewMaximumWidthRatio);
     previewCanvasFreeAspect_ = jsonBool(ui, kPreviewCanvasFreeAspect, legacySettings,
                                         kLegacyPreviewCanvasFreeAspect, false);
+    previewHidePv_ = jsonBool(ui, kPreviewHidePv, legacySettings, kPreviewHidePv, false);
     fontSize_ = qBound(12, jsonInt(ui, kFontSize, legacySettings, kLegacyFontSize, 13), 14);
     if (!ui.contains(QLatin1String(kSidebarVisible))
         || !ui.contains(QLatin1String(kSidebarWidth))
@@ -180,6 +182,7 @@ double WorkbenchSettings::previewWidthRatio() const { return previewWidthRatio_;
 double WorkbenchSettings::previewMinimumWidthRatio() const { return kPreviewMinimumWidthRatio; }
 double WorkbenchSettings::previewMaximumWidthRatio() const { return kPreviewMaximumWidthRatio; }
 bool WorkbenchSettings::previewCanvasFreeAspect() const { return previewCanvasFreeAspect_; }
+bool WorkbenchSettings::previewHidePv() const { return previewHidePv_; }
 QString WorkbenchSettings::uiFontFamily() const { return uiFontFamily_; }
 QString WorkbenchSettings::themeModeToken() const
 {
@@ -366,6 +369,14 @@ void WorkbenchSettings::setPreviewCanvasFreeAspect(bool value)
     previewCanvasFreeAspect_ = value;
     storeUiValue(kPreviewCanvasFreeAspect, value);
     emit previewCanvasFreeAspectChanged();
+}
+
+void WorkbenchSettings::setPreviewHidePv(bool value)
+{
+    if (previewHidePv_ == value) return;
+    previewHidePv_ = value;
+    storeUiValue(kPreviewHidePv, value);
+    emit previewHidePvChanged();
 }
 
 void WorkbenchSettings::setEditorAppearance(int pointSize, double lineSpacingFactor)

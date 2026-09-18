@@ -33,6 +33,8 @@ class PreviewStageMediaHost : public QObject
     Q_OBJECT
     Q_PROPERTY(bool hasResolvedMedia READ hasResolvedMedia NOTIFY mediaStateChanged)
     Q_PROPERTY(bool hasVideoMedia READ hasVideoMedia NOTIFY mediaStateChanged)
+    Q_PROPERTY(bool chartHasVideoBackground READ chartHasVideoBackground NOTIFY mediaStateChanged)
+    Q_PROPERTY(bool hidePv READ hidePv WRITE setHidePv NOTIFY hidePvChanged)
     Q_PROPERTY(bool mediaVisible READ mediaVisible WRITE setMediaVisible NOTIFY mediaVisibilityChanged)
     Q_PROPERTY(QUrl imageSource READ imageSource NOTIFY imageSourceChanged)
     Q_PROPERTY(int backgroundScaleMode READ backgroundScaleMode WRITE setBackgroundScaleModeValue NOTIFY backgroundScaleModeChanged)
@@ -63,6 +65,9 @@ public:
 
     bool hasResolvedMedia() const;
     bool hasVideoMedia() const;
+    bool chartHasVideoBackground() const;
+    bool hidePv() const;
+    void setHidePv(bool hide);
     bool mediaVisible() const;
     void setMediaVisible(bool visible);
     QUrl imageSource() const;
@@ -159,6 +164,7 @@ public:
 
 signals:
     void mediaStateChanged();
+    void hidePvChanged();
     void mediaVisibilityChanged();
     void imageSourceChanged();
     void backgroundScaleModeChanged();
@@ -173,6 +179,7 @@ private:
 
     void clearMedia();
     QString resolveMediaPath(const QString& chartPath) const;
+    QString resolveStageMediaPath(const QString& chartPath, const QString& chartVideoOverridePath) const;
     void loadImageMedia(const QString& path);
     void loadVideoMedia(const QString& path);
     void bindVideoOutput();
@@ -281,6 +288,7 @@ private:
     QElapsedTimer videoFrameToImageThrottle_;
     double videoFrameToImageMaxFps_ = 30.0;
     bool mediaVisible_ = true;
+    bool hidePv_ = false;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     double layoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
 #ifdef MIACODE_USE_QTAVPLAYER
@@ -351,6 +359,7 @@ private:
     int consecutiveVideoBackendRecoveryCount_ = 0;
     int consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
     bool videoPlaybackActive_ = false;
+    bool transportPlaying_ = false;
     bool videoPlaybackPendingStart_ = false;
     double observedPlayheadSecond_ = 0.0;
     double clockDeltaSeconds_ = 0.0;

@@ -17,10 +17,7 @@ using namespace miacode::runtime::shared;
 
 double miacode::runtime::PlaybackCoordinator::previewDurationSeconds() const
 {
-    // Unified content-duration policy = max(chartEnd + tail, music) — see
-    // common/ContentDurationConfig.h. The chart end is the timeline bridge's
-    // durationSeconds (last note/beat/measure); the runtime cursors below are
-    // maxed in WITHOUT the tail so the range merely covers an active playhead.
+    // Unified content-duration policy = max(chartEnd + tail, music).
     double chartEndSeconds = 0.0;
     if (state_.timelineQuickStateBridge_ != nullptr) {
         chartEndSeconds = qMax(chartEndSeconds, state_.timelineQuickStateBridge_->durationSeconds());
@@ -30,11 +27,6 @@ double miacode::runtime::PlaybackCoordinator::previewDurationSeconds() const
     if (state_.playing_ && state_.qtPreviewPlaybackEndSecond_ > 0.0) {
         duration = qMax(duration, state_.qtPreviewPlaybackEndSecond_);
     }
-    if (state_.timelineQuickStateBridge_ != nullptr) {
-        duration = qMax(duration, state_.timelineQuickStateBridge_->playheadSeconds());
-        duration = qMax(duration, state_.timelineQuickStateBridge_->playbackEntrySeconds());
-    }
-    duration = qMax(duration, qMax(0.0, state_.pauseSecond_));
     return qMax(0.0, duration);
 }
 

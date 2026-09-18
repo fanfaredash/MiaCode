@@ -922,7 +922,10 @@ void miacode::runtime::PlaybackCoordinator::dispatchTimelineSlowRefresh()
                 if (state_.pendingDifficultySwitchPreviewRestore_
                     && state_.pendingDifficultySwitchPreviewRestoreRevision_ == request.revision
                     && state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ == request.difficultyId) {
-                    const double restoreSecond = state_.pendingDifficultySwitchPreviewRestoreSecond_;
+                    const double restoreSecond = qBound(
+                        0.0,
+                        state_.pendingDifficultySwitchPreviewRestoreSecond_,
+                        previewPlaybackEndSeconds());
                     state_.pendingDifficultySwitchPreviewRestore_ = false;
                     state_.pendingDifficultySwitchPreviewRestoreRevision_ = 0;
                     state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ = 0;

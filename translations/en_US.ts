@@ -4061,25 +4061,29 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Free Aspect</source>
         <translation>Free Aspect</translation>
     </message>
+    <message id="preview.canvas.hide_pv">
+        <source>Hide PV</source>
+        <translation>Hide PV</translation>
+    </message>
     <message id="preview.canvas.menu_description">
-        <source>Open preview canvas menu</source>
-        <translation>Open preview canvas menu</translation>
+        <source>Open picture options</source>
+        <translation>Open picture options</translation>
     </message>
     <message id="preview.canvas.menu_tooltip">
-        <source>Preview canvas</source>
-        <translation>Preview canvas</translation>
+        <source>Picture Options</source>
+        <translation>Picture Options</translation>
     </message>
     <message id="preview.fullscreen.enter_tooltip">
-        <source>Open fullscreen preview</source>
-        <translation>Open fullscreen preview</translation>
+        <source>Fullscreen</source>
+        <translation>Fullscreen</translation>
     </message>
     <message id="preview.fullscreen.exit_hint">
         <source>Press Esc to exit fullscreen</source>
         <translation>Press Esc to exit fullscreen</translation>
     </message>
     <message id="preview.fullscreen.exit_tooltip">
-        <source>Exit fullscreen preview (Esc)</source>
-        <translation>Exit fullscreen preview (Esc)</translation>
+        <source>Exit fullscreen (Esc)</source>
+        <translation>Exit fullscreen (Esc)</translation>
     </message>
     <message id="preview.fullscreen.window_title">
         <source>Fullscreen Preview</source>
@@ -4286,8 +4290,8 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <translation>Errors</translation>
     </message>
     <message id="qml.exit_fullscreen_preview">
-        <source>Exit fullscreen preview</source>
-        <translation>Exit fullscreen preview</translation>
+        <source>Exit fullscreen</source>
+        <translation>Exit fullscreen</translation>
     </message>
     <message id="qml.expand_bookmarks">
         <source>Expand bookmarks</source>

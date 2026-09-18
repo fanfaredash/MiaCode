@@ -461,6 +461,7 @@ void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 void PreviewStageMediaHost::startPlayback(double seconds)
 {
     MC_OP("PreviewStageMediaHost::startPlayback");
+    transportPlaying_ = true;
     recordPvMemoryBoundary(PvMemoryBoundary::Play);
     // This start owns the transport from here; a stale-EndOfMedia recovery seek still
     // in flight must not resume on this start's own seek acknowledgement.
@@ -908,7 +909,9 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
 
 void PreviewStageMediaHost::pausePlayback()
 {
-    observedPlayheadSecond_ = currentPlaybackSecond();
+    if (mediaKind_ == MediaKind::Video && player_ != nullptr) {
+        observedPlayheadSecond_ = currentPlaybackSecond();
+    }
     recordPvMemoryBoundary(PvMemoryBoundary::Pause);
 #ifndef HAVE_QT_MULTIMEDIA
     return;
@@ -922,6 +925,7 @@ void PreviewStageMediaHost::pausePlayback()
     staleEndOfMediaResumePending_ = false;
     ++staleEndOfMediaResumeSerial_;
     videoPlaybackActive_ = false;
+    transportPlaying_ = false;
     videoPlaybackPendingStart_ = false;
     videoPlaybackActiveElapsed_.invalidate();
     ++videoPlaybackWatchdogSerial_;

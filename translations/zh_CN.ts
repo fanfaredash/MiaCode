@@ -4061,25 +4061,29 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Free Aspect</source>
         <translation>自由比例</translation>
     </message>
+    <message id="preview.canvas.hide_pv">
+        <source>Hide PV</source>
+        <translation>隐藏PV</translation>
+    </message>
     <message id="preview.canvas.menu_description">
-        <source>Open preview canvas menu</source>
-        <translation>打开预览画布菜单</translation>
+        <source>Open picture options</source>
+        <translation>打开画面选项</translation>
     </message>
     <message id="preview.canvas.menu_tooltip">
-        <source>Preview canvas</source>
-        <translation>预览画布</translation>
+        <source>Picture Options</source>
+        <translation>画面选项</translation>
     </message>
     <message id="preview.fullscreen.enter_tooltip">
-        <source>Open fullscreen preview</source>
-        <translation>打开全屏预览</translation>
+        <source>Fullscreen</source>
+        <translation>全屏</translation>
     </message>
     <message id="preview.fullscreen.exit_hint">
         <source>Press Esc to exit fullscreen</source>
         <translation>按 Esc 退出全屏</translation>
     </message>
     <message id="preview.fullscreen.exit_tooltip">
-        <source>Exit fullscreen preview (Esc)</source>
-        <translation>退出全屏预览（Esc）</translation>
+        <source>Exit fullscreen (Esc)</source>
+        <translation>退出全屏（Esc）</translation>
     </message>
     <message id="preview.fullscreen.window_title">
         <source>Fullscreen Preview</source>
@@ -4286,8 +4290,8 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <translation>错误</translation>
     </message>
     <message id="qml.exit_fullscreen_preview">
-        <source>Exit fullscreen preview</source>
-        <translation>退出全屏预览</translation>
+        <source>Exit fullscreen</source>
+        <translation>退出全屏</translation>
     </message>
     <message id="qml.expand_bookmarks">
         <source>Expand bookmarks</source>

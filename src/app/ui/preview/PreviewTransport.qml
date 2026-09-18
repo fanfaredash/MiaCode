@@ -56,10 +56,13 @@ Item {
 
     // Shorten "pos / dur" only when the control row would actually collide —
     // independent of NoteStatistics column switching.
-    readonly property int _visibleButtonCount: 3 + (canvasMenuButton.visible ? 1 : 0)
+    readonly property int _visibleButtonCount: 3
+        + (canvasMenuButton.visible ? 1 : 0)
+        + (fullscreenButton.visible ? 1 : 0)
     readonly property real _fixedChromeWidth: stopButton.implicitWidth + playButton.implicitWidth
         + rateButton.implicitWidth
         + (canvasMenuButton.visible ? canvasMenuButton.implicitWidth : 0)
+        + (fullscreenButton.visible ? fullscreenButton.implicitWidth : 0)
         + transportRow.spacing * _visibleButtonCount
     readonly property real minimumWidth: _fixedChromeWidth + 16 + 40
     readonly property bool timeFitsFull: {
@@ -194,6 +197,16 @@ Item {
                 canvasMenu.openAt(canvasMenuButton)
             }
         }
+
+        IconButton {
+            id: fullscreenButton
+            Layout.preferredWidth: implicitWidth
+            Layout.preferredHeight: implicitHeight
+            visible: root.showCanvasMenuButton
+            iconSource: Qt.resolvedUrl("icons/fullscreen.svg")
+            tooltip: qsTrId("preview.fullscreen.enter_tooltip")
+            onClicked: root.fullscreenRequested()
+        }
     }
 
     PreviewRateMenu {
@@ -204,6 +217,6 @@ Item {
     PreviewCanvasMenu {
         id: canvasMenu
         preferences: root.preferences
-        onFullscreenRequested: root.fullscreenRequested()
+        previewSession: root.previewSession
     }
 }

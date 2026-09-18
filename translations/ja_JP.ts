@@ -4061,25 +4061,29 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Free Aspect</source>
         <translation>フリーアスペクト</translation>
     </message>
+    <message id="preview.canvas.hide_pv">
+        <source>Hide PV</source>
+        <translation>PVを非表示</translation>
+    </message>
     <message id="preview.canvas.menu_description">
-        <source>Open preview canvas menu</source>
-        <translation>プレビューキャンバスメニューを開く</translation>
+        <source>Open picture options</source>
+        <translation>画面オプションを開く</translation>
     </message>
     <message id="preview.canvas.menu_tooltip">
-        <source>Preview canvas</source>
-        <translation>プレビューキャンバス</translation>
+        <source>Picture Options</source>
+        <translation>画面オプション</translation>
     </message>
     <message id="preview.fullscreen.enter_tooltip">
-        <source>Open fullscreen preview</source>
-        <translation>全画面表示を開く</translation>
+        <source>Fullscreen</source>
+        <translation>全画面</translation>
     </message>
     <message id="preview.fullscreen.exit_hint">
         <source>Press Esc to exit fullscreen</source>
         <translation>Esc で全画面を終了</translation>
     </message>
     <message id="preview.fullscreen.exit_tooltip">
-        <source>Exit fullscreen preview (Esc)</source>
-        <translation>全画面表示を終了（Esc）</translation>
+        <source>Exit fullscreen (Esc)</source>
+        <translation>全画面を終了（Esc）</translation>
     </message>
     <message id="preview.fullscreen.window_title">
         <source>Fullscreen Preview</source>
@@ -4286,8 +4290,8 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <translation>エラー</translation>
     </message>
     <message id="qml.exit_fullscreen_preview">
-        <source>Exit fullscreen preview</source>
-        <translation>全画面プレビューを終了</translation>
+        <source>Exit fullscreen</source>
+        <translation>全画面を終了</translation>
     </message>
     <message id="qml.expand_bookmarks">
         <source>Expand bookmarks</source>
