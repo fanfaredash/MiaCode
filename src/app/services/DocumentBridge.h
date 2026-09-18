@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
 
 #include <QPair>
@@ -102,18 +101,6 @@ public:
     // Call it only between transactions: a half-applied designer edit looks
     // exactly like a document that diverged.
     virtual void reconcileUnifiedDocumentDesigner(UnifiedDesignerReconcileReason reason) = 0;
-
-    // ---- chart drop ----
-    //
-    // Dropping audio onto the root window creates a chart beside it. This is
-    // document work, not window work: the bootstrap only happens to be where
-    // the OS drag route lands.
-    virtual void importDroppedAudio(const QStringList& audioPaths, quint64 requestId,
-                                    quint64 generation,
-                                    ChartDropImportService::Completion completion) = 0;
-    // Invalidates any in-flight import so a late callback cannot reach a
-    // half-destroyed shell.
-    virtual void releaseChartDropImport() = 0;
 
 protected:
     DocumentBridge() = default;

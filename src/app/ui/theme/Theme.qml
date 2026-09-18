@@ -38,6 +38,7 @@ QtObject {
             lineNumber: "#858889",
             heading: "#FFFFFF",
             onAccent: "#FFFFFF",
+            onDanger: "#FFFFFF",
             status: "#AEAEAE",
             chrome: "#AEAEAE"
         },
@@ -99,6 +100,14 @@ QtObject {
             pressed: "#236888",
             selected: "#307E9F"
         },
+        danger: {
+            primary: "#C4453C"
+        },
+        dangerState: {
+            hover: "#D4544B",
+            pressed: "#A83A33",
+            selected: "#C4453C"
+        },
         syntax: {
             keyword: "#F5AE9C",
             comment: "#71B77A",
@@ -157,6 +166,7 @@ QtObject {
             lineNumber: "#6D7A89",
             heading: "#2F3B4A",
             onAccent: "#FFFFFF",
+            onDanger: "#FFFFFF",
             status: "#FFFFFF",
             chrome: "#3D4856"
         },
@@ -215,6 +225,14 @@ QtObject {
             pressed: "#405B80",
             selected: "#526F98"
         },
+        danger: {
+            primary: "#C4473F"
+        },
+        dangerState: {
+            hover: "#D4564D",
+            pressed: "#A83C36",
+            selected: "#C4473F"
+        },
         syntax: {
             keyword: "#4B69C6",
             comment: "#448C27",
@@ -270,6 +288,7 @@ QtObject {
             lineNumber: "#7A8796",
             heading: "#203040",
             onAccent: "#FFFFFF",
+            onDanger: "#FFFFFF",
             status: "#5F6B7A",
             chrome: "#5F6B7A"
         },
@@ -328,6 +347,14 @@ QtObject {
             pressed: "#2668B9",
             selected: "#2E77D0"
         },
+        danger: {
+            primary: "#C4473F"
+        },
+        dangerState: {
+            hover: "#D4564D",
+            pressed: "#A83C36",
+            selected: "#C4473F"
+        },
         syntax: {
             keyword: "#4B69C6",
             comment: "#448C27",
@@ -381,6 +408,7 @@ QtObject {
             lineNumber: "#8091A5",
             heading: "#E6EEF8",
             onAccent: "#F7FBFF",
+            onDanger: "#F7FBFF",
             status: "#A9B6C6",
             chrome: "#A9B6C6"
         },
@@ -438,6 +466,14 @@ QtObject {
             hover: "#67A1F1",
             pressed: "#3E79D0",
             selected: "#4F8FEC"
+        },
+        danger: {
+            primary: "#D15A50"
+        },
+        dangerState: {
+            hover: "#E26A60",
+            pressed: "#B84C44",
+            selected: "#D15A50"
         },
         syntax: {
             keyword: "#F29A83",

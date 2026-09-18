@@ -183,6 +183,7 @@ public:
     // name unless it already has it.
     // The unsaved-changes guard belongs to the caller in CommandService.
     Q_INVOKABLE void createDocumentFromPickedAudio();
+    void handleDroppedFile(const QString& path, std::function<void()> finished);
     Q_INVOKABLE void selectDifficulty(int id);
     Q_INVOKABLE bool addDifficulty(int id);
     Q_INVOKABLE bool removeDifficulty(int id);
@@ -318,9 +319,14 @@ private:
     // makes it a continuation like the rest of this flow. Without this, 保存 on
     // a never-saved chart wrote nothing and said nothing: the file service
     // refused an empty path and the prompt just went away.
-    void createChartBesideAudio(const QString& audioPath);
+    void createChartBesideAudio(const QString& audioPath, bool overwriteExisting = false);
     void ensureTrackCopyThenCreate(const QString& audioPath, const QString& targetPath);
-    void createEmptyDocumentAt(const QString& targetPath);
+    void createEmptyDocumentAt(const QString& targetPath, const QString& sourceAudioPath);
+    void handleDroppedAudio(const QString& audioPath, std::function<void()> finished);
+    void leaveThenCreateDroppedChart(const QString& audioPath, bool overwriteExisting,
+                                     std::function<void()> finished);
+    void createDroppedChartInNewFolder(const QString& audioPath, const QString& targetDirectory,
+                                       std::function<void()> finished);
     void saveSectionOrAskForPath(int difficultyId, std::function<void(bool)> onSaved);
     void requestLeaveSection(int difficultyId, std::function<void(bool)> onDecided);
     bool closeDecisionPending_ = false;

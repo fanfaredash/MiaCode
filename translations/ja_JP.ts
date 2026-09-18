@@ -2525,77 +2525,45 @@ Line %2 · double-click to rename</source>
         <source>When checked, &amp;des and every &amp;des_N stay identical.</source>
         <translation>チェックすると &amp;des と各難易度の &amp;des_N が一致します。</translation>
     </message>
-    <message id="drop_chart.confirm_switch">
-        <source>Open the first newly created chart? (%1 chart(s))</source>
-        <translation>最初に作成した譜面を開きますか？（合計 %1 個）</translation>
-    </message>
-    <message id="drop_chart.create_chart_file">
-        <source>Create Chart File</source>
-        <translation>譜面ファイルを作成</translation>
-    </message>
-    <message id="drop_chart.create_failed">
-        <source>The chart could not be created. No incomplete project was kept.</source>
-        <translation>譜面を作成できませんでした。不完全な譜面プロジェクトは残していません。</translation>
-    </message>
-    <message id="drop_chart.created_chart">
-        <source>Created %1 new chart(s).</source>
-        <translation>%1 個の新しい譜面を作成しました。</translation>
-    </message>
-    <message id="drop_chart.created_title">
-        <source>Charts Created</source>
-        <translation>譜面を作成しました</translation>
-    </message>
-    <message id="drop_chart.created_with_failures">
-        <source>Created %1 chart(s), but %2 could not be created. No incomplete project was kept.</source>
-        <translation>%1 個の譜面を作成しましたが、%2 個は作成できませんでした。不完全な譜面プロジェクトは残していません。</translation>
-    </message>
-    <message id="drop_chart.drop_hint">
-        <source>Release to create a new chart project</source>
-        <translation>マウスを離すと新しい譜面プロジェクトを作成します</translation>
-    </message>
-    <message id="drop_chart.error.title">
-        <source>Chart Creation Failed</source>
-        <translation>譜面の作成に失敗</translation>
-    </message>
-    <message id="drop_chart.preview.create">
-        <source>Create %1 Chart(s)</source>
-        <translation>%1 個の譜面を作成</translation>
-    </message>
-    <message id="drop_chart.preview.message">
-        <source>Create %1 chart(s) at:
-
-</source>
-        <translation>次の場所に %1 個の譜面を作成します：
-
-</translation>
+    <message id="drop_chart.overwrite">
+        <source>Overwrite</source>
+        <translation>上書き</translation>
     </message>
     <message id="drop_chart.preview.title">
-        <source>Prepare Charts</source>
-        <translation>譜面作成の確認</translation>
+        <source>New or Open Chart</source>
+        <translation>譜面を新規作成または開く</translation>
+    </message>
+    <message id="drop_chart.preview.create_title">
+        <source>New Chart</source>
+        <translation>譜面を新規作成</translation>
+    </message>
+    <message id="drop_chart.preview.open_title">
+        <source>Open Chart</source>
+        <translation>譜面を開く</translation>
+    </message>
+    <message id="drop_chart.preview.create_here">
+        <source>The chart will be created here:
+
+%1</source>
+        <translation>次の場所に譜面を新規作成します：
+
+%1</translation>
     </message>
     <message id="drop_chart.preview.existing_project">
-        <source>Existing chart files or project data:</source>
-        <translation>既存の譜面ファイルまたはプロジェクトデータ：</translation>
-    </message>
-    <message id="drop_chart.preview.overwrite_question">
-        <source>These files will be overwritten. Continue?</source>
-        <translation>上記のファイルを上書きします。続行しますか？</translation>
-    </message>
-    <message id="drop_chart.preview.multiple_audio">
-        <source>Multiple audio files remain in this directory:</source>
-        <translation>このフォルダーには複数の音声ファイルが残っています：</translation>
+        <source>This folder already has a chart:
+
+%1</source>
+        <translation>このフォルダーには既に譜面があります：
+
+%1</translation>
     </message>
     <message id="drop_chart.preview.create_folder">
-        <source>Create a separate chart folder for this audio?</source>
-        <translation>この音声用に譜面フォルダーを作成しますか？</translation>
+        <source>New Folder</source>
+        <translation>別フォルダーを作成</translation>
     </message>
     <message id="drop_chart.preview.single_track">
-        <source>The current directory already contains %1. Create a separate chart folder for this audio?
-
-%2</source>
-        <translation>現在のフォルダーには%1が存在します。この音声用に独立した譜面フォルダーを作成しますか？
-
-%2</translation>
+        <source>This folder already has %1. Create a separate chart folder?</source>
+        <translation>このフォルダーには既に %1 があります。別フォルダーを作成しますか？</translation>
     </message>
     <message id="editor.bookmark.delete">
         <source>Delete Bookmark</source>

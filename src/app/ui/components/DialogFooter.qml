@@ -46,6 +46,7 @@ Item {
                 width: Math.min(implicitWidth, row.width)
                 enabled: modelData.enabled !== false
                 emphasized: modelData.role === "accept"
+                destructive: modelData.role === "destructive"
                 onClicked: {
                     root.chosen(modelData.id)
                     if (modelData.id === "accept") root.accepted()

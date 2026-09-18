@@ -203,17 +203,18 @@ bool Bootstrap::start(const QString& startupOpenTarget)
             },
             [this](const QStringList& paths, quint64 requestId, quint64 generation,
                    std::function<void(const miacode::ui::ChartDropResult&)> done) {
-                applicationServices_->documentBridge()->importDroppedAudio(
-                    paths,
-                    requestId,
-                    generation,
-                    [done = std::move(done)](const miacode::ChartDropImportResult& result) mutable {
-                        if (done) {
-                            done({result.requestId, result.generation, result.accepted,
-                                  result.completed, result.cancelled, result.createdCount,
-                                  result.failedCount, result.targetPath});
-                        }
-                    });
+                auto* document = qobject_cast<DocumentModel*>(applicationContext_->document());
+                if (document == nullptr || paths.size() != 1) {
+                    if (done) {
+                        done({requestId, generation, false, true, false, 0, 1, {}});
+                    }
+                    return;
+                }
+                document->handleDroppedFile(paths.first(), [done, requestId, generation]() {
+                    if (done) {
+                        done({requestId, generation, true, true, false, 0, 0, {}});
+                    }
+                });
             },
             [](const miacode::ui::ChartDropResult&) {},
             this);
@@ -333,7 +334,6 @@ void Bootstrap::beginAcceptedRootWindowShutdown(const QString& source)
     }
     if (applicationServices_ != nullptr && applicationServices_->documentBridge() != nullptr
         && applicationServices_->previewSurface() != nullptr) {
-        applicationServices_->documentBridge()->releaseChartDropImport();
         applicationServices_->previewSurface()->prepareForShutdown();
     }
 
@@ -376,10 +376,6 @@ void Bootstrap::releaseRootWindowResources()
 {
     if (!rootLifecycle_.beginRelease()) {
         return;
-    }
-    if (applicationServices_ != nullptr
-        && applicationServices_->documentBridge() != nullptr) {
-        applicationServices_->documentBridge()->releaseChartDropImport();
     }
     if (chartDropBridge_ != nullptr) {
         chartDropBridge_->release();

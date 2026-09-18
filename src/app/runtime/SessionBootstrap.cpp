@@ -76,7 +76,6 @@ Session::Session(miacode::ApplicationServices& services, QObject* parent)
     // the non-Widget assembly (stage 3.5 item 1). The window only connects to
     // them.
     editorSyncController_ = &applicationServices_.editorSync();
-    chartDropImportService_ = &applicationServices_.chartDropImport();
     connect(editorSyncController_, &miacode::EditorSyncController::editorContextChanged,
             this, &Session::refreshEditorAuthoringContext);
     connect(editorSyncController_, &miacode::EditorSyncController::caretLocationPublished,

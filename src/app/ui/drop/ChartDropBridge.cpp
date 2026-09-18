@@ -53,25 +53,33 @@ ChartDropBridge::~ChartDropBridge()
     release();
 }
 
+bool ChartDropBridge::chartDocumentDrag() const
+{
+    return acceptedPaths_.size() == 1
+        && miacode::chart_assets::isChartDocumentPath(acceptedPaths_.constFirst());
+}
+
 QStringList ChartDropBridge::supportedPaths(const QMimeData* mimeData) const
 {
     QStringList paths;
     if (mimeData == nullptr || !mimeData->hasUrls()) {
         return paths;
     }
-    const QStringList extensions = miacode::chart_assets::supportedTrackFileExtensions();
     for (const QUrl& url : mimeData->urls()) {
         if (!url.isLocalFile()) {
             continue;
         }
-        const QFileInfo info(url.toLocalFile());
-        if (!info.isFile() || !extensions.contains(info.suffix().toLower())) {
+        const QString path = QFileInfo(url.toLocalFile()).absoluteFilePath();
+        if (!miacode::chart_assets::isChartDocumentPath(path)
+            && !miacode::chart_assets::isSupportedTrackFilePath(path)) {
             continue;
         }
-        const QString path = info.absoluteFilePath();
         if (!paths.contains(path, Qt::CaseInsensitive)) {
             paths.append(path);
         }
+    }
+    if (paths.size() != 1) {
+        return {};
     }
     return paths;
 }

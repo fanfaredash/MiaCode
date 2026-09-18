@@ -1,7 +1,6 @@
 #pragma once
 
 #include "AnalysisService.h"
-#include "ChartDropImportService.h"
 #include "ChartWorkspace.h"
 #include "ChartWorkspaceFileService.h"
 #include "EditorSyncController.h"
@@ -45,9 +44,9 @@ SimaiNativeValidationLocale uiValidationLocale();
 // domain and the shared UI boundaries.
 //
 // Before this existed the same services had two owners, both of them UI
-// objects — MainWindow held UiRequestService, JobProgressService,
-// EditorSyncController and ChartDropImportService, while ApplicationContext
-// held ChartWorkspace, ChartWorkspaceFileService and AnalysisService. That made
+// objects — MainWindow held UiRequestService, JobProgressService and
+// EditorSyncController, while ApplicationContext held ChartWorkspace,
+// ChartWorkspaceFileService and AnalysisService. That made
 // "who owns the document" depend on which of the two you asked, and it kept the
 // hidden window on the critical path for services that never needed a window.
 //
@@ -75,9 +74,6 @@ public:
 
     EditorSyncController& editorSync() { return editorSync_; }
     const EditorSyncController& editorSync() const { return editorSync_; }
-
-    ChartDropImportService& chartDropImport() { return chartDropImport_; }
-    const ChartDropImportService& chartDropImport() const { return chartDropImport_; }
 
     UiRequestService& uiRequests() { return uiRequests_; }
     const UiRequestService& uiRequests() const { return uiRequests_; }
@@ -183,7 +179,6 @@ private:
     SimaiNativeValidationLocale validationLocale_;
     AnalysisService analysis_;
     EditorSyncController editorSync_;
-    ChartDropImportService chartDropImport_;
     UiRequestService uiRequests_;
     JobProgressService jobProgress_;
     PreviewAppearanceState previewAppearance_;

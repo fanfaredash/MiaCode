@@ -203,7 +203,9 @@ ApplicationWindow {
                 Text {
                     anchors.centerIn: parent
                     color: Theme.colors.text.primary
-                    text: qsTrId("drop_chart.preview.title")
+                    text: (window.chartDropBridge && window.chartDropBridge.chartDocumentDrag)
+                          ? qsTrId("drop_chart.preview.open_title")
+                          : qsTrId("drop_chart.preview.title")
                     font.family: Theme.uiFont
                     font.pixelSize: 16
                 }

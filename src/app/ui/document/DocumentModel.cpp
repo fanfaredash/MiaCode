@@ -17,11 +17,14 @@
 #include <functional>
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QVariantMap>
 #include <QCoreApplication>
 
@@ -54,6 +57,117 @@ QVariantList unsavedSectionChoices()
         choice("discard", "action.discard", "destructive"),
         choice("cancel", "action.cancel", "reject"),
     };
+}
+
+QString dropCreateTitle()
+{
+    return qtTrId("drop_chart.preview.create_title");
+}
+
+QString dropOpenOrCreateTitle()
+{
+    return qtTrId("drop_chart.preview.title");
+}
+
+QString cleanChartFolderName(QString name)
+{
+    name = name.trimmed();
+    name.replace(QRegularExpression(QStringLiteral("[<>:\"/\\\\|?*\\x00-\\x1f]")), QStringLiteral("_"));
+    while (name.endsWith(QLatin1Char('.')) || name.endsWith(QLatin1Char(' '))) {
+        name.chop(1);
+    }
+    const QString device = name.section(QLatin1Char('.'), 0, 0).toUpper();
+    const bool reservedDevice = QSet<QString>{QStringLiteral("CON"), QStringLiteral("PRN"),
+                                              QStringLiteral("AUX"), QStringLiteral("NUL")}.contains(device);
+    const bool numberedDevice = (device.startsWith(QStringLiteral("COM"))
+                                 || device.startsWith(QStringLiteral("LPT")))
+        && device.size() == 4 && device.at(3) >= QLatin1Char('1') && device.at(3) <= QLatin1Char('9');
+    if (reservedDevice || numberedDevice) {
+        name.prepend(QLatin1Char('_'));
+    }
+    name = name.left(80).trimmed();
+    while (name.endsWith(QLatin1Char('.')) || name.endsWith(QLatin1Char(' '))) {
+        name.chop(1);
+    }
+    return name;
+}
+
+void applyId3Metadata(SimaiDocument& document, const QString& audioPath)
+{
+    const miacode::id3::Tag tag = miacode::id3::readTagFromFile(audioPath);
+    if (!tag.title.trimmed().isEmpty()) {
+        document.title = tag.title.trimmed();
+    }
+    if (!tag.artist.trimmed().isEmpty()) {
+        document.artist = tag.artist.trimmed();
+    }
+}
+
+QString uniqueChartFolder(const QString& parentDirectory, const QString& folder)
+{
+    QString target = QDir(parentDirectory).filePath(folder);
+    int suffix = 2;
+    while (QFileInfo::exists(target)) {
+        target = QDir(parentDirectory).filePath(
+            QStringLiteral("%1 (%2)").arg(folder).arg(suffix++));
+    }
+    return target;
+}
+
+QVariantMap dropChoice(const char* id, const char* labelKey, const char* role)
+{
+    return QVariantMap{
+        {QStringLiteral("id"), QLatin1String(id)},
+        {QStringLiteral("label"), qtTrId(labelKey)},
+        {QStringLiteral("role"), QLatin1String(role)},
+    };
+}
+
+QVariantList existingChartChoices()
+{
+    return QVariantList{
+        dropChoice("open", "action.open", "accept"),
+        dropChoice("overwrite", "drop_chart.overwrite", "destructive"),
+        dropChoice("cancel", "action.cancel", "reject"),
+    };
+}
+
+QVariantList createChartChoices()
+{
+    return QVariantList{
+        dropChoice("create", "action.new", "accept"),
+        dropChoice("cancel", "action.cancel", "reject"),
+    };
+}
+
+QVariantList createFolderChoices()
+{
+    return QVariantList{
+        dropChoice("create_folder", "drop_chart.preview.create_folder", "accept"),
+        dropChoice("cancel", "action.cancel", "reject"),
+    };
+}
+
+QString dropCreateHereText(const QString& path)
+{
+    return qtTrId("drop_chart.preview.create_here").arg(QDir::toNativeSeparators(path));
+}
+
+QString plannedDroppedChartFolder(const QString& audioPath)
+{
+    const QFileInfo audioInfo(audioPath);
+    QString title = audioInfo.completeBaseName();
+    if (audioInfo.suffix().compare(QStringLiteral("mp3"), Qt::CaseInsensitive) == 0) {
+        const auto tag = miacode::id3::readTagFromFile(audioInfo.absoluteFilePath());
+        if (!tag.title.trimmed().isEmpty()) {
+            title = tag.title.trimmed();
+        }
+    }
+    QString folder = cleanChartFolderName(title);
+    if (folder.isEmpty()) {
+        folder = QStringLiteral("Untitled");
+    }
+    return uniqueChartFolder(audioInfo.absolutePath(), folder);
 }
 
 }  // namespace
@@ -855,7 +969,173 @@ void DocumentModel::createDocumentFromPickedAudio()
     });
 }
 
-void DocumentModel::createChartBesideAudio(const QString& audioPath)
+void DocumentModel::handleDroppedFile(const QString& path, std::function<void()> finished)
+{
+    const auto done = [finished = std::move(finished)]() {
+        if (finished) {
+            finished();
+        }
+    };
+    const QString normalized = QDir::cleanPath(path);
+    if (miacode::chart_assets::isChartDocumentPath(normalized)) {
+        requestLeaveDocument([this, normalized, done](bool mayLeave) {
+            if (mayLeave) {
+                openFile(QUrl::fromLocalFile(normalized));
+            }
+            done();
+        });
+        return;
+    }
+    if (miacode::chart_assets::isSupportedTrackFilePath(normalized)) {
+        handleDroppedAudio(normalized, done);
+        return;
+    }
+    done();
+}
+
+void DocumentModel::handleDroppedAudio(const QString& audioPath, std::function<void()> finished)
+{
+    miacode::UiRequestService* const requests = uiRequests_;
+    if (requests == nullptr) {
+        finished();
+        return;
+    }
+
+    const QFileInfo audioInfo(audioPath);
+    const QString directory = audioInfo.absolutePath();
+    const bool sourceIsTrack = miacode::chart_assets::isTrackFileName(audioInfo.fileName());
+    const QString existingTrack = miacode::chart_assets::resolveTrackPathForDirectory(directory);
+    const bool hasOtherTrack = !existingTrack.isEmpty()
+        && QFileInfo(existingTrack).absoluteFilePath().compare(
+               audioInfo.absoluteFilePath(), Qt::CaseInsensitive) != 0;
+
+    if (!sourceIsTrack && hasOtherTrack) {
+        const QString targetDirectory = plannedDroppedChartFolder(audioPath);
+        requests->requestChoice(
+            dropCreateTitle(),
+            QStringLiteral("%1\n\n%2")
+                .arg(qtTrId("drop_chart.preview.single_track")
+                         .arg(QFileInfo(existingTrack).fileName()),
+                     dropCreateHereText(targetDirectory)),
+            createFolderChoices(),
+            QStringLiteral("cancel"),
+            [this, audioPath, targetDirectory, finished](const QString& choiceId) {
+                if (choiceId == QLatin1String("create_folder")) {
+                    createDroppedChartInNewFolder(audioPath, targetDirectory, finished);
+                    return;
+                }
+                finished();
+            });
+        return;
+    }
+
+    const QString maidataPath = QDir(directory).filePath(QStringLiteral("maidata.txt"));
+    if (QFileInfo::exists(maidataPath)) {
+        requests->requestChoice(
+            dropOpenOrCreateTitle(),
+            qtTrId("drop_chart.preview.existing_project")
+                .arg(QDir::toNativeSeparators(directory)),
+            existingChartChoices(),
+            QStringLiteral("cancel"),
+            [this, audioPath, maidataPath, finished](const QString& choiceId) {
+                if (choiceId == QLatin1String("open")) {
+                    requestLeaveDocument([this, maidataPath, finished](bool mayLeave) {
+                        if (mayLeave) {
+                            openFile(QUrl::fromLocalFile(maidataPath));
+                        }
+                        finished();
+                    });
+                    return;
+                }
+                if (choiceId == QLatin1String("overwrite")) {
+                    leaveThenCreateDroppedChart(audioPath, true, finished);
+                    return;
+                }
+                finished();
+            });
+        return;
+    }
+
+    requests->requestChoice(
+        dropCreateTitle(),
+        dropCreateHereText(directory),
+        createChartChoices(),
+        QStringLiteral("cancel"),
+        [this, audioPath, finished](const QString& choiceId) {
+            if (choiceId == QLatin1String("create")) {
+                leaveThenCreateDroppedChart(audioPath, false, finished);
+                return;
+            }
+            finished();
+        });
+}
+
+void DocumentModel::leaveThenCreateDroppedChart(const QString& audioPath, bool overwriteExisting,
+                                                std::function<void()> finished)
+{
+    requestLeaveDocument([this, audioPath, overwriteExisting, finished](bool mayLeave) {
+        if (!mayLeave) {
+            finished();
+            return;
+        }
+
+        const QFileInfo audioInfo(audioPath);
+        QString trackPath = audioInfo.absoluteFilePath();
+        if (!miacode::chart_assets::isTrackFileName(audioInfo.fileName())) {
+            const QString renamed = audioInfo.absoluteDir().filePath(
+                QStringLiteral("track.%1").arg(audioInfo.suffix().toLower()));
+            if (QFileInfo::exists(renamed)
+                && QFileInfo(renamed).absoluteFilePath().compare(
+                       audioInfo.absoluteFilePath(), Qt::CaseInsensitive) != 0) {
+                if (uiRequests_ != nullptr) {
+                    uiRequests_->postNotice(
+                        miacode::NoticeSeverity::Error,
+                        qtTrId("document.new_failed"),
+                        qtTrId("document.cannot_replace")
+                            .arg(QDir::toNativeSeparators(renamed)));
+                }
+                finished();
+                return;
+            }
+            if (!QFile::rename(audioInfo.absoluteFilePath(), renamed)) {
+                if (uiRequests_ != nullptr) {
+                    uiRequests_->postNotice(
+                        miacode::NoticeSeverity::Error,
+                        qtTrId("document.new_failed"),
+                        qtTrId("document.cannot_write")
+                            .arg(QDir::toNativeSeparators(renamed)));
+                }
+                finished();
+                return;
+            }
+            trackPath = renamed;
+        }
+        createChartBesideAudio(trackPath, overwriteExisting);
+        finished();
+    });
+}
+
+void DocumentModel::createDroppedChartInNewFolder(const QString& audioPath,
+                                                  const QString& targetDirectory,
+                                                  std::function<void()> finished)
+{
+    const QFileInfo audioInfo(audioPath);
+    const QString trackPath = QDir(targetDirectory).filePath(
+        QStringLiteral("track.%1").arg(audioInfo.suffix().toLower()));
+    if (!QDir().mkpath(targetDirectory) || !QFile::copy(audioInfo.absoluteFilePath(), trackPath)) {
+        if (uiRequests_ != nullptr) {
+            uiRequests_->postNotice(
+                miacode::NoticeSeverity::Error,
+                qtTrId("document.new_failed"),
+                qtTrId("document.cannot_write").arg(QDir::toNativeSeparators(trackPath)));
+        }
+        finished();
+        return;
+    }
+    leaveThenCreateDroppedChart(trackPath, false, finished);
+}
+
+void DocumentModel::createChartBesideAudio(const QString& audioPath, bool overwriteExisting)
 {
     miacode::UiRequestService* const requests = uiRequests_;
     if (requests == nullptr) {
@@ -866,7 +1146,7 @@ void DocumentModel::createChartBesideAudio(const QString& audioPath)
     // already that folder as far as the user is concerned.
     const QString targetPath =
         QFileInfo(audioPath).absoluteDir().filePath(QStringLiteral("maidata.txt"));
-    if (!QFileInfo::exists(targetPath)) {
+    if (overwriteExisting || !QFileInfo::exists(targetPath)) {
         ensureTrackCopyThenCreate(audioPath, targetPath);
         return;
     }
@@ -892,7 +1172,7 @@ void DocumentModel::ensureTrackCopyThenCreate(
     // Already named track.<ext>: nothing to copy, and copying would mean
     // copying a file onto itself.
     if (audioInfo.fileName().compare(trackName, Qt::CaseInsensitive) == 0) {
-        createEmptyDocumentAt(targetPath);
+        createEmptyDocumentAt(targetPath, audioPath);
         return;
     }
 
@@ -927,7 +1207,7 @@ void DocumentModel::ensureTrackCopyThenCreate(
                 qtTrId("document.existing_track_preferred")
                     .arg(QFileInfo(resolved).fileName(), QFileInfo(trackPath).fileName()));
         }
-        createEmptyDocumentAt(targetPath);
+        createEmptyDocumentAt(targetPath, audioPath);
     };
 
     if (!QFileInfo::exists(trackPath)) {
@@ -949,13 +1229,15 @@ void DocumentModel::ensureTrackCopyThenCreate(
         });
 }
 
-void DocumentModel::createEmptyDocumentAt(const QString& targetPath)
+void DocumentModel::createEmptyDocumentAt(const QString& targetPath, const QString& sourceAudioPath)
 {
     miacode::UiRequestService* const requests = uiRequests_;
     if (fileService_ == nullptr) {
         return;
     }
-    if (!fileService_->createEmptyDocument(targetPath).accepted) {
+    SimaiDocument document = SimaiDocument::createEmpty();
+    applyId3Metadata(document, sourceAudioPath);
+    if (!fileService_->createEmptyDocument(targetPath, document).accepted) {
         if (requests != nullptr) {
             requests->postNotice(
                 miacode::NoticeSeverity::Error,

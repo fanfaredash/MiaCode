@@ -1,11 +1,11 @@
 // Contract regression for the non-Widget application service assembly.
 //
 // Stage 3.5 items 1-2 of docs/specs/ui/UI_TODO_ZH.md: the
-// document, analysis, editor-sync, chart-drop, UI-request, job-progress and
+// document, analysis, editor-sync, UI-request, job-progress and
 // preview-appearance services must have an owner that is not a QWidget and does
 // not need one to exist. Before ApplicationServices they were split between
 // MainWindow (UiRequestService, JobProgressService, EditorSyncController,
-// ChartDropImportService, and the preview appearance members reached through
+// and the preview appearance members reached through
 // friend access) and ApplicationContext (ChartWorkspace,
 // ChartWorkspaceFileService, AnalysisService), so "who owns the document
 // domain" had two answers and both of them were UI objects.
@@ -52,7 +52,6 @@ bool verifyConstructsWithoutAnyWidgetHost(QTextStream& err)
     ok &= require(services.workspace().parent() == &services
                       && services.analysis().parent() == &services
                       && services.editorSync().parent() == &services
-                      && services.chartDropImport().parent() == &services
                       && services.uiRequests().parent() == &services
                       && services.jobProgress().parent() == &services
                       && services.previewAppearance().parent() == &services,
@@ -69,7 +68,6 @@ bool verifySingleInstancePerService(QTextStream& err)
                           && &services.files() == &services.files()
                           && &services.analysis() == &services.analysis()
                           && &services.editorSync() == &services.editorSync()
-                          && &services.chartDropImport() == &services.chartDropImport()
                           && &services.uiRequests() == &services.uiRequests()
                           && &services.jobProgress() == &services.jobProgress()
                           && &services.previewAppearance() == &services.previewAppearance(),
@@ -119,16 +117,13 @@ bool verifyDestructionReleasesEverything(QTextStream& err)
     QPointer<QObject> workspace;
     QPointer<QObject> uiRequests;
     QPointer<QObject> jobProgress;
-    QPointer<QObject> chartDropImport;
     {
         miacode::ApplicationServices services;
         workspace = &services.workspace();
         uiRequests = &services.uiRequests();
         jobProgress = &services.jobProgress();
-        chartDropImport = &services.chartDropImport();
     }
-    return require(workspace.isNull() && uiRequests.isNull() && jobProgress.isNull()
-                       && chartDropImport.isNull(),
+    return require(workspace.isNull() && uiRequests.isNull() && jobProgress.isNull(),
                    QStringLiteral("every owned service dies with the assembly"), err);
 }
 
@@ -218,7 +213,6 @@ bool verifyNothingElseInTheProductConstructsTheServices(QTextStream& err)
         QStringLiteral("ChartWorkspaceFileService"),
         QStringLiteral("AnalysisService"),
         QStringLiteral("EditorSyncController"),
-        QStringLiteral("ChartDropImportService"),
         QStringLiteral("UiRequestService"),
         QStringLiteral("JobProgressService"),
         QStringLiteral("PreviewAppearanceState"),

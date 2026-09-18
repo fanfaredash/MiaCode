@@ -202,18 +202,6 @@ QString miacode::runtime::DocumentSessionHost::sourceText() const
     return snapshot.hasDocument ? snapshot.sourceText : QString();
 }
 
-void miacode::runtime::DocumentSessionHost::importDroppedAudio(
-    const QStringList& audioPaths, quint64 requestId, quint64 generation,
-    miacode::ChartDropImportService::Completion completion)
-{
-    session_.handleAudioDrop(audioPaths, requestId, generation, std::move(completion));
-}
-
-void miacode::runtime::DocumentSessionHost::releaseChartDropImport()
-{
-    session_.releaseChartDropImportService();
-}
-
 QString miacode::runtime::DocumentSessionHost::filePath() const
 {
     return session_.documentFilePath();

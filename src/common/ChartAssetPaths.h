@@ -22,6 +22,28 @@ inline QStringList supportedTrackFileExtensions()
     };
 }
 
+inline QStringList supportedChartFileExtensions()
+{
+    return {
+        QStringLiteral("txt"),
+        QStringLiteral("simai"),
+    };
+}
+
+inline bool isSupportedTrackFilePath(const QString& path)
+{
+    const QFileInfo info(path);
+    return info.isFile()
+        && supportedTrackFileExtensions().contains(info.suffix().toLower());
+}
+
+inline bool isChartDocumentPath(const QString& path)
+{
+    const QFileInfo info(path);
+    return info.isFile()
+        && supportedChartFileExtensions().contains(info.suffix().toLower());
+}
+
 inline QStringList trackCandidateFileNames()
 {
     QStringList candidates;
@@ -29,6 +51,11 @@ inline QStringList trackCandidateFileNames()
         candidates << QStringLiteral("track.%1").arg(extension);
     }
     return candidates;
+}
+
+inline bool isTrackFileName(const QString& fileName)
+{
+    return trackCandidateFileNames().contains(QFileInfo(fileName).fileName(), Qt::CaseInsensitive);
 }
 
 inline QString resolveTrackPathForDirectory(const QString& directoryPath)

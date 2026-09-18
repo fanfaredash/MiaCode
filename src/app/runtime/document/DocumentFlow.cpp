@@ -254,33 +254,6 @@ bool Session::saveToPath(const QString& path)
     return documents_->saveToPath(path);
 }
 
-void Session::handleAudioDrop(const QStringList& audioPaths,
-                                 quint64 requestId,
-                                 quint64 generation,
-                                 miacode::ChartDropImportService::Completion completion)
-{
-    if (documents_ == nullptr || chartDropImportService_ == nullptr) {
-        if (completion) {
-            completion({requestId, generation, true, true, true, 0,
-                        static_cast<int>(audioPaths.size()), {}});
-        }
-        return;
-    }
-    chartDropImportService_->submit(
-        audioPaths,
-        requestId,
-        generation,
-        documents_->chartDropImportAdapter(),
-        std::move(completion));
-}
-
-void Session::releaseChartDropImportService()
-{
-    if (chartDropImportService_ != nullptr) {
-        chartDropImportService_->release();
-    }
-}
-
 void Session::updatePauseButtonAppearance()
 {
     documents_->updatePauseButtonAppearance();

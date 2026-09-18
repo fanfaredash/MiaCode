@@ -2525,77 +2525,45 @@ Line %2 · double-click to rename</translation>
         <source>When checked, &amp;des and every &amp;des_N stay identical.</source>
         <translation>When checked, &amp;des and every &amp;des_N stay identical.</translation>
     </message>
-    <message id="drop_chart.confirm_switch">
-        <source>Open the first newly created chart? (%1 chart(s))</source>
-        <translation>Open the first newly created chart? (%1 chart(s))</translation>
-    </message>
-    <message id="drop_chart.create_chart_file">
-        <source>Create Chart File</source>
-        <translation>Create Chart File</translation>
-    </message>
-    <message id="drop_chart.create_failed">
-        <source>The chart could not be created. No incomplete project was kept.</source>
-        <translation>The chart could not be created. No incomplete project was kept.</translation>
-    </message>
-    <message id="drop_chart.created_chart">
-        <source>Created %1 new chart(s).</source>
-        <translation>Created %1 new chart(s).</translation>
-    </message>
-    <message id="drop_chart.created_title">
-        <source>Charts Created</source>
-        <translation>Charts Created</translation>
-    </message>
-    <message id="drop_chart.created_with_failures">
-        <source>Created %1 chart(s), but %2 could not be created. No incomplete project was kept.</source>
-        <translation>Created %1 chart(s), but %2 could not be created. No incomplete project was kept.</translation>
-    </message>
-    <message id="drop_chart.drop_hint">
-        <source>Release to create a new chart project</source>
-        <translation>Release to create a new chart project</translation>
-    </message>
-    <message id="drop_chart.error.title">
-        <source>Chart Creation Failed</source>
-        <translation>Chart Creation Failed</translation>
-    </message>
-    <message id="drop_chart.preview.create">
-        <source>Create %1 Chart(s)</source>
-        <translation>Create %1 Chart(s)</translation>
-    </message>
-    <message id="drop_chart.preview.message">
-        <source>Create %1 chart(s) at:
-
-</source>
-        <translation>Create %1 chart(s) at:
-
-</translation>
+    <message id="drop_chart.overwrite">
+        <source>Overwrite</source>
+        <translation>Overwrite</translation>
     </message>
     <message id="drop_chart.preview.title">
-        <source>Prepare Charts</source>
-        <translation>Prepare Charts</translation>
+        <source>New or Open Chart</source>
+        <translation>New or Open Chart</translation>
+    </message>
+    <message id="drop_chart.preview.create_title">
+        <source>New Chart</source>
+        <translation>New Chart</translation>
+    </message>
+    <message id="drop_chart.preview.open_title">
+        <source>Open Chart</source>
+        <translation>Open Chart</translation>
+    </message>
+    <message id="drop_chart.preview.create_here">
+        <source>The chart will be created here:
+
+%1</source>
+        <translation>The chart will be created here:
+
+%1</translation>
     </message>
     <message id="drop_chart.preview.existing_project">
-        <source>Existing chart files or project data:</source>
-        <translation>Existing chart files or project data:</translation>
-    </message>
-    <message id="drop_chart.preview.overwrite_question">
-        <source>These files will be overwritten. Continue?</source>
-        <translation>These files will be overwritten. Continue?</translation>
-    </message>
-    <message id="drop_chart.preview.multiple_audio">
-        <source>Multiple audio files remain in this directory:</source>
-        <translation>Multiple audio files remain in this directory:</translation>
+        <source>This folder already has a chart:
+
+%1</source>
+        <translation>This folder already has a chart:
+
+%1</translation>
     </message>
     <message id="drop_chart.preview.create_folder">
-        <source>Create a separate chart folder for this audio?</source>
-        <translation>Create a separate chart folder for this audio?</translation>
+        <source>New Folder</source>
+        <translation>New Folder</translation>
     </message>
     <message id="drop_chart.preview.single_track">
-        <source>The current directory already contains %1. Create a separate chart folder for this audio?
-
-%2</source>
-        <translation>The current directory already contains %1. Create a separate chart folder for this audio?
-
-%2</translation>
+        <source>This folder already has %1. Create a separate chart folder?</source>
+        <translation>This folder already has %1. Create a separate chart folder?</translation>
     </message>
     <message id="editor.bookmark.delete">
         <source>Delete Bookmark</source>

@@ -30,8 +30,6 @@ miacode_add_spec(qml_chart_drop_bridge_spec
         src/tools/ui/QmlChartDropBridgeSpec.cpp
         src/app/ui/drop/ChartDropBridge.h
         src/app/ui/drop/ChartDropBridge.cpp
-        src/app/services/ChartDropImportService.h
-        src/app/services/ChartDropImportService.cpp
     LIBS Qt6::Core Qt6::Gui Qt6::Quick
     INCLUDES src src/app/ui
 )

@@ -38,6 +38,12 @@ ChartWorkspaceFileResult ChartWorkspaceFileService::open(const QString& path) co
 
 ChartWorkspaceFileResult ChartWorkspaceFileService::createEmptyDocument(const QString& path) const
 {
+    return createEmptyDocument(path, SimaiDocument::createEmpty());
+}
+
+ChartWorkspaceFileResult ChartWorkspaceFileService::createEmptyDocument(
+    const QString& path, const SimaiDocument& document) const
+{
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     if (normalizedPath.isEmpty()) return {false, 0, QStringLiteral("path_empty"), {}};
     const QDir parent = QFileInfo(normalizedPath).absoluteDir();
@@ -45,7 +51,7 @@ ChartWorkspaceFileResult ChartWorkspaceFileService::createEmptyDocument(const QS
         return {false, 0, QStringLiteral("mkpath_failed"), {}};
     }
     const QByteArray payload =
-        QStringEncoder(QStringConverter::Utf8).encode(SimaiDocument::createEmpty().toText());
+        QStringEncoder(QStringConverter::Utf8).encode(document.toText());
     QSaveFile file(normalizedPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         return {false, 0, QStringLiteral("open_failed"), {}};

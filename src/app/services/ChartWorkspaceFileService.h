@@ -36,6 +36,8 @@ public:
     // document arrives through the same door as any other and starts on a real
     // save point rather than dirty-on-arrival.
     ChartWorkspaceFileResult createEmptyDocument(const QString& path) const;
+    ChartWorkspaceFileResult createEmptyDocument(const QString& path,
+                                                 const SimaiDocument& document) const;
     // Saves one section — the difficulty being worked in — leaving every other
     // difficulty on disk exactly as it was. difficultyId 0 saves the whole
     // document, which is what the whole-source view means by its section.

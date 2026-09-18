@@ -2525,77 +2525,45 @@ Line %2 · double-click to rename</source>
         <source>When checked, &amp;des and every &amp;des_N stay identical.</source>
         <translation>勾选后，&amp;des 与每个难度的 &amp;des_N 会保持一致。</translation>
     </message>
-    <message id="drop_chart.confirm_switch">
-        <source>Open the first newly created chart? (%1 chart(s))</source>
-        <translation>是否打开刚创建的第一个谱面？（共 %1 个）</translation>
-    </message>
-    <message id="drop_chart.create_chart_file">
-        <source>Create Chart File</source>
-        <translation>创建谱面文件</translation>
-    </message>
-    <message id="drop_chart.create_failed">
-        <source>The chart could not be created. No incomplete project was kept.</source>
-        <translation>谱面创建失败，未保留不完整的谱面工程。</translation>
-    </message>
-    <message id="drop_chart.created_chart">
-        <source>Created %1 new chart(s).</source>
-        <translation>已创建 %1 个新谱面。</translation>
-    </message>
-    <message id="drop_chart.created_title">
-        <source>Charts Created</source>
-        <translation>谱面创建完成</translation>
-    </message>
-    <message id="drop_chart.created_with_failures">
-        <source>Created %1 chart(s), but %2 could not be created. No incomplete project was kept.</source>
-        <translation>已创建 %1 个谱面，但有 %2 个创建失败。未保留不完整的谱面工程。</translation>
-    </message>
-    <message id="drop_chart.drop_hint">
-        <source>Release to create a new chart project</source>
-        <translation>松开鼠标以创建新的谱面工程</translation>
-    </message>
-    <message id="drop_chart.error.title">
-        <source>Chart Creation Failed</source>
-        <translation>谱面创建失败</translation>
-    </message>
-    <message id="drop_chart.preview.create">
-        <source>Create %1 Chart(s)</source>
-        <translation>创建 %1 个谱面</translation>
-    </message>
-    <message id="drop_chart.preview.message">
-        <source>Create %1 chart(s) at:
-
-</source>
-        <translation>将在以下位置创建 %1 个谱面：
-
-</translation>
+    <message id="drop_chart.overwrite">
+        <source>Overwrite</source>
+        <translation>覆盖</translation>
     </message>
     <message id="drop_chart.preview.title">
-        <source>Prepare Charts</source>
-        <translation>准备创建谱面</translation>
+        <source>New or Open Chart</source>
+        <translation>新建或打开谱面</translation>
+    </message>
+    <message id="drop_chart.preview.create_title">
+        <source>New Chart</source>
+        <translation>新建谱面</translation>
+    </message>
+    <message id="drop_chart.preview.open_title">
+        <source>Open Chart</source>
+        <translation>打开谱面</translation>
+    </message>
+    <message id="drop_chart.preview.create_here">
+        <source>The chart will be created here:
+
+%1</source>
+        <translation>将在以下位置新建谱面：
+
+%1</translation>
     </message>
     <message id="drop_chart.preview.existing_project">
-        <source>Existing chart files or project data:</source>
-        <translation>目录中已有以下谱面文件或工程数据：</translation>
-    </message>
-    <message id="drop_chart.preview.overwrite_question">
-        <source>These files will be overwritten. Continue?</source>
-        <translation>确认后将覆盖上述文件，请问是否覆盖？</translation>
-    </message>
-    <message id="drop_chart.preview.multiple_audio">
-        <source>Multiple audio files remain in this directory:</source>
-        <translation>当前目录中还存在多个音频文件：</translation>
+        <source>This folder already has a chart:
+
+%1</source>
+        <translation>该目录已有谱面：
+
+%1</translation>
     </message>
     <message id="drop_chart.preview.create_folder">
-        <source>Create a separate chart folder for this audio?</source>
-        <translation>是否为当前音频创建独立谱面文件夹？</translation>
+        <source>New Folder</source>
+        <translation>另开文件夹</translation>
     </message>
     <message id="drop_chart.preview.single_track">
-        <source>The current directory already contains %1. Create a separate chart folder for this audio?
-
-%2</source>
-        <translation>当前路径下已存在%1，是否为当前音频创建独立谱面文件夹？
-
-%2</translation>
+        <source>This folder already has %1. Create a separate chart folder?</source>
+        <translation>当前目录已有 %1。是否另开文件夹？</translation>
     </message>
     <message id="editor.bookmark.delete">
         <source>Delete Bookmark</source>

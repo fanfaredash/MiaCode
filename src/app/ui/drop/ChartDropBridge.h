@@ -26,6 +26,7 @@ class ChartDropBridge final : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool dragActive READ dragActive NOTIFY dragActiveChanged)
+    Q_PROPERTY(bool chartDocumentDrag READ chartDocumentDrag NOTIFY acceptedPathsChanged)
     Q_PROPERTY(QStringList acceptedPaths READ acceptedPaths NOTIFY acceptedPathsChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
 
@@ -39,6 +40,7 @@ public:
     ~ChartDropBridge() override;
 
     bool dragActive() const { return dragActive_; }
+    bool chartDocumentDrag() const;
     QStringList acceptedPaths() const { return acceptedPaths_; }
     bool busy() const { return busy_; }
     void release();

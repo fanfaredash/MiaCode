@@ -111,12 +111,6 @@ public:
     bool redoChartEditorWithSelectionRestore();
     QString resolveInitialOpenDirectory() const;
     void setLastOpenDirectory(const QString& pathOrDir);
-    using DroppedChartCandidate = miacode::ChartDropCandidate;
-    miacode::DocumentImportAdapter chartDropImportAdapter();
-    void finishChartsFromAudioDrop(
-        const QList<DroppedChartCandidate>& candidates,
-        QElapsedTimer dropTimer,
-        std::function<void(const miacode::ChartDropCreateResult&)> onFinished);
     void onNormalizeWholeChart();
     // DifficultyList.qml owns the confirmation; this method only applies the
     // already-confirmed document mutation.
@@ -159,11 +153,6 @@ public:
     void setChartTextHandler(std::function<bool(const QString&)> handler) override;
     void setLeaveDocumentHandler(
         std::function<void(std::function<void(bool)>)> handler) override;
-    void importDroppedAudio(const QStringList& audioPaths, quint64 requestId,
-                            quint64 generation,
-                            miacode::ChartDropImportService::Completion completion) override;
-    void releaseChartDropImport() override;
-
     bool hasActiveDifficulty() const override;
     bool enterDifficultyPage(int difficultyId) override;
     bool enterMetadataPage() override;

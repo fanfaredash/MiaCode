@@ -40,7 +40,6 @@
 #include "app/services/PlaybackPreferencesPort.h"
 #include "app/services/PlaybackPreviewPort.h"
 #include "app/services/EditorSyncController.h"
-#include "app/services/ChartDropImportService.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "runtime/RuntimeContext.h"
 
@@ -320,11 +319,6 @@ public:
     bool validateActiveDocument();
     void attachRootWindow(QWindow* window);
     bool eventFilter(QObject* watched, QEvent* event) override;
-    void releaseChartDropImportService();
-    void handleAudioDrop(const QStringList& audioPaths,
-                         quint64 requestId,
-                         quint64 generation,
-                         miacode::ChartDropImportService::Completion completion);
     bool rootWindowFrameGeometryAvailable() const;
     QRect rootWindowFrameGeometry() const;
     void setBackendActive(bool active);
@@ -380,7 +374,6 @@ private:
     // Borrowed from applicationServices_; never owned here.
     miacode::ApplicationServices& applicationServices_;
     miacode::EditorSyncController* editorSyncController_ = nullptr;
-    miacode::ChartDropImportService* chartDropImportService_ = nullptr;
     using BatchTransform = std::function<QString(const QString&, int*)>;
     using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {

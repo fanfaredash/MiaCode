@@ -578,8 +578,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickOverlayLayer.cpp
     src/app/ui/drop/ChartDropBridge.h
     src/app/ui/drop/ChartDropBridge.cpp
-    src/app/services/ChartDropImportService.h
-    src/app/services/ChartDropImportService.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/slide_data.qrc

@@ -131,8 +131,6 @@ miacode_add_spec(editor_page_router_spec
         src/app/services/ApplicationServices.cpp
         src/app/services/AnalysisService.h
         src/app/services/AnalysisService.cpp
-        src/app/services/ChartDropImportService.h
-        src/app/services/ChartDropImportService.cpp
         src/app/services/ChartWorkspace.h
         src/app/services/ChartWorkspace.cpp
         src/app/services/ChartWorkspaceFileService.h
@@ -177,8 +175,6 @@ miacode_add_spec(export_engine_spec
         src/app/services/ApplicationServices.cpp
         src/app/services/AnalysisService.h
         src/app/services/AnalysisService.cpp
-        src/app/services/ChartDropImportService.h
-        src/app/services/ChartDropImportService.cpp
         src/app/services/ChartWorkspace.h
         src/app/services/ChartWorkspace.cpp
         src/app/services/ChartWorkspaceFileService.h
@@ -240,8 +236,6 @@ miacode_add_spec(application_services_spec
         src/app/services/ApplicationServices.cpp
         src/app/services/AnalysisService.h
         src/app/services/AnalysisService.cpp
-        src/app/services/ChartDropImportService.h
-        src/app/services/ChartDropImportService.cpp
         src/app/services/ChartWorkspace.h
         src/app/services/ChartWorkspace.cpp
         src/app/services/ChartWorkspaceFileService.h
