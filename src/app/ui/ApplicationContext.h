@@ -49,6 +49,7 @@ class ApplicationContext final : public QObject
     // Shared Widgets-free UI boundary, hosted once by MainView.qml.
     Q_PROPERTY(QObject* uiRequests READ uiRequests CONSTANT)
     Q_PROPERTY(QObject* jobProgress READ jobProgress CONSTANT)
+    Q_PROPERTY(QObject* comicResources READ comicResources CONSTANT)
     Q_PROPERTY(QObject* mediaTools READ mediaTools CONSTANT)
     Q_PROPERTY(QObject* preferencesModel READ preferencesModel CONSTANT)
     Q_PROPERTY(QObject* audioSettings READ audioSettings CONSTANT)
@@ -82,6 +83,7 @@ public:
     QObject* platform();
     QObject* uiRequests();
     QObject* jobProgress();
+    QObject* comicResources();
     QObject* mediaTools();
     QObject* preferencesModel();
     QObject* audioSettings();

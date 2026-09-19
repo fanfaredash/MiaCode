@@ -90,6 +90,8 @@ QObject* ApplicationContext::uiRequests() { return &services_.uiRequests(); }
 
 QObject* ApplicationContext::jobProgress() { return &services_.jobProgress(); }
 
+QObject* ApplicationContext::comicResources() { return &services_.comicResources(); }
+
 QObject* ApplicationContext::mediaTools() { return &mediaTools_; }
 
 QObject* ApplicationContext::preferencesModel() { return &preferencesModel_; }
