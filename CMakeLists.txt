@@ -678,6 +678,7 @@ set(MIACODE_UI_QML_FILES
     src/app/ui/components/SettingsSection.qml
     src/app/ui/components/AboutDialog.qml
     src/app/ui/components/JobProgressOverlay.qml
+    src/app/ui/components/JobProgressComic.qml
     src/app/ui/chrome/WindowGestureArea.qml
     src/app/ui/chrome/WindowTitleBar.qml
     src/app/ui/chrome/WindowCaptionButtons.qml
@@ -796,6 +797,14 @@ foreach(pet_asset IN LISTS MIACODE_PET_ASSET_FILES)
     set_source_files_properties("${pet_asset}" PROPERTIES QT_RESOURCE_ALIAS "pet/minecraft/${pet_asset_name}")
 endforeach()
 
+set(MIACODE_COMIC_FALLBACK_FILE
+    resources/comics-fallback/comic_001.jpg
+)
+set_source_files_properties(
+    "${MIACODE_COMIC_FALLBACK_FILE}"
+    PROPERTIES QT_RESOURCE_ALIAS "comics/fallback.jpg"
+)
+
 qt_add_qml_module(MiaCode
     URI MiaCode.UI
     VERSION 1.0
@@ -806,6 +815,8 @@ qt_add_qml_module(MiaCode
         src/app/ui/editor/EditorTextStyle.h
         src/app/ui/ApplicationContext.cpp
         src/app/ui/ApplicationContext.h
+        src/app/ui/ComicResourceModel.cpp
+        src/app/ui/ComicResourceModel.h
         src/app/ui/document/CommandService.cpp
         src/app/ui/document/CommandService.h
         src/app/ui/chrome/ShortcutCommands.h
@@ -870,6 +881,7 @@ qt_add_qml_module(MiaCode
     RESOURCES
         ${MIACODE_UI_ICON_FILES}
         ${MIACODE_PET_ASSET_FILES}
+        ${MIACODE_COMIC_FALLBACK_FILE}
     IMPORTS
         QtQuick3D
         QtQuick3D.Helpers

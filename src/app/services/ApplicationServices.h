@@ -82,8 +82,8 @@ public:
     JobProgressService& jobProgress() { return jobProgress_; }
     const JobProgressService& jobProgress() const { return jobProgress_; }
 
-    ComicResourceModel& comicResources() { return comicResources_; }
-    const ComicResourceModel& comicResources() const { return comicResources_; }
+    ui::ComicResourceModel& comicResources() { return comicResources_; }
+    const ui::ComicResourceModel& comicResources() const { return comicResources_; }
 
     ShellNotifications& shellNotifications() { return shellNotifications_; }
     const ShellNotifications& shellNotifications() const { return shellNotifications_; }
@@ -185,7 +185,7 @@ private:
     EditorSyncController editorSync_;
     UiRequestService uiRequests_;
     JobProgressService jobProgress_;
-    ComicResourceModel comicResources_;
+    ui::ComicResourceModel comicResources_;
     PreviewAppearanceState previewAppearance_;
     ShellNotifications shellNotifications_;
     ExportEngine* exportEngine_ = nullptr;

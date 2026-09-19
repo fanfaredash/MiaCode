@@ -4197,6 +4197,26 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Close document</source>
         <translation>Close document</translation>
     </message>
+    <message id="qml.comic_resource_unavailable">
+        <source>Comic resource unavailable</source>
+        <translation>Comic resource unavailable</translation>
+    </message>
+    <message id="qml.previous_comic">
+        <source>Previous comic</source>
+        <translation>Previous comic</translation>
+    </message>
+    <message id="qml.show_previous_comic">
+        <source>Show previous comic</source>
+        <translation>Show previous comic</translation>
+    </message>
+    <message id="qml.next_comic">
+        <source>Next comic</source>
+        <translation>Next comic</translation>
+    </message>
+    <message id="qml.show_next_comic">
+        <source>Show next comic</source>
+        <translation>Show next comic</translation>
+    </message>
     <message id="qml.collapse_bookmarks">
         <source>Collapse bookmarks</source>
         <translation>Collapse bookmarks</translation>

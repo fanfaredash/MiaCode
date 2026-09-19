@@ -1,6 +1,7 @@
 #include "ComicResourceModel.h"
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -15,6 +16,8 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace {
 
@@ -199,13 +202,31 @@ void ComicResourceModel::refresh()
         for (const QJsonValue& itemValue : items) {
             const QJsonObject item = itemValue.toObject();
             const QString fileName = item.value(QStringLiteral("file")).toString();
-            const int manifestWidth = item.value(QStringLiteral("width")).toInt(0);
-            const int manifestHeight = item.value(QStringLiteral("height")).toInt(0);
-            if (manifestWidth <= 0 || manifestHeight <= 0 || added.contains(fileName)) {
+            const QJsonValue widthValue = item.value(QStringLiteral("width"));
+            const QJsonValue heightValue = item.value(QStringLiteral("height"));
+            const auto isPositiveInteger = [](const QJsonValue& value) {
+                if (!value.isDouble()) {
+                    return false;
+                }
+                const double number = value.toDouble();
+                return std::isfinite(number) && number > 0.0
+                    && std::floor(number) == number
+                    && number <= static_cast<double>(std::numeric_limits<int>::max());
+            };
+            if (!isSafeRootFile(fileName, directory) || !isPositiveInteger(widthValue)
+                || !isPositiveInteger(heightValue) || added.contains(fileName)) {
                 continue;
             }
             const auto it = byName.constFind(fileName);
             if (it != byName.constEnd()) {
+                const int manifestWidth = widthValue.toInt();
+                const int manifestHeight = heightValue.toInt();
+                if (manifestWidth != it->width || manifestHeight != it->height) {
+                    qWarning().noquote()
+                        << "Comic manifest dimensions mismatch:" << fileName
+                        << "manifest=" << QStringLiteral("%1x%2").arg(manifestWidth).arg(manifestHeight)
+                        << "actual=" << QStringLiteral("%1x%2").arg(it->width).arg(it->height);
+                }
                 discovered.append(it.value());
                 added.insert(fileName);
             }

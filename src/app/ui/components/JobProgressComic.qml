@@ -13,6 +13,7 @@ Item {
     property int currentIndex: -1
     property int pendingIndex: -1
     property int pendingDirection: 0
+    visible: root.active && root.chartExportActive
 
     readonly property bool hasVisibleImage: visibleImage.status === Image.Ready
     readonly property bool canSwitch: root.chartExportActive && root.active
@@ -42,7 +43,7 @@ Item {
     }
 
     function syncFromModel() {
-        if (!root.resources || root.switching)
+        if (!root.active || !root.chartExportActive || !root.resources || root.switching)
             return
         const modelUrl = root.resources.currentImageUrl
         if (modelUrl.length === 0)
@@ -108,6 +109,14 @@ Item {
     }
 
     function handleIncomingReady() {
+        if (!root.active || !root.chartExportActive) {
+            incomingImage.source = ""
+            root.pendingIndex = -1
+            root.pendingDirection = 0
+            root.switching = false
+            root.updateTimer()
+            return
+        }
         if (root.pendingDirection === 0) {
             finishModelSync()
             return
@@ -120,6 +129,14 @@ Item {
     }
 
     function handleIncomingError() {
+        if (!root.active || !root.chartExportActive) {
+            incomingImage.source = ""
+            root.pendingIndex = -1
+            root.pendingDirection = 0
+            root.switching = false
+            root.updateTimer()
+            return
+        }
         if (root.resources)
             root.resources.useFallback()
         incomingImage.source = ""
@@ -130,7 +147,7 @@ Item {
     }
 
     function handleVisibleError() {
-        if (!root.resources)
+        if (!root.active || !root.chartExportActive || !root.resources)
             return
         const fallbackUrl = root.resources.currentImageUrl
         if (visibleImage.source.toString() === fallbackUrl.toString()) {
@@ -165,6 +182,8 @@ Item {
     onChartExportActiveChanged: {
         if (!root.chartExportActive)
             stopBanner()
+        else
+            syncFromModel()
         updateTimer()
     }
     onVisibleChanged: updateTimer()
