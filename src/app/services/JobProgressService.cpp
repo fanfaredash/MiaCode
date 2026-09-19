@@ -9,12 +9,27 @@ JobProgressService::JobProgressService(QObject* parent)
 {
 }
 
-quint64 JobProgressService::begin(const QString& title, const QString& label, bool cancellable)
+QString JobProgressService::taskTypeName() const
+{
+    switch (taskType_) {
+    case TaskType::ChartExport:
+        return QStringLiteral("chartExport");
+    case TaskType::Generic:
+        return QStringLiteral("generic");
+    }
+    return QStringLiteral("generic");
+}
+
+quint64 JobProgressService::begin(const QString& title,
+                                  const QString& label,
+                                  bool cancellable,
+                                  TaskType taskType)
 {
     active_ = true;
     ++token_;
     indeterminate_ = false;
     cancellable_ = cancellable;
+    taskType_ = taskType;
     // A new job always starts uncancelled: a stale flag from the previous job
     // would abort this one at its first checkpoint.
     cancelRequested_ = false;
@@ -63,6 +78,7 @@ void JobProgressService::end()
     cancelRequested_ = false;
     indeterminate_ = false;
     percent_ = 0;
+    taskType_ = TaskType::Generic;
     title_.clear();
     label_.clear();
     emit changed();

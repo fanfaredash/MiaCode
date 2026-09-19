@@ -16,6 +16,14 @@ namespace miacode {
 class JobProgressService final : public QObject
 {
     Q_OBJECT
+
+public:
+    enum class TaskType {
+        Generic,
+        ChartExport
+    };
+    Q_ENUM(TaskType)
+
     Q_PROPERTY(bool active READ active NOTIFY changed)
     Q_PROPERTY(QString title READ title NOTIFY changed)
     Q_PROPERTY(QString label READ label NOTIFY changed)
@@ -23,8 +31,9 @@ class JobProgressService final : public QObject
     Q_PROPERTY(bool indeterminate READ indeterminate NOTIFY changed)
     Q_PROPERTY(bool cancellable READ cancellable NOTIFY changed)
     Q_PROPERTY(bool cancelRequested READ cancelRequested NOTIFY changed)
+    Q_PROPERTY(TaskType taskType READ taskType NOTIFY changed)
+    Q_PROPERTY(QString taskTypeName READ taskTypeName NOTIFY changed)
 
-public:
     explicit JobProgressService(QObject* parent = nullptr);
 
     bool active() const { return active_; }
@@ -37,9 +46,14 @@ public:
     quint64 token() const { return token_; }
     bool cancellable() const { return cancellable_; }
     bool cancelRequested() const { return cancelRequested_; }
+    TaskType taskType() const { return taskType_; }
+    QString taskTypeName() const;
 
     // Returns the new job's token.
-    quint64 begin(const QString& title, const QString& label, bool cancellable);
+    quint64 begin(const QString& title,
+                  const QString& label,
+                  bool cancellable,
+                  TaskType taskType = TaskType::Generic);
     void report(int percent, const QString& label);
     // A stage with no measurable progress; the shell shows a busy indicator.
     void reportIndeterminate(const QString& label);
@@ -58,6 +72,7 @@ private:
     bool indeterminate_ = false;
     int percent_ = 0;
     quint64 token_ = 0;
+    TaskType taskType_ = TaskType::Generic;
     QString title_;
     QString label_;
 };
