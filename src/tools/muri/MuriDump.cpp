@@ -744,7 +744,7 @@ QVector<StaticReferenceRecord> buildStaticReferenceRecords(const QVector<Timelin
                 && note.second > criticalSecond + kStaticCollideThresholdSeconds + kStaticTimeEpsilonSeconds
                 && note.second <= slide.endSecond + kStaticCollideExtraDeltaSeconds + kStaticTimeEpsilonSeconds) {
                 StaticReferenceRecord record;
-                record.kind = MuriKind::TapOnSlide;
+                record.kind = MuriKind::Overlap;
                 record.affectedIndex = noteIndex;
                 record.causeIndex = slideIndex;
                 record.deltaSecond = criticalSecond - note.second;
@@ -767,12 +767,10 @@ QVector<StaticReferenceRecord> buildStaticReferenceRecords(const QVector<Timelin
             ((endLane + 6) % 8) + 1,
             (endLane % 8) + 1,
         };
-        const double startSecond = qMax(
+        const double collideStartSecond = qMax(
             criticalSecond - kStaticCollideExtraDeltaSeconds,
             wifi.slideTraceSecond + miacode::muri::kTapOnSlideThresholdSeconds);
-        const double endSecond = qMax(
-            criticalSecond + kStaticCollideThresholdSeconds,
-            wifi.endSecond + kStaticCollideExtraDeltaSeconds);
+        const double collideEndSecond = criticalSecond + kStaticCollideThresholdSeconds;
 
         for (int noteIndex : nonSlideIndices) {
             const TimelineNoteMarker& note = noteMarkers.at(noteIndex);
@@ -797,9 +795,23 @@ QVector<StaticReferenceRecord> buildStaticReferenceRecords(const QVector<Timelin
                 records.append(record);
             }
 
-            if (endLanes.contains(note.lane) && markerMomentInRange(note.second, startSecond, endSecond)) {
+            if (endLanes.contains(note.lane)
+                && markerMomentInRange(note.second, collideStartSecond, collideEndSecond)) {
                 StaticReferenceRecord record;
                 record.kind = MuriKind::TapOnSlide;
+                record.affectedIndex = noteIndex;
+                record.causeIndex = wifiIndex;
+                record.deltaSecond = criticalSecond - note.second;
+                record.hasDelta = true;
+                records.append(record);
+            }
+
+            if (endLanes.contains(note.lane)
+                && criticalSecond >= 0.0
+                && note.second > criticalSecond + kStaticCollideThresholdSeconds + kStaticTimeEpsilonSeconds
+                && note.second <= wifi.endSecond + kStaticCollideExtraDeltaSeconds + kStaticTimeEpsilonSeconds) {
+                StaticReferenceRecord record;
+                record.kind = MuriKind::Overlap;
                 record.affectedIndex = noteIndex;
                 record.causeIndex = wifiIndex;
                 record.deltaSecond = criticalSecond - note.second;

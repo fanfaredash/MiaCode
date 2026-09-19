@@ -952,6 +952,48 @@ int main(int argc, char** argv)
 
     {
         const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(160){4}4-8[4:7],,3h,,2h,,1h,,8h\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("slow slide end occupancy repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::TapOnSlide) == 0,
+            QStringLiteral("slow slide end occupancy repro has no runtime tap-on-slide"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::TapOnSlide) == 0,
+            QStringLiteral("slow slide end occupancy repro has no static tap-on-slide"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::Overlap) == 0,
+            QStringLiteral("slow slide end occupancy repro keeps runtime overlap empty"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::Overlap) == 1,
+            QStringLiteral("slow slide end occupancy repro emits one static overlap"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::Overlap) == 1,
+            QStringLiteral("slow slide end occupancy repro keeps one overlap visible"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::TapOnSlide) == 0,
+            QStringLiteral("slow slide end occupancy repro hides tap-on-slide from the panel"));
+
+        if (const MuriStaticReference* reference =
+                firstStaticReference(analyzed.staticReferences, MuriKind::Overlap)) {
+            expect(reference->affected.markerType == QStringLiteral("hold"),
+                QStringLiteral("slow slide end occupancy repro static affected is hold"));
+            expect(reference->affected.lane == 8,
+                QStringLiteral("slow slide end occupancy repro static affected lane is 8"));
+            expect(reference->cause.markerType == QStringLiteral("slide"),
+                QStringLiteral("slow slide end occupancy repro static cause is slide"));
+            expect(reference->cause.endLane == 8,
+                QStringLiteral("slow slide end occupancy repro static cause ends on lane 8"));
+        }
+
+        if (!analyzed.visibleEntries.isEmpty()) {
+            const miacode::muri::MuriPanelEntry& entry = analyzed.visibleEntries.constFirst();
+            expect(entry.kind == MuriKind::Overlap,
+                QStringLiteral("slow slide end occupancy repro visible entry is overlap"));
+            expect(entry.rawDetail.contains(QStringLiteral("hold 8h")),
+                QStringLiteral("slow slide end occupancy repro detail names hold 8h"));
+            expect(entry.rawDetail.contains(QStringLiteral("slide")),
+                QStringLiteral("slow slide end occupancy repro detail names the slide"));
+            expect(!entry.rawDetail.contains(QStringLiteral("hold 8 ")),
+                QStringLiteral("slow slide end occupancy repro detail does not use bare hold 8"));
+        }
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
             QStringLiteral("(192)\n{8}2V46[4:1],1/8,,7h[4:1],,5w1b[8:1],2/8,{32}5bx,B5,Cf,B8/B1/B2,\n"));
         expect(analyzed.parsed.ok, QStringLiteral("wifi on-slide touch repro chart parses"));
         expect(analyzed.report.diagnostics.isEmpty(),

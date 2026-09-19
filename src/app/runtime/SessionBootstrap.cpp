@@ -79,11 +79,7 @@ Session::Session(miacode::ApplicationServices& services, QObject* parent)
     connect(editorSyncController_, &miacode::EditorSyncController::editorContextChanged,
             this, &Session::refreshEditorAuthoringContext);
     connect(editorSyncController_, &miacode::EditorSyncController::caretLocationPublished,
-            this, [this](int difficultyId, qulonglong, int line, int column) {
-                if (difficultyId == activeDifficultyId_) {
-                    publishEditorCaret(difficultyId, line, column);
-                }
-            });
+            this, &Session::onEditorCaretLocationPublished);
     connect(editorSyncController_, &miacode::EditorSyncController::pointerInteractionStarted,
             this, &Session::handleEditorPointerInteraction);
     connect(editorSyncController_, &miacode::EditorSyncController::touchPadControlHoldChanged,
@@ -103,22 +99,11 @@ Session::Session(miacode::ApplicationServices& services, QObject* parent)
     miacode::PreviewAppearanceState& previewAppearance =
         applicationServices_.previewAppearance();
     connect(&previewAppearance, &miacode::PreviewAppearanceState::skinChanged,
-            this, [this] {
-                applyPreviewSkinDirectoryToSurfaces();
-                savePortableState();
-            });
+            this, &Session::onPreviewAppearanceSkinChanged);
     connect(&previewAppearance, &miacode::PreviewAppearanceState::judgeEffectStyleChanged,
-            this, [this, &previewAppearance] {
-                if (scene_ != nullptr) {
-                    scene_->setJudgeEffectStyle(previewAppearance.judgeEffectStyle());
-                }
-                savePortableState();
-            });
+            this, &Session::onPreviewAppearanceJudgeEffectStyleChanged);
     connect(&previewAppearance, &miacode::PreviewAppearanceState::introSoundChanged,
-            this, [this] {
-                applyPreviewSfxLevels(/*reloadAssets=*/true);
-                savePortableState();
-            });
+            this, &Session::onPreviewAppearanceIntroSoundChanged);
 
     QElapsedTimer startupStageTimer;
     startupStageTimer.start();
@@ -129,7 +114,6 @@ Session::Session(miacode::ApplicationServices& services, QObject* parent)
         startupLastMs = nowMs;
         appendStartupTimingStage(QString("runtime/%1").arg(stageName), nowMs, deltaMs);
     };
-
     configureRuntimeDebugOutput();
     logStartupStage("configure_runtime_debug_output");
     quickShellStartupStageMediaLoadDeferred_ = true;

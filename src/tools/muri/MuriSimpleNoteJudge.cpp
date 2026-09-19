@@ -18,6 +18,7 @@
 #include "tools/muri/MuriAnalyzerModel.h"
 #include "tools/muri/MuriDiagnosticLabels.h"     // config labels / source anchors / alert text
 #include "tools/muri/MuriRuntimeModelBuilder.h"  // buildNoteExpiryBuckets + the Stage-1 model builders
+#include "tools/muri/MuriStaticChecker.h"
 
 namespace miacode::muri::detail {
 
@@ -67,6 +68,102 @@ void updateSimpleNoteLateBad(JudgeableSimpleNote* note, double nowSecond)
     note->judgeBad = true;
     note->lateBad = true;
     note->judgeSecond = nowSecond;
+}
+
+bool findOccupyingPadCause(
+    const QVector<MuriPadWindow>& padWindows,
+    const QHash<QString, MarkerSourceRef>& markerRefs,
+    const QString& pad,
+    double momentSecond,
+    const QString& excludeMarkerKey,
+    RuntimePadEvent* cause)
+{
+    if (cause == nullptr || pad.isEmpty()) {
+        return false;
+    }
+
+    int bestIndex = -1;
+    for (int index = 0; index < padWindows.size(); ++index) {
+        const MuriPadWindow& window = padWindows.at(index);
+        if (normalizedPadToken(window.pad) != normalizedPadToken(pad)) {
+            continue;
+        }
+        if (window.sourceMarkerKey == excludeMarkerKey) {
+            continue;
+        }
+        if (momentSecond + kPadTimeEpsilon < window.startSecond
+            || momentSecond > window.endSecond + kPadTimeEpsilon) {
+            continue;
+        }
+
+        if (bestIndex < 0) {
+            bestIndex = index;
+            continue;
+        }
+
+        const MuriPadWindow& best = padWindows.at(bestIndex);
+        const bool candidateSlideLike =
+            window.sourceType == QLatin1String("slide") || window.sourceType == QLatin1String("wifi");
+        const bool bestSlideLike =
+            best.sourceType == QLatin1String("slide") || best.sourceType == QLatin1String("wifi");
+        if (candidateSlideLike != bestSlideLike) {
+            if (candidateSlideLike) {
+                bestIndex = index;
+            }
+            continue;
+        }
+        if (window.startSecond + kPadTimeEpsilon < best.startSecond) {
+            bestIndex = index;
+            continue;
+        }
+        if (best.startSecond + kPadTimeEpsilon < window.startSecond) {
+            continue;
+        }
+        const MarkerSourceRef candidateRef = markerRefs.value(window.sourceMarkerKey);
+        const MarkerSourceRef bestRef = markerRefs.value(best.sourceMarkerKey);
+        if (candidateRef.order > bestRef.order) {
+            bestIndex = index;
+        }
+    }
+
+    if (bestIndex < 0) {
+        return false;
+    }
+
+    const MuriPadWindow& window = padWindows.at(bestIndex);
+    const MarkerSourceRef ref = markerRefs.value(window.sourceMarkerKey);
+    cause->pad = normalizedPadToken(window.pad);
+    cause->tick = judgeTickForPadActiveStart(window.startSecond);
+    cause->second = window.startSecond;
+    cause->sourceMarkerKey = window.sourceMarkerKey;
+    cause->sourceType = window.sourceType;
+    cause->sourceOrder = ref.order;
+    cause->line = ref.line;
+    cause->col = ref.col;
+    cause->extraPadDown = false;
+    return true;
+}
+
+bool matchesStaticSlideEndOverlap(
+    const QVector<MuriStaticReference>& staticReferences,
+    const JudgeableSimpleNote& note,
+    const RuntimePadEvent& cause)
+{
+    if (cause.sourceMarkerKey.isEmpty()
+        || (cause.sourceType != QLatin1String("slide")
+            && cause.sourceType != QLatin1String("wifi"))) {
+        return false;
+    }
+
+    for (const MuriStaticReference& reference : staticReferences) {
+        if (reference.kind != MuriKind::Overlap
+            || reference.affected.markerKey != note.markerKey
+            || reference.cause.markerKey != cause.sourceMarkerKey) {
+            continue;
+        }
+        return true;
+    }
+    return false;
 }
 
 bool consumeRuntimePadEvent(
@@ -513,6 +610,9 @@ void collectSimpleNoteRuntimeDiagnostics(
         static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdMinMs) / 1000.0,
         staticTapOnSlideThresholdSeconds,
         static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdMaxMs) / 1000.0);
+    const QVector<MuriStaticReference> staticReferences = buildStaticMuriReferences(
+        noteMarkers,
+        normalizedStaticTapOnSlideThresholdSeconds);
     const QHash<QString, MarkerSourceRef> markerRefs = buildMarkerSourceRefs(noteMarkers);
     const QHash<QString, const TimelineNoteMarker*> markerLookup = buildMarkerLookup(noteMarkers);
     const QHash<QString, QString> markerConfigLabels = buildMarkerConfigLabels(noteMarkers);
@@ -628,17 +728,36 @@ void collectSimpleNoteRuntimeDiagnostics(
             continue;
         }
 
+        RuntimePadEvent overlapCause = note.cause;
+        if (note.lateBad && overlapCause.sourceMarkerKey.isEmpty()) {
+            findOccupyingPadCause(
+                runtimePadWindows,
+                markerRefs,
+                note.pad,
+                note.momentSecond,
+                note.markerKey,
+                &overlapCause);
+        }
+
+        // A matching static end-area reference owns this slow-slide overlap.
+        // The runtime late result would duplicate the panel and anchor it to
+        // the earlier slide head.
+        if (note.lateBad
+            && matchesStaticSlideEndOverlap(staticReferences, note, overlapCause)) {
+            continue;
+        }
+
         const QString affectedConfig = markerConfigLabelForKey(markerConfigLabels, note.markerKey, note.type);
         MuriDetailKind overlapDetailKind = MuriDetailKind::FormedOverlapAtSamePosition;
         MuriDetailArgs overlapDetailArgs;
         overlapDetailArgs.left = affectedConfig;
         overlapDetailArgs.alert = MuriAlertLevel::Muri;
-        if (!note.cause.sourceMarkerKey.isEmpty()) {
+        if (!overlapCause.sourceMarkerKey.isEmpty()) {
             const QString causeConfig = markerConfigLabelForSource(
                 markerConfigLabels,
                 syntheticSlideHeadOwnerKeys,
-                note.cause.sourceMarkerKey,
-                note.cause.sourceType);
+                overlapCause.sourceMarkerKey,
+                overlapCause.sourceType);
             if (!causeConfig.isEmpty() && causeConfig != affectedConfig) {
                 overlapDetailKind = MuriDetailKind::FormedOverlapSamePosition;
                 overlapDetailArgs.right = causeConfig;
@@ -650,7 +769,7 @@ void collectSimpleNoteRuntimeDiagnostics(
             SimaiNativeValidationLocale::English);
         const DiagnosticAnchor anchor = earlierDiagnosticAnchor(
             diagnosticAnchorFromNote(note),
-            diagnosticAnchorForCause(note.cause, markerRefs, syntheticSlideHeadOwnerKeys));
+            diagnosticAnchorForCause(overlapCause, markerRefs, syntheticSlideHeadOwnerKeys));
         collector.addSimpleNoteDiagnostic(
             MuriKind::Overlap,
             MuriAlertLevel::Muri,

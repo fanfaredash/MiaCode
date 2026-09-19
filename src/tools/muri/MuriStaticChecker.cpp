@@ -242,6 +242,18 @@ double slideCriticalSecondForMarker(const TimelineNoteMarker& marker)
     return -1.0;
 }
 
+bool isLastAreaOccupancyMoment(
+    double noteSecond,
+    double criticalSecond,
+    double endSecond,
+    double collideThresholdSeconds,
+    double collideExtraDeltaSeconds)
+{
+    return qIsFinite(criticalSecond)
+        && noteSecond > criticalSecond + collideThresholdSeconds + kStaticTimeEpsilonSeconds
+        && noteSecond <= endSecond + collideExtraDeltaSeconds + kStaticTimeEpsilonSeconds;
+}
+
 MuriStaticReferenceNote staticReferenceNoteFromMarker(const TimelineNoteMarker& marker)
 {
     MuriStaticReferenceNote note;
@@ -259,6 +271,18 @@ MuriStaticReferenceNote staticReferenceNoteFromMarker(const TimelineNoteMarker& 
     note.slideTraceSecond = marker.slideTraceSecond;
     note.hasProtection = marker.isEx;
     return note;
+}
+
+MuriStaticReference lastAreaOccupancyOverlap(
+    const MuriStaticReferenceNote& affected,
+    const TimelineNoteMarker& slideLike)
+{
+    MuriStaticReference record;
+    record.kind = MuriKind::Overlap;
+    record.alertLevel = MuriAlertLevel::Muri;
+    record.affected = affected;
+    record.cause = staticReferenceNoteFromMarker(slideLike);
+    return record;
 }
 
 MuriStaticReferenceNote staticReferenceNoteFromHeadStar(const TimelineNoteMarker& marker)
@@ -475,22 +499,13 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
 
             if (!endPad.isEmpty()
                 && notePad == endPad
-                && qIsFinite(criticalSecond)
-                && note.second > criticalSecond + normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds
-                && note.second <= slide.endSecond + collideExtraDeltaSeconds + kStaticTimeEpsilonSeconds) {
-                MuriStaticReference record;
-                const MuriStaticReferenceNote affected = staticReferenceNoteFromMarker(note);
-                record.kind = MuriKind::TapOnSlide;
-                record.alertLevel = downgradeProtectedReferenceAlertLevel(
-                    tapOnSlideAlertLevel(
-                        qAbs(criticalSecond - note.second),
-                        normalizedCollideThresholdSeconds),
-                    affected.hasProtection);
-                record.affected = affected;
-                record.cause = staticReferenceNoteFromMarker(slide);
-                record.deltaSecond = criticalSecond - note.second;
-                record.hasDelta = true;
-                records.append(record);
+                && isLastAreaOccupancyMoment(
+                    note.second,
+                    criticalSecond,
+                    slide.endSecond,
+                    normalizedCollideThresholdSeconds,
+                    collideExtraDeltaSeconds)) {
+                records.append(lastAreaOccupancyOverlap(staticReferenceNoteFromMarker(note), slide));
             }
         }
 
@@ -549,22 +564,13 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
 
             if (!endPad.isEmpty()
                 && target.pad == endPad
-                && qIsFinite(criticalSecond)
-                && target.second > criticalSecond + normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds
-                && target.second <= slide.endSecond + collideExtraDeltaSeconds + kStaticTimeEpsilonSeconds) {
-                MuriStaticReference record;
-                const MuriStaticReferenceNote affected = target.note;
-                record.kind = MuriKind::TapOnSlide;
-                record.alertLevel = downgradeProtectedReferenceAlertLevel(
-                    tapOnSlideAlertLevel(
-                        qAbs(criticalSecond - target.second),
-                        normalizedCollideThresholdSeconds),
-                    affected.hasProtection);
-                record.affected = affected;
-                record.cause = staticReferenceNoteFromMarker(slide);
-                record.deltaSecond = criticalSecond - target.second;
-                record.hasDelta = true;
-                records.append(record);
+                && isLastAreaOccupancyMoment(
+                    target.second,
+                    criticalSecond,
+                    slide.endSecond,
+                    normalizedCollideThresholdSeconds,
+                    collideExtraDeltaSeconds)) {
+                records.append(lastAreaOccupancyOverlap(target.note, slide));
             }
         }
     }
@@ -582,12 +588,10 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
             ((endLane + 6) % 8) + 1,
             (endLane % 8) + 1,
         };
-        const double startSecond = qMax(
+        const double collideStartSecond = qMax(
             criticalSecond - collideExtraDeltaSeconds,
             wifi.slideTraceSecond + miacode::muri::kTapOnSlideThresholdSeconds);
-        const double endSecond = qMax(
-            criticalSecond + normalizedCollideThresholdSeconds,
-            wifi.endSecond + collideExtraDeltaSeconds);
+        const double collideEndSecond = criticalSecond + normalizedCollideThresholdSeconds;
 
         for (int noteIndex : nonSlideIndices) {
             const TimelineNoteMarker& note = noteMarkers.at(noteIndex);
@@ -620,7 +624,8 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 records.append(record);
             }
 
-            if (endLanes.contains(note.lane) && markerMomentInRange(note.second, startSecond, endSecond)) {
+            if (endLanes.contains(note.lane)
+                && markerMomentInRange(note.second, collideStartSecond, collideEndSecond)) {
                 MuriStaticReference record;
                 const MuriStaticReferenceNote affected = staticReferenceNoteFromMarker(note);
                 record.kind = MuriKind::TapOnSlide;
@@ -634,6 +639,16 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 record.deltaSecond = criticalSecond - note.second;
                 record.hasDelta = true;
                 records.append(record);
+            }
+
+            if (endLanes.contains(note.lane)
+                && isLastAreaOccupancyMoment(
+                    note.second,
+                    criticalSecond,
+                    wifi.endSecond,
+                    normalizedCollideThresholdSeconds,
+                    collideExtraDeltaSeconds)) {
+                records.append(lastAreaOccupancyOverlap(staticReferenceNoteFromMarker(note), wifi));
             }
         }
 
@@ -664,7 +679,8 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 records.append(record);
             }
 
-            if (endLanes.contains(target.note.lane) && markerMomentInRange(target.second, startSecond, endSecond)) {
+            if (endLanes.contains(target.note.lane)
+                && markerMomentInRange(target.second, collideStartSecond, collideEndSecond)) {
                 MuriStaticReference record;
                 const MuriStaticReferenceNote affected = target.note;
                 record.kind = MuriKind::TapOnSlide;
@@ -678,6 +694,16 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 record.deltaSecond = criticalSecond - target.second;
                 record.hasDelta = true;
                 records.append(record);
+            }
+
+            if (endLanes.contains(target.note.lane)
+                && isLastAreaOccupancyMoment(
+                    target.second,
+                    criticalSecond,
+                    wifi.endSecond,
+                    normalizedCollideThresholdSeconds,
+                    collideExtraDeltaSeconds)) {
+                records.append(lastAreaOccupancyOverlap(target.note, wifi));
             }
         }
     }

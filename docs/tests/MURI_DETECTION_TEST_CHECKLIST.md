@@ -173,6 +173,7 @@ E
 - [ ] `118` 不残留 `MultiTouch`
 - [ ] `123` 仍保留 `MultiTouch`
 - [ ] `(128.6){1}3v1[1:11]/7v5[1:11],` 不显示 `SlideTooFast`
+- [ ] 超慢 Slide 终点占用：`(160){4}4-8[4:7],,3h,,2h,,1h,,8h` 报 `Overlap`（非 `TapOnSlide`）
 
 ## 14. 建议记录模板
 

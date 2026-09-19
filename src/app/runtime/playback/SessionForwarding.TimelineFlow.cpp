@@ -192,6 +192,13 @@ void Session::publishEditorCaret(int difficultyId, int line, int column)
         qMax(1, line), qMax(1, column), false);
 }
 
+void Session::onEditorCaretLocationPublished(int difficultyId, qulonglong, int line, int column)
+{
+    if (difficultyId == activeDifficultyId_) {
+        publishEditorCaret(difficultyId, line, column);
+    }
+}
+
 void Session::handleEditorPointerInteraction(int difficultyId)
 {
     if (!hasActiveDifficulty() || difficultyId != activeDifficultyId_

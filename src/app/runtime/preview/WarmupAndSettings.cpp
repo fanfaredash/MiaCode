@@ -1050,6 +1050,26 @@ void Session::applyPreviewSfxLevels(bool reloadAssets)
     previewSfxRuntime_->applyLevels(previewAudioSettings_);
 }
 
+void Session::onPreviewAppearanceSkinChanged()
+{
+    applyPreviewSkinDirectoryToSurfaces();
+    savePortableState();
+}
+
+void Session::onPreviewAppearanceJudgeEffectStyleChanged()
+{
+    if (scene_ != nullptr) {
+        scene_->setJudgeEffectStyle(applicationServices_.previewAppearance().judgeEffectStyle());
+    }
+    savePortableState();
+}
+
+void Session::onPreviewAppearanceIntroSoundChanged()
+{
+    applyPreviewSfxLevels(/*reloadAssets=*/true);
+    savePortableState();
+}
+
 void Session::applyPreviewSkinDirectoryToSurfaces()
 {
     const QString skinDir = resolvePreviewSkinDir();

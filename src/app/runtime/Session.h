@@ -253,6 +253,10 @@ public:
     QString documentFilePath() const;
     int documentActiveDifficultyId() const;
     void publishEditorCaret(int difficultyId, int line, int column);
+    void onEditorCaretLocationPublished(int difficultyId, qulonglong revision, int line, int column);
+    void onPreviewAppearanceSkinChanged();
+    void onPreviewAppearanceJudgeEffectStyleChanged();
+    void onPreviewAppearanceIntroSoundChanged();
     void handleEditorPointerInteraction(int difficultyId);
     miacode::EditorSyncController& editorSyncController();
     const miacode::EditorSyncController& editorSyncController() const;

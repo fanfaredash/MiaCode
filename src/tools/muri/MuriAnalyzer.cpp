@@ -1096,27 +1096,7 @@ QMap<int, QMap<QString, RuntimePadEvent>> buildRuntimePadEvents(
     const QVector<PadWindowInterval> intervals = buildPadWindowIntervals(padWindows, markerRefs);
     QHash<QString, QVector<int>> intervalIndicesByPad;
     for (int index = 0; index < intervals.size(); ++index) {
-        const PadWindowInterval& interval = intervals.at(index);
-        if (interval.sourceType == QLatin1String("slide") || interval.sourceType == QLatin1String("wifi")) {
-            RuntimePadEvent event;
-            event.pad = interval.pad;
-            event.tick = interval.startTick;
-            event.second = tickToSecond(interval.startTick);
-            event.sourceMarkerKey = interval.sourceMarkerKey;
-            event.sourceType = interval.sourceType;
-            event.sourceOrder = interval.sourceOrder;
-            event.line = interval.line;
-            event.col = interval.col;
-            event.extraPadDown = false;
-
-            QMap<QString, RuntimePadEvent>& tickEvents = eventsByTick[event.tick];
-            if (!tickEvents.contains(event.pad) || tickEvents.value(event.pad).sourceOrder <= event.sourceOrder) {
-                tickEvents.insert(event.pad, event);
-            }
-            continue;
-        }
-
-        intervalIndicesByPad[interval.pad].append(index);
+        intervalIndicesByPad[intervals.at(index).pad].append(index);
     }
 
     for (auto it = intervalIndicesByPad.constBegin(); it != intervalIndicesByPad.constEnd(); ++it) {

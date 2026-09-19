@@ -212,11 +212,14 @@ QString formatMarkerConfigLabel(const TimelineNoteMarker& marker, bool slideHead
     if (slideHead && isSlideLike(marker)) {
         return slideHeadConfigLabel(marker);
     }
-    if (marker.type == QLatin1String("tap")) {
-        return QStringLiteral("tap %1").arg(marker.lane);
-    }
-    if (marker.type == QLatin1String("hold")) {
-        return QStringLiteral("hold %1").arg(marker.lane);
+    if (marker.type == QLatin1String("tap") || marker.type == QLatin1String("hold")) {
+        const QString laneToken =
+            (marker.lane >= 1 && marker.lane <= 8) ? QString::number(marker.lane) : QString();
+        const bool isHold = marker.type == QLatin1String("hold");
+        const QString token = simpleNoteLaneConfigToken(laneToken, marker.isEx, isHold);
+        const QString typeText = isHold ? QStringLiteral("hold") : QStringLiteral("tap");
+        const QString base = token.isEmpty() ? typeText : QStringLiteral("%1 %2").arg(typeText, token);
+        return marker.isEx ? QStringLiteral("protected %1").arg(base) : base;
     }
     if (marker.type == QLatin1String("touch")) {
         const QString pad = normalizedPadToken(marker.touchPad);

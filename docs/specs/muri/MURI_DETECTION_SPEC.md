@@ -89,7 +89,8 @@ code_anchors: ["src/tools/muri/MuriAnalyzer.cpp", "src/tools/muri/MuriStaticChec
 
 ### 5.3 TapOnSlide
 
-- 当普通物件因 slide / wifi 尾部、路径进入时机或 critical 末端窗口而可能发生碰撞时，报 `TapOnSlide`。
+- 当普通物件因 slide / wifi 路径进入时机，或落在 critical 附近的撞尾窗口内而可能发生碰撞时，报 `TapOnSlide`。
+- 超慢 slide / wifi：若普通物件落在 `critical + threshold` 之后、且仍在 `end + (threshold - 150ms)` 占用窗口内，则报 `Overlap`（同 pad 占用），不再报 `TapOnSlide`。
 - 运行时路径基于真实提前判定结果。
 - 静态参考基于：
   - slide 各 segment 的 `pad enter time`
@@ -104,10 +105,14 @@ code_anchors: ["src/tools/muri/MuriAnalyzer.cpp", "src/tools/muri/MuriStaticChec
 ### 5.4 Overlap
 
 - 运行时 `Overlap` 来自普通物件最终以“同位置叠键”方式判定失败。
-- 静态 `Overlap` 来自非 slide 物件之间的同 pad 重叠参考：
-  - tap / touch 对 tap / touch：同 pad 且时差不超过 `6 / 180 = 33.3 ms`
-  - tap / touch 对 hold / touch-hold：落在对方按住区间前后各 `33.3 ms` 的扩展区间内
-  - hold / touch-hold 对 hold / touch-hold：两个扩展区间相交
+- 晚到且无显式 cause 时，运行时会回查当前 pad 占用源（含仍占用终点区的 slide / wifi），写入详情。
+- 若晚到占用源是 slide / wifi，运行时不再另报 `Overlap`：终点区超慢占用由静态 `Overlap` 单独呈现，避免面板出现两条叠键（且运行时锚点会落到 slide 头、文案弱化为 `hold 8`）。
+- 静态 `Overlap` 来自：
+  - 非 slide 物件之间的同 pad 重叠参考：
+    - tap / touch 对 tap / touch：同 pad 且时差不超过 `6 / 180 = 33.3 ms`
+    - tap / touch 对 hold / touch-hold：落在对方按住区间前后各 `33.3 ms` 的扩展区间内
+    - hold / touch-hold 对 hold / touch-hold：两个扩展区间相交
+  - slide / wifi 终点区超慢占用：`critical + threshold < note ≤ end + (threshold - 150ms)`，受影响目标为同终点 pad 的 `tap` / `hold` / `head star`
 - slide 头真撞尾的配对不会被再次当作晚到 overlap 补报。
 
 ### 5.5 MultiTouch
