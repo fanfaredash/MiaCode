@@ -10,13 +10,33 @@ Item {
 
     // A miacode::JobProgressService instance.
     property var progress: null
+    property var comicResources: null
 
     readonly property bool jobActive: !!root.progress && root.progress.active
+    readonly property bool chartExportActive: !!root.progress
+        && root.progress.active
+        && root.progress.taskTypeName === "chartExport"
+    readonly property bool genericActive: !!root.progress
+        && root.progress.active
+        && root.progress.taskTypeName !== "chartExport"
+    readonly property var chartExportLabelLines: {
+        const label = root.progress ? String(root.progress.label || "") : ""
+        const lines = label.split(/\r?\n/)
+        return [lines.length > 0 ? lines[0] : "",
+                lines.length > 1 ? lines.slice(1).join(" ") : ""]
+    }
+    readonly property real comicAspectRatio: root.comicResources
+        && root.comicResources.currentAspectRatio > 0
+        ? root.comicResources.currentAspectRatio : 1.0
+    readonly property real comicPreferredHeight: Math.min(
+        260, Math.max(160, 520 / root.comicAspectRatio))
 
     AppDialog {
         objectName: "jobProgressCard"
         visible: root.jobActive
-        preferredWidth: 420
+        preferredWidth: root.chartExportActive ? 560 : 420
+        preferredHeight: root.chartExportActive
+            ? Theme.dialogHeight : Theme.dialogCompactHeight
         closePolicy: Popup.NoAutoClose
         title: root.progress ? root.progress.title : ""
 
@@ -25,9 +45,32 @@ Item {
             Text {
                 objectName: "jobProgressLabel"
                 Layout.fillWidth: true
+                visible: !root.chartExportActive
                 text: root.progress ? root.progress.label : ""
                 color: Theme.colors.text.secondary
                 wrapMode: Text.WordWrap
+            }
+
+            Text {
+                objectName: "jobProgressChartExportLabelLine1"
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.chartExportActive ? Theme.uiFontSize + 4 : 0
+                visible: root.chartExportActive
+                text: root.chartExportLabelLines[0]
+                color: Theme.colors.text.secondary
+                elide: Text.ElideRight
+                maximumLineCount: 1
+            }
+
+            Text {
+                objectName: "jobProgressChartExportLabelLine2"
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.chartExportActive ? Theme.uiFontSize + 4 : 0
+                visible: root.chartExportActive
+                text: root.chartExportLabelLines[1]
+                color: Theme.colors.text.secondary
+                elide: Text.ElideRight
+                maximumLineCount: 1
             }
 
             ProgressBar {
@@ -37,6 +80,16 @@ Item {
                 to: 100
                 indeterminate: !!root.progress && root.progress.indeterminate
                 value: root.progress ? root.progress.percent : 0
+            }
+
+            JobProgressComic {
+                objectName: "jobProgressComic"
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.chartExportActive
+                    ? root.comicPreferredHeight : 0
+                resources: root.comicResources
+                active: root.jobActive
+                chartExportActive: root.chartExportActive
             }
 
         }
