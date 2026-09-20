@@ -161,7 +161,7 @@ int main(int argc, char* argv[])
             excludedFilePaths.insert(it.fileName(), path);
             continue;
         }
-        codeFlags.unite(collectFlags(readFile(path)));
+        codeFlags |= collectFlags(readFile(path));
         ++scanned;
     }
     if (scanned == 0) {

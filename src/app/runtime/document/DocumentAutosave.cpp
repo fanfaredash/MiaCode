@@ -45,7 +45,9 @@ QString autosaveMetadataFilePath(const QString& autosaveDirectoryPath)
 
 QString autosaveTimestampStringUtc(qint64 msecsSinceEpoch)
 {
-    return QDateTime::fromMSecsSinceEpoch(msecsSinceEpoch, Qt::UTC)
+    return QDateTime::fromMSecsSinceEpoch(
+               msecsSinceEpoch,
+               QTimeZone(QTimeZone::UTC))
         .toString(QStringLiteral("yyyy-MM-dd-HH-mm-ss"));
 }
 
