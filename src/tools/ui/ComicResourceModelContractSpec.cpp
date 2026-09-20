@@ -136,6 +136,13 @@ bool verifyModelLifecycleContract(QTextStream& err)
                       && implementation.contains(QStringLiteral("total_elapsed_ms"))
                       && implementation.contains(QStringLiteral("resource_count")),
                   QStringLiteral("startup scan records resource count and elapsed timings"), err);
+    ok &= require(header.contains(QStringLiteral("Q_INVOKABLE void selectResource(int index);"))
+                      && implementation.contains(QStringLiteral("void ComicResourceModel::selectResource(int index)"))
+                      && implementation.contains(QStringLiteral(
+                          "if (index < 0 || index >= resources_.size() || currentIndex_ == index)"))
+                      && implementation.contains(QStringLiteral("currentIndex_ = index;"))
+                      && implementation.contains(QStringLiteral("emit currentChanged();")),
+                  QStringLiteral("selectResource supports valid, duplicate, and invalid index states"), err);
     return ok;
 }
 

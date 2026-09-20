@@ -26,6 +26,7 @@ public:
     Q_INVOKABLE void selectNextResource();
     Q_INVOKABLE void selectPreviousResource();
     Q_INVOKABLE void selectRandomResource();
+    Q_INVOKABLE void selectResource(int index);
     Q_INVOKABLE void useFallback();
     Q_INVOKABLE void refresh();
     Q_INVOKABLE QString imageUrlAt(int index) const;

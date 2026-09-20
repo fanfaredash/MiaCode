@@ -57,12 +57,6 @@ Item {
             ? 499 : Theme.dialogCompactHeight
         closePolicy: Popup.NoAutoClose
         title: root.progress ? root.progress.title : ""
-        onAboutToShow: {
-            if (root.chartExportActive && root.comicResources
-                    && root.comicResources.resourceCount > 1) {
-                root.comicResources.selectRandomResource()
-            }
-        }
 
         body: ColumnLayout {
             spacing: root.progressBodySpacing
@@ -123,10 +117,12 @@ Item {
                     tooltip: qsTrId("qml.previous_comic")
                     Accessible.name: qsTrId("qml.previous_comic")
                     Accessible.description: qsTrId("qml.show_previous_comic")
-                    visible: comic.canSwitch
-                    enabled: comic.canSwitch
+                    visible: root.chartExportActive
+                        && root.comicResources !== null
+                        && root.comicResources.resourceCount >= 2
+                    enabled: comic.canSwitch && comic.canGoBack
                     Layout.alignment: Qt.AlignVCenter
-                    onClicked: comic.requestSlide(-1)
+                    onClicked: comic.selectPreviousFromHistory()
                 }
 
                 JobProgressComic {
@@ -149,10 +145,12 @@ Item {
                     tooltip: qsTrId("qml.next_comic")
                     Accessible.name: qsTrId("qml.next_comic")
                     Accessible.description: qsTrId("qml.show_next_comic")
-                    visible: comic.canSwitch
+                    visible: root.chartExportActive
+                        && root.comicResources !== null
+                        && root.comicResources.resourceCount >= 2
                     enabled: comic.canSwitch
                     Layout.alignment: Qt.AlignVCenter
-                    onClicked: comic.requestSlide(1)
+                    onClicked: comic.selectRandomNext()
                 }
             }
 

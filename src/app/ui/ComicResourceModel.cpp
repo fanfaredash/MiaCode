@@ -409,6 +409,15 @@ double ComicResourceModel::aspectRatioAt(int index) const
     return index >= 0 && index < resources_.size() ? resources_.at(index).aspectRatio : 0.0;
 }
 
+void ComicResourceModel::selectResource(int index)
+{
+    if (index < 0 || index >= resources_.size() || currentIndex_ == index) {
+        return;
+    }
+    currentIndex_ = index;
+    emit currentChanged();
+}
+
 void ComicResourceModel::useFallback()
 {
     if (!usingFallback()) {

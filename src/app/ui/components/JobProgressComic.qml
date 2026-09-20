@@ -16,12 +16,61 @@ Item {
     property int pendingIndex: -1
     property int pendingDirection: 0
     property bool visibleCommitPending: false
+    property var navigationHistory: []
+    property bool chartExportInitialized: false
     visible: root.active && root.chartExportActive
 
     readonly property bool hasVisibleImage: visibleImage.status === Image.Ready
+    readonly property bool canGoBack: root.navigationHistory.length > 0
     readonly property bool canSwitch: root.chartExportActive && root.active
         && root.resources !== null && root.resources.resourceCount >= 2
         && !root.switching && incomingImage.status !== Image.Loading
+
+    function clearNavigationHistory() {
+        root.navigationHistory = []
+    }
+
+    function currentResourceIndex() {
+        if (!root.resources || root.resources.usingFallback)
+            return -1
+
+        return root.modelIndexForUrl(root.resources.currentImageUrl)
+    }
+
+    function pushCurrentResource() {
+        const index = root.currentIndex >= 0
+            ? root.currentIndex : root.currentResourceIndex()
+
+        if (index >= 0)
+            root.navigationHistory = root.navigationHistory.concat([index])
+    }
+
+    function selectRandomNext() {
+        if (!root.canSwitch || !root.resources
+                || root.resources.resourceCount < 2) {
+            return
+        }
+
+        root.pushCurrentResource()
+        root.resources.selectRandomResource()
+    }
+
+    function selectPreviousFromHistory() {
+        if (!root.canSwitch || !root.canGoBack || !root.resources)
+            return
+
+        const previousIndex = root.navigationHistory[root.navigationHistory.length - 1]
+        root.navigationHistory = root.navigationHistory.slice(
+            0, root.navigationHistory.length - 1)
+
+        if (previousIndex < 0 || previousIndex >= root.resources.resourceCount)
+            return
+        if (previousIndex === root.currentResourceIndex())
+            return
+
+        root.pendingDirection = -1
+        root.resources.selectResource(previousIndex)
+    }
 
     function updateTimer() {
         slideTimer.running = root.visible && root.active && root.chartExportActive
@@ -56,8 +105,10 @@ Item {
             updateTimer()
             return
         }
+        const transitionDirection = root.pendingDirection
         root.pendingIndex = modelIndexForUrl(modelUrl)
-        root.pendingDirection = 0
+        root.pendingDirection = transitionDirection
+        incomingImage.x = transitionDirection < 0 ? -root.width : root.width
         incomingImage.source = modelUrl
         updateTimer()
     }
@@ -181,19 +232,41 @@ Item {
         incomingImage.x = root.width
     }
 
+    function beginChartExport() {
+        root.clearNavigationHistory()
+
+        if (root.resources && root.resources.resourceCount > 1)
+            root.resources.selectRandomResource()
+    }
+
     Component.onCompleted: syncFromModel()
     onActiveChanged: {
-        if (root.active)
-            syncFromModel()
-        else
+        if (root.active) {
+            if (root.chartExportActive && !root.chartExportInitialized) {
+                root.chartExportInitialized = true
+                root.beginChartExport()
+            }
+            root.syncFromModel()
+        } else {
+            root.chartExportInitialized = false
+            root.clearNavigationHistory()
             stopBanner()
+        }
         updateTimer()
     }
     onChartExportActiveChanged: {
-        if (!root.chartExportActive)
+        if (!root.chartExportActive) {
+            root.chartExportInitialized = false
+            root.clearNavigationHistory()
             stopBanner()
-        else
-            syncFromModel()
+            return
+        }
+        if (!root.chartExportInitialized) {
+            root.chartExportInitialized = true
+            root.beginChartExport()
+        }
+        if (root.active)
+            root.syncFromModel()
         updateTimer()
     }
     onVisibleChanged: updateTimer()
@@ -288,7 +361,7 @@ Item {
         interval: root.slideIntervalMs
         repeat: true
         triggeredOnStart: false
-        onTriggered: root.resources.selectRandomResource()
+        onTriggered: root.selectRandomNext()
     }
 
     ParallelAnimation {
