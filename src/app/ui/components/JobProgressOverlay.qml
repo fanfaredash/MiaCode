@@ -25,18 +25,16 @@ Item {
         return [lines.length > 0 ? lines[0] : "",
                 lines.length > 1 ? lines.slice(1).join(" ") : ""]
     }
-    readonly property real comicAspectRatio: root.comicResources
-        && root.comicResources.currentAspectRatio > 0
-        ? root.comicResources.currentAspectRatio : 1.0
-    readonly property real comicPreferredHeight: Math.min(
-        260, Math.max(160, 520 / root.comicAspectRatio))
+    readonly property real comicFrameAspectRatio: 10 / 9
+    readonly property real comicPreferredHeight: root.chartExportActive
+        ? 528 / root.comicFrameAspectRatio : 0
 
     AppDialog {
         objectName: "jobProgressCard"
         visible: root.jobActive
         preferredWidth: root.chartExportActive ? 560 : 420
         preferredHeight: root.chartExportActive
-            ? Theme.dialogHeight : Theme.dialogCompactHeight
+            ? 760 : Theme.dialogCompactHeight
         closePolicy: Popup.NoAutoClose
         title: root.progress ? root.progress.title : ""
 

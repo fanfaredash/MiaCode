@@ -203,7 +203,7 @@ Item {
         anchors.fill: parent
         color: Theme.colors.background.control
         radius: Theme.controlRadius
-        border.color: Theme.colors.border.control
+        border.color: Theme.colors.text.heading
         border.width: 1
         clip: true
 
@@ -242,6 +242,16 @@ Item {
                     root.handleIncomingError()
                 root.updateTimer()
             }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            radius: Theme.controlRadius
+            border.color: Theme.colors.text.heading
+            border.width: 1
+            z: 2.5
+            enabled: false
         }
 
         Text {
