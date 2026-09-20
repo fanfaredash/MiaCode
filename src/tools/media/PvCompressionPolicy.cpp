@@ -7,9 +7,13 @@
 
 namespace miacode::media {
 
-PvCompressionPlan makePvCompressionPlan(double durationSeconds)
+PvCompressionPlan makePvCompressionPlan(double durationSeconds, qint64 targetBytes)
 {
     PvCompressionPlan plan;
+    plan.targetBytes = std::clamp<qint64>(
+        targetBytes,
+        1,
+        kPvCompressionWorkingTargetBytes);
     if (!(durationSeconds > 0.0)) {
         return plan;
     }

@@ -1284,6 +1284,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   reached via the toolbox's "音频/视频处理 / Audio/Video Processing" entry — not a hover submenu.
   The two track-audio operations resolve the canonical `track.{mp3,wav,flac,ogg}` candidates and
   preserve the selected input format in both the processed file and `track_bak.<extension>`.
+  Silence prepend normalizes both segments to stereo 44100 Hz and applies a 5 ms fade-in to the
+  source segment before the non-overlapping concat, preventing a zero-to-signal click without
+  changing the requested silence duration. PV black prepend uses `tpad` so source dimensions and
+  frame timing are preserved, then applies the shared two-pass size correction under the decimal
+  20,000,000-byte hard limit instead of upscaling every source to 1920x1080.
   The shared `runFfmpegBlocking(... totalDurationSeconds, error)` helper drives a determinate
   progress bar by parsing ffmpeg `-progress pipe:1` `out_time_us=` against the expected output
   duration (falls back to an indeterminate bar when duration is unknown).

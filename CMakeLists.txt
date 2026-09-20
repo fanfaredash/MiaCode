@@ -373,6 +373,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/media/PvBatchCompressionScanner.cpp
     src/tools/media/PvCompressionPolicy.h
     src/tools/media/PvCompressionPolicy.cpp
+    src/tools/media/MediaPrependPolicy.h
+    src/tools/media/MediaPrependPolicy.cpp
     src/tools/media/PvBatchCompressionWorker.h
     src/tools/media/PvBatchCompressionWorker.cpp
     src/tools/media/PvBatchCompressionDialog.h
@@ -2051,6 +2053,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/common/ChartAssetPaths.h
         LIBS Qt6::Core Qt6::Gui miniz
         INCLUDES src src/common src/tools
+    )
+
+    miacode_add_dev_tool(media_prepend_policy_spec TEST
+        SOURCES
+            src/tools/media/MediaPrependPolicySpec.cpp
+            src/tools/media/MediaPrependPolicy.h
+            src/tools/media/MediaPrependPolicy.cpp
+            src/tools/media/PvCompressionPolicy.h
+            src/tools/media/PvCompressionPolicy.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/tools
     )
 
     miacode_add_dev_tool(net_client_spec TEST

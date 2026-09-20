@@ -15,7 +15,9 @@ struct PvCompressionPlan {
     int videoBitrateKbps = 0;
 };
 
-PvCompressionPlan makePvCompressionPlan(double durationSeconds);
+PvCompressionPlan makePvCompressionPlan(
+    double durationSeconds,
+    qint64 targetBytes = kPvCompressionWorkingTargetBytes);
 PvCompressionPlan adjustedPvCompressionPlan(
     const PvCompressionPlan& previous,
     qint64 actualOutputBytes);

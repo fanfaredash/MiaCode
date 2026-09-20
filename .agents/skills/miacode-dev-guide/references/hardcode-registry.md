@@ -120,10 +120,12 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   SYNC-PAIR mirrored as `kMaxContentScale` in `TimelineSceneStateBuilder.cpp` and the literal `4.0`
   in `TimelineView.cpp`/`TimelineView.Core.cpp`/`TimelineQuickStateBridge.cpp` `setContentScale`
   clamps — change all together. See `cross-chain-linkage.md`.
-- `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.MediaTools.cpp` — toolbox media-prepend
-  ffmpeg defaults (`1920x1080@30`, x264 `CRF 18 veryfast`; silence stereo `44100 Hz`); audio
-  output encoders follow the resolved track format (`libmp3lame -q:a 2`, `pcm_s16le`, `flac`,
-  or `libvorbis -q:a 6`).
+- `src/tools/media/MediaPrependPolicy.h` + `.cpp` — toolbox media-prepend ffmpeg policy: audio
+  normalizes both segments to stereo `44100 Hz` and fades the source in over `5 ms`; audio output
+  encoders follow the resolved track format (`libmp3lame -q:a 2`, `pcm_s16le`, `flac`, or
+  `libvorbis -q:a 6`). PV prepend preserves source geometry/timing and derives its two-pass target
+  from source bytes and duration with a `1.02` container allowance plus `1.02` acceptance tolerance,
+  capped by the shared `19,500,000`-byte working target / `20,000,000`-byte hard limit.
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp` — issue-row padding /
   min height / ignored-row opacity.
 - `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp` —

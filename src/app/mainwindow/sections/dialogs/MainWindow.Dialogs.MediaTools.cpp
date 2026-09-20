@@ -9,6 +9,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "tools/media/PvBatchCompressionDialog.h"
+#include "tools/media/MediaPrependPolicy.h"
 #include "tools/media/PvCompressionPolicy.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
@@ -28,6 +29,7 @@
 #include <QtWidgets>
 
 #include <algorithm>
+#include <cmath>
 
 #include "common/DebugLog.h"
 
@@ -512,6 +514,52 @@ bool probeMediaDurationSeconds(const QString& ffmpegPath, const QString& mediaPa
     return true;
 }
 
+bool probeVideoDimensions(const QString& ffmpegPath, const QString& mediaPath, QSize* dimensions, QString* error)
+{
+    QProcess process;
+    process.setProcessChannelMode(QProcess::MergedChannels);
+    process.start(
+        ffmpegPath,
+        {QStringLiteral("-hide_banner"), QStringLiteral("-i"), mediaPath},
+        QIODevice::ReadOnly);
+    if (!process.waitForStarted(5000)) {
+        if (error != nullptr) {
+            *error = process.errorString();
+        }
+        return false;
+    }
+    if (!process.waitForFinished(30000)) {
+        process.kill();
+        process.waitForFinished(3000);
+        if (error != nullptr) {
+            *error = QStringLiteral("Timed out while probing video dimensions.");
+        }
+        return false;
+    }
+
+    const QString output = QString::fromLocal8Bit(process.readAll());
+    static const QRegularExpression dimensionsPattern(
+        QStringLiteral(R"(Video:.*?\s(\d{2,})x(\d{2,})(?:[\s,]))"));
+    const QRegularExpressionMatch match = dimensionsPattern.match(output);
+    if (!match.hasMatch()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Failed to read video dimensions.");
+        }
+        return false;
+    }
+    const QSize size(match.captured(1).toInt(), match.captured(2).toInt());
+    if (!size.isValid()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Invalid video dimensions.");
+        }
+        return false;
+    }
+    if (dimensions != nullptr) {
+        *dimensions = size;
+    }
+    return true;
+}
+
 bool compressVideoUnder20Mb(
     const QString& ffmpegPath,
     const QString& videoPath,
@@ -702,18 +750,11 @@ bool prependTrackSilence(
     const double totalDurationSeconds =
         inputDurationSeconds > 0.0 ? inputDurationSeconds + silenceSeconds : 0.0;
 
-    const QString silenceDuration = QString::number(silenceSeconds, 'f', 6);
-    QStringList args;
-    args << QStringLiteral("-hide_banner")
-         << QStringLiteral("-y")
-         << QStringLiteral("-f") << QStringLiteral("lavfi")
-         << QStringLiteral("-i") << QStringLiteral("anullsrc=channel_layout=stereo:sample_rate=44100:d=%1").arg(silenceDuration)
-         << QStringLiteral("-i") << backupPath
-         << QStringLiteral("-filter_complex")
-         << QStringLiteral("[0:a]atrim=duration=%1,asetpts=PTS-STARTPTS[s];[1:a]aresample=44100,aformat=channel_layouts=stereo,asetpts=PTS-STARTPTS[a];[s][a]concat=n=2:v=0:a=1[out]").arg(silenceDuration)
-         << QStringLiteral("-map") << QStringLiteral("[out]");
-    appendAudioEncoderArguments(args, trackInfo.suffix());
-    args << tempPath;
+    const QStringList args = miacode::media::makeAudioPrependArguments(
+        backupPath,
+        tempPath,
+        trackInfo.suffix(),
+        silenceSeconds);
     if (!runFfmpegBlocking(
             ffmpegPath,
             args,
@@ -746,39 +787,94 @@ bool prependPvBlack(
         return false;
     }
 
-    // Output runs for the original video plus the prepended black screen;
-    // probe the source so the progress bar can track real percent (best-effort).
+    // Keep the source geometry/timing and size the encode against the original
+    // average bitrate instead of upscaling every PV to a fixed 1080p CRF encode.
     double inputDurationSeconds = 0.0;
-    probeMediaDurationSeconds(ffmpegPath, backupPath, &inputDurationSeconds, nullptr);
+    if (!probeMediaDurationSeconds(ffmpegPath, backupPath, &inputDurationSeconds, error)) {
+        return false;
+    }
+    QSize inputDimensions;
+    if (!probeVideoDimensions(ffmpegPath, backupPath, &inputDimensions, error)) {
+        return false;
+    }
     const double totalDurationSeconds =
-        inputDurationSeconds > 0.0 ? inputDurationSeconds + silenceSeconds : 0.0;
+        inputDurationSeconds + silenceSeconds;
 
-    QStringList args;
-    args << QStringLiteral("-hide_banner")
-         << QStringLiteral("-y")
-         << QStringLiteral("-f") << QStringLiteral("lavfi")
-         << QStringLiteral("-t") << QString::number(silenceSeconds, 'f', 6)
-         << QStringLiteral("-i") << QStringLiteral("color=c=black:s=1920x1080:r=30")
-         << QStringLiteral("-i") << backupPath
-         << QStringLiteral("-filter_complex")
-         << QStringLiteral("[0:v]format=yuv420p[v0];[1:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[v1];[v0][v1]concat=n=2:v=1:a=0[v]")
-         << QStringLiteral("-map") << QStringLiteral("[v]")
-         << QStringLiteral("-an")
-         << QStringLiteral("-c:v") << QStringLiteral("libx264")
-         << QStringLiteral("-preset") << QStringLiteral("veryfast")
-         << QStringLiteral("-crf") << QStringLiteral("18")
-         << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p")
-         << QStringLiteral("-movflags") << QStringLiteral("+faststart")
-         << tempPath;
-    if (!runFfmpegBlocking(
-            ffmpegPath,
-            args,
-            parent,
-            UiText::text(QStringLiteral("media_tools.processing_pv_mp4")),
-            totalDurationSeconds,
-            error,
-            cancelled)) {
+    QTemporaryDir passLogDirectory;
+    if (!passLogDirectory.isValid()) {
+        if (error != nullptr) {
+            *error = QStringLiteral("Could not create the two-pass log directory.");
+        }
+        return false;
+    }
+
+    miacode::media::PvCompressionPlan plan = miacode::media::makePvPrependCompressionPlan(
+        pvInfo.size(),
+        inputDurationSeconds,
+        silenceSeconds);
+    qint64 outputBytes = 0;
+    bool encoded = false;
+    for (int attempt = 0; attempt < 2; ++attempt) {
         QFile::remove(tempPath);
+        const QString passLogPath = QDir(passLogDirectory.path()).filePath(
+            QStringLiteral("x264-prepend-attempt-%1").arg(attempt));
+        const QStringList firstPass = miacode::media::makePvPrependPassArguments(
+            backupPath, tempPath, passLogPath, plan, silenceSeconds, 1);
+        const QStringList secondPass = miacode::media::makePvPrependPassArguments(
+            backupPath, tempPath, passLogPath, plan, silenceSeconds, 2);
+        if (!runFfmpegBlocking(
+                ffmpegPath,
+                firstPass,
+                parent,
+                UiText::text(QStringLiteral("media_tools.processing_pv_mp4")),
+                totalDurationSeconds,
+                error,
+                cancelled)
+            || !runFfmpegBlocking(
+                ffmpegPath,
+                secondPass,
+                parent,
+                UiText::text(QStringLiteral("media_tools.processing_pv_mp4")),
+                totalDurationSeconds,
+                error,
+                cancelled)) {
+            QFile::remove(tempPath);
+            return false;
+        }
+
+        double outputDurationSeconds = 0.0;
+        QSize outputDimensions;
+        if (!probeMediaDurationSeconds(ffmpegPath, tempPath, &outputDurationSeconds, error)
+            || !probeVideoDimensions(ffmpegPath, tempPath, &outputDimensions, error)) {
+            QFile::remove(tempPath);
+            return false;
+        }
+        if (outputDimensions != inputDimensions
+            || std::abs(outputDurationSeconds - totalDurationSeconds) > 0.25) {
+            QFile::remove(tempPath);
+            if (error != nullptr) {
+                *error = QStringLiteral("Prepended video failed its dimensions or duration check.");
+            }
+            return false;
+        }
+
+        outputBytes = QFileInfo(tempPath).size();
+        if (miacode::media::isAcceptablePvPrependOutput(plan, outputBytes)) {
+            encoded = true;
+            break;
+        }
+        if (attempt == 0) {
+            plan = miacode::media::adjustedPvCompressionPlan(plan, outputBytes);
+        }
+    }
+
+    if (!encoded) {
+        QFile::remove(tempPath);
+        if (error != nullptr) {
+            *error = outputBytes >= miacode::media::kPvCompressionHardLimitBytes
+                ? QStringLiteral("Prepended video is still 20 MB or larger.")
+                : QStringLiteral("Prepended video exceeded its size target.");
+        }
         return false;
     }
     return replaceFileWithTemp(tempPath, pvPath, error);
