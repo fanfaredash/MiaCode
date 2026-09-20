@@ -31,9 +31,9 @@ Item {
         / root.comicFrameAspectRatio
     readonly property int progressBodySpacing: 10
     readonly property color comicButtonGlyphColor:
-        root.comicResources && root.comicResources.currentImageLight
-            ? Theme.comicButtonDarkGlyph : Theme.comicButtonLightGlyph
-    readonly property real comicButtonGlyphScale: 2.25
+        Theme.activeTheme.dark
+            ? Theme.comicButtonLightGlyph : Theme.comicButtonDarkGlyph
+    readonly property real comicButtonGlyphScale: 3.375
     readonly property int comicButtonGlyphPixelSize:
         Math.round(Theme.uiFontSize * root.comicButtonGlyphScale)
     readonly property var comicButtonGlyphStateColors: ({
@@ -52,7 +52,7 @@ Item {
     AppDialog {
         objectName: "jobProgressCard"
         visible: root.jobActive
-        preferredWidth: root.chartExportActive ? 498 : 420
+        preferredWidth: root.chartExportActive ? 468 : 420
         preferredHeight: root.chartExportActive
             ? 499 : Theme.dialogCompactHeight
         closePolicy: Popup.NoAutoClose
