@@ -30,6 +30,24 @@ Item {
     readonly property real comicFrameHeight: root.comicFrameWidth
         / root.comicFrameAspectRatio
     readonly property int progressBodySpacing: 10
+    readonly property color comicButtonGlyphColor:
+        root.comicResources && root.comicResources.currentImageLight
+            ? Theme.comicButtonDarkGlyph : Theme.comicButtonLightGlyph
+    readonly property real comicButtonGlyphScale: 2.25
+    readonly property int comicButtonGlyphPixelSize:
+        Math.round(Theme.uiFontSize * root.comicButtonGlyphScale)
+    readonly property var comicButtonGlyphStateColors: ({
+        normal: root.comicButtonGlyphColor,
+        hovered: root.comicButtonGlyphColor,
+        pressed: root.comicButtonGlyphColor,
+        focused: root.comicButtonGlyphColor,
+        disabled: Theme.colors.text.disabled
+    })
+    readonly property var comicButtonStateColors: ({
+        hover: Theme.comicButtonBackground,
+        pressed: Theme.comicButtonBackground,
+        selected: Theme.comicButtonBackground
+    })
 
     AppDialog {
         objectName: "jobProgressCard"
@@ -88,16 +106,54 @@ Item {
                 value: root.progress ? root.progress.percent : 0
             }
 
-            JobProgressComic {
-                objectName: "jobProgressComic"
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: root.comicFrameWidth
+            RowLayout {
+                objectName: "jobProgressComicControls"
+                Layout.fillWidth: true
                 Layout.preferredHeight: root.chartExportActive ? root.comicFrameHeight : 0
                 Layout.bottomMargin: root.chartExportActive
                     ? root.progressBodySpacing * 2 : 0
-                resources: root.comicResources
-                active: root.jobActive
-                chartExportActive: root.chartExportActive
+                spacing: Theme.panelPadding
+
+                IconButton {
+                    id: previousButton
+                    glyph: "‹"
+                    glyphPixelSize: root.comicButtonGlyphPixelSize
+                    glyphStateColors: root.comicButtonGlyphStateColors
+                    stateColors: root.comicButtonStateColors
+                    tooltip: qsTrId("qml.previous_comic")
+                    Accessible.name: qsTrId("qml.previous_comic")
+                    Accessible.description: qsTrId("qml.show_previous_comic")
+                    visible: comic.canSwitch
+                    enabled: comic.canSwitch
+                    Layout.alignment: Qt.AlignVCenter
+                    onClicked: comic.requestSlide(-1)
+                }
+
+                JobProgressComic {
+                    id: comic
+                    objectName: "jobProgressComic"
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: root.comicFrameWidth
+                    Layout.preferredHeight: root.chartExportActive ? root.comicFrameHeight : 0
+                    resources: root.comicResources
+                    active: root.jobActive
+                    chartExportActive: root.chartExportActive
+                }
+
+                IconButton {
+                    id: nextButton
+                    glyph: "›"
+                    glyphPixelSize: root.comicButtonGlyphPixelSize
+                    glyphStateColors: root.comicButtonGlyphStateColors
+                    stateColors: root.comicButtonStateColors
+                    tooltip: qsTrId("qml.next_comic")
+                    Accessible.name: qsTrId("qml.next_comic")
+                    Accessible.description: qsTrId("qml.show_next_comic")
+                    visible: comic.canSwitch
+                    enabled: comic.canSwitch
+                    Layout.alignment: Qt.AlignVCenter
+                    onClicked: comic.requestSlide(1)
+                }
             }
 
         }

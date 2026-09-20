@@ -20,24 +20,6 @@ Item {
     readonly property bool canSwitch: root.chartExportActive && root.active
         && root.resources !== null && root.resources.resourceCount >= 2
         && !root.switching && incomingImage.status !== Image.Loading
-    readonly property color comicButtonGlyphColor:
-        root.resources && root.resources.currentImageLight
-            ? Theme.comicButtonDarkGlyph : Theme.comicButtonLightGlyph
-    readonly property real comicButtonGlyphScale: 2.25
-    readonly property int comicButtonGlyphPixelSize:
-        Math.round(Theme.uiFontSize * root.comicButtonGlyphScale)
-    readonly property var comicButtonGlyphStateColors: ({
-        normal: root.comicButtonGlyphColor,
-        hovered: root.comicButtonGlyphColor,
-        pressed: root.comicButtonGlyphColor,
-        focused: root.comicButtonGlyphColor,
-        disabled: Theme.colors.text.disabled
-    })
-    readonly property var comicButtonStateColors: ({
-        hover: Theme.comicButtonBackground,
-        pressed: Theme.comicButtonBackground,
-        selected: Theme.comicButtonBackground
-    })
 
     function updateTimer() {
         slideTimer.running = root.visible && root.active && root.chartExportActive
@@ -297,41 +279,6 @@ Item {
             Accessible.description: qsTrId("qml.comic_resource_unavailable")
         }
 
-        IconButton {
-            id: previousButton
-            anchors.left: parent.left
-            anchors.leftMargin: Theme.panelPadding
-            anchors.verticalCenter: parent.verticalCenter
-            glyph: "‹"
-            glyphPixelSize: root.comicButtonGlyphPixelSize
-            glyphStateColors: root.comicButtonGlyphStateColors
-            stateColors: root.comicButtonStateColors
-            tooltip: qsTrId("qml.previous_comic")
-            Accessible.name: qsTrId("qml.previous_comic")
-            Accessible.description: qsTrId("qml.show_previous_comic")
-            visible: root.canSwitch
-            enabled: root.canSwitch
-            z: 3
-            onClicked: root.requestSlide(-1)
-        }
-
-        IconButton {
-            id: nextButton
-            anchors.right: parent.right
-            anchors.rightMargin: Theme.panelPadding
-            anchors.verticalCenter: parent.verticalCenter
-            glyph: "›"
-            glyphPixelSize: root.comicButtonGlyphPixelSize
-            glyphStateColors: root.comicButtonGlyphStateColors
-            stateColors: root.comicButtonStateColors
-            tooltip: qsTrId("qml.next_comic")
-            Accessible.name: qsTrId("qml.next_comic")
-            Accessible.description: qsTrId("qml.show_next_comic")
-            visible: root.canSwitch
-            enabled: root.canSwitch
-            z: 3
-            onClicked: root.requestSlide(1)
-        }
     }
 
     Timer {
