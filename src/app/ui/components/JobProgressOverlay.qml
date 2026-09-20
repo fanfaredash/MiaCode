@@ -36,7 +36,7 @@ Item {
         visible: root.jobActive
         preferredWidth: root.chartExportActive ? 388 : 420
         preferredHeight: root.chartExportActive
-            ? 549 : Theme.dialogCompactHeight
+            ? 499 : Theme.dialogCompactHeight
         closePolicy: Popup.NoAutoClose
         title: root.progress ? root.progress.title : ""
 
