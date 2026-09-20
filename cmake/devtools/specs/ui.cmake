@@ -367,3 +367,16 @@ miacode_add_spec(qml_ui_theme_contract_spec
 )
 target_compile_definitions(qml_ui_theme_contract_spec PRIVATE
     "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+miacode_add_spec(comic_resource_model_contract_spec
+    OWNER src/app/ui
+    CONTRACT qml-ui.comic-resource-model-contract
+    DOMAIN ui KIND source-contract RISK normal
+    EXECUTION ctest STATUS active PLATFORM all
+    SOURCES
+        src/tools/ui/ComicResourceModelContractSpec.cpp
+    LIBS Qt6::Core
+    INCLUDES src src/app/ui
+)
+target_compile_definitions(comic_resource_model_contract_spec PRIVATE
+    "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")

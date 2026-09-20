@@ -1,8 +1,6 @@
 #pragma once
 
-#include <QFileSystemWatcher>
 #include <QObject>
-#include <QTimer>
 #include <QVector>
 
 namespace miacode::ui {
@@ -47,8 +45,6 @@ private:
         double aspectRatio = 0.0;
     };
 
-    void scheduleRefresh();
-    void updateWatcher(const QString& comicsDirectory);
     QString fallbackUrl() const;
     double fallbackAspectRatio() const;
     bool loadFallbackInfo();
@@ -58,6 +54,8 @@ private:
                         QString* absolutePath = nullptr) const;
     bool readResource(const QString& fileName,
                       const QString& comicsDirectory,
+                      int expectedWidth,
+                      int expectedHeight,
                       ResourceEntry* entry) const;
 
     QVector<ResourceEntry> resources_;
@@ -65,8 +63,6 @@ private:
     bool fallbackAvailable_ = false;
     int fallbackWidth_ = 0;
     int fallbackHeight_ = 0;
-    QFileSystemWatcher watcher_;
-    QTimer refreshTimer_;
 };
 
 }  // namespace miacode::ui

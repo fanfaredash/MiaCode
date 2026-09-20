@@ -1,8 +1,11 @@
 #include "ComicResourceModel.h"
 
+#include "common/DebugLog.h"
+
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -11,6 +14,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QJsonValue>
 #include <QRandomGenerator>
 #include <QSet>
 #include <QUrl>
@@ -43,6 +47,23 @@ bool isWithinDirectory(const QString& path, const QString& directory)
         && !QDir::isAbsolutePath(relative);
 }
 
+bool isReservedResourceName(const QString& fileName)
+{
+    return fileName.compare(QStringLiteral("comic_001.jpg"), Qt::CaseInsensitive) == 0
+        || fileName.compare(QStringLiteral("fallback.jpg"), Qt::CaseInsensitive) == 0;
+}
+
+bool isPositiveInteger(const QJsonValue& value)
+{
+    if (!value.isDouble()) {
+        return false;
+    }
+    const double number = value.toDouble();
+    return std::isfinite(number) && number > 0.0
+        && std::floor(number) == number
+        && number <= static_cast<double>(std::numeric_limits<int>::max());
+}
+
 }  // namespace
 
 namespace miacode::ui {
@@ -50,13 +71,6 @@ namespace miacode::ui {
 ComicResourceModel::ComicResourceModel(QObject* parent)
     : QObject(parent)
 {
-    refreshTimer_.setSingleShot(true);
-    refreshTimer_.setInterval(0);
-    connect(&refreshTimer_, &QTimer::timeout, this, &ComicResourceModel::refresh);
-    connect(&watcher_, &QFileSystemWatcher::directoryChanged,
-            this, &ComicResourceModel::scheduleRefresh);
-    connect(&watcher_, &QFileSystemWatcher::fileChanged,
-            this, &ComicResourceModel::scheduleRefresh);
     refresh();
 }
 
@@ -101,7 +115,8 @@ bool ComicResourceModel::isSafeRootFile(const QString& fileName,
     if (fileName.isEmpty() || fileName == QLatin1String(".") || fileName == QLatin1String("..")
         || fileName.contains(QStringLiteral(".."))
         || fileName.contains(QLatin1Char('/')) || fileName.contains(QLatin1Char('\\'))
-        || QDir::isAbsolutePath(fileName) || !isSupportedImageName(fileName)) {
+        || QDir::isAbsolutePath(fileName) || !isSupportedImageName(fileName)
+        || isReservedResourceName(fileName)) {
         return false;
     }
     const QFileInfo info(QDir(comicsDirectory).filePath(fileName));
@@ -116,16 +131,18 @@ bool ComicResourceModel::isSafeRootFile(const QString& fileName,
 
 bool ComicResourceModel::readResource(const QString& fileName,
                                       const QString& comicsDirectory,
+                                      int expectedWidth,
+                                      int expectedHeight,
                                       ResourceEntry* entry) const
 {
-    if (entry == nullptr || fileName.compare(QStringLiteral("comic_001.jpg"), Qt::CaseInsensitive) == 0
-        || fileName.compare(QStringLiteral("fallback.jpg"), Qt::CaseInsensitive) == 0
+    if (entry == nullptr
         || !isSafeRootFile(fileName, comicsDirectory, &entry->absolutePath)) {
         return false;
     }
     QImageReader reader(entry->absolutePath);
     const QSize size = reader.size();
-    if (!reader.canRead() || size.width() <= 0 || size.height() <= 0) {
+    if (!reader.canRead() || size.width() <= 0 || size.height() <= 0
+        || size.width() != expectedWidth || size.height() != expectedHeight) {
         return false;
     }
     entry->fileName = fileName;
@@ -136,33 +153,10 @@ bool ComicResourceModel::readResource(const QString& fileName,
     return true;
 }
 
-void ComicResourceModel::updateWatcher(const QString& comicsDirectory)
-{
-    const QStringList oldPaths = watcher_.directories();
-    if (!oldPaths.isEmpty()) {
-        watcher_.removePaths(oldPaths);
-    }
-    const QFileInfo directoryInfo(comicsDirectory);
-    QString watchPath = directoryInfo.exists() && directoryInfo.isDir()
-        ? directoryInfo.absoluteFilePath()
-        : directoryInfo.absoluteDir().absolutePath();
-    if (!QFileInfo::exists(watchPath)) {
-        watchPath = QCoreApplication::applicationDirPath();
-    }
-    if (QFileInfo(watchPath).isDir()) {
-        watcher_.addPath(watchPath);
-    }
-}
-
-void ComicResourceModel::scheduleRefresh()
-{
-    if (!refreshTimer_.isActive()) {
-        refreshTimer_.start();
-    }
-}
-
 void ComicResourceModel::refresh()
 {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
     const QVector<ResourceEntry> oldResources = resources_;
     const QString oldUrl = currentImageUrl();
     const double oldAspectRatio = currentAspectRatio();
@@ -173,129 +167,164 @@ void ComicResourceModel::refresh()
         && currentIndex_ < resources_.size() ? resources_.at(currentIndex_).fileName : QString();
 
     const QString directory = comicsDirectoryPath();
-    updateWatcher(directory);
+    QElapsedTimer phaseTimer;
+    phaseTimer.start();
     loadFallbackInfo();
+    const qint64 fallbackElapsedMs = phaseTimer.elapsed();
 
+    phaseTimer.restart();
     QVector<ResourceEntry> discovered;
-    QHash<QString, ResourceEntry> byName;
+    QHash<QString, QFileInfo> filesByName;
     bool directoryValid = true;
+    QString invalidReason;
+    const auto invalidate = [&directoryValid, &invalidReason](const QString& reason) {
+        directoryValid = false;
+        if (invalidReason.isEmpty()) {
+            invalidReason = reason;
+        }
+    };
     const QDir comicsDir(directory);
-    const QFileInfoList files = comicsDir.entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot,
-                                                        QDir::Name | QDir::IgnoreCase);
-    for (const QFileInfo& fileInfo : files) {
-        const QString lowerName = fileInfo.fileName().toLower();
-        if (fileInfo.fileName() == QStringLiteral("manifest.json")) {
-            continue;
-        }
-        if (fileInfo.isDir() || fileInfo.fileName().startsWith(QLatin1Char('.'))
-            || lowerName.endsWith(QStringLiteral(".tmp"))
-            || lowerName.endsWith(QStringLiteral(".part"))
-            || lowerName.endsWith(QStringLiteral(".bak"))) {
-            directoryValid = false;
-            continue;
-        }
-        if (!isSupportedImageName(fileInfo.fileName())) {
-            directoryValid = false;
-            continue;
-        }
-        ResourceEntry entry;
-        if (readResource(fileInfo.fileName(), directory, &entry)) {
-            if (entry.fileName.compare(QStringLiteral("comic_001.jpg"), Qt::CaseInsensitive) != 0
-                && entry.fileName.compare(QStringLiteral("fallback.jpg"), Qt::CaseInsensitive) != 0) {
-                byName.insert(entry.fileName.toLower(), entry);
+    const QFileInfo directoryInfo(directory);
+    if (!directoryInfo.exists() || !directoryInfo.isDir()) {
+        invalidate(QStringLiteral("resource directory is missing"));
+    } else {
+        const QFileInfoList files = comicsDir.entryInfoList(
+            QDir::AllEntries | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
+        for (const QFileInfo& fileInfo : files) {
+            if (fileInfo.fileName() == QStringLiteral("manifest.json")) {
+                continue;
             }
-        } else {
-            directoryValid = false;
+            const QString lowerName = fileInfo.fileName().toLower();
+            if (fileInfo.isDir()) {
+                invalidate(QStringLiteral("directory contains a subdirectory: %1")
+                               .arg(fileInfo.fileName()));
+                continue;
+            }
+            if (!fileInfo.isFile() || !isWithinDirectory(fileInfo.absoluteFilePath(), directory)) {
+                invalidate(QStringLiteral("resource is outside the comics directory: %1")
+                               .arg(fileInfo.fileName()));
+                continue;
+            }
+            if (fileInfo.fileName().startsWith(QLatin1Char('.'))
+                || lowerName.endsWith(QStringLiteral(".tmp"))
+                || lowerName.endsWith(QStringLiteral(".part"))
+                || lowerName.endsWith(QStringLiteral(".bak"))) {
+                invalidate(QStringLiteral("directory contains a temporary resource: %1")
+                               .arg(fileInfo.fileName()));
+                continue;
+            }
+            if (!isSupportedImageName(fileInfo.fileName())) {
+                invalidate(QStringLiteral("directory contains an unsupported file: %1")
+                               .arg(fileInfo.fileName()));
+                continue;
+            }
+            if (isReservedResourceName(fileInfo.fileName())) {
+                invalidate(QStringLiteral("directory contains a reserved resource name: %1")
+                               .arg(fileInfo.fileName()));
+                continue;
+            }
+            const QString key = fileInfo.fileName().toLower();
+            if (filesByName.contains(key)) {
+                invalidate(QStringLiteral("directory contains a case-insensitive filename collision: %1")
+                               .arg(fileInfo.fileName()));
+                continue;
+            }
+            filesByName.insert(key, fileInfo);
         }
     }
+    const qint64 directoryElapsedMs = phaseTimer.elapsed();
 
+    phaseTimer.restart();
     QFile manifestFile(comicsDir.filePath(QStringLiteral("manifest.json")));
     QJsonDocument manifestDocument;
     bool manifestValid = directoryValid;
+    if (!manifestValid) {
+        if (invalidReason.isEmpty()) {
+            invalidReason = QStringLiteral("resource directory contract is invalid");
+        }
+    }
     if (manifestFile.open(QIODevice::ReadOnly)) {
         QJsonParseError error;
         manifestDocument = QJsonDocument::fromJson(manifestFile.readAll(), &error);
         const QJsonObject manifest = manifestDocument.object();
         const QJsonValue versionValue = manifest.value(QStringLiteral("version"));
-        manifestValid = manifestValid && error.error == QJsonParseError::NoError
-            && manifestDocument.isObject()
-            && versionValue.isDouble()
-            && std::isfinite(versionValue.toDouble())
-            && std::floor(versionValue.toDouble()) == versionValue.toDouble()
-            && versionValue.toInt(-1) == 1
-            && manifest.value(QStringLiteral("items")).isArray();
+        if (error.error != QJsonParseError::NoError || !manifestDocument.isObject()) {
+            manifestValid = false;
+            invalidReason = QStringLiteral("manifest JSON is invalid: %1").arg(error.errorString());
+        } else if (!versionValue.isDouble() || versionValue.toInt(-1) != 1
+                   || std::floor(versionValue.toDouble()) != versionValue.toDouble()) {
+            manifestValid = false;
+            invalidReason = QStringLiteral("manifest version must be 1");
+        } else if (!manifest.value(QStringLiteral("items")).isArray()) {
+            manifestValid = false;
+            invalidReason = QStringLiteral("manifest items is not an array");
+        }
     } else {
         manifestValid = false;
+        invalidReason = QStringLiteral("manifest.json cannot be opened");
     }
+    const qint64 manifestElapsedMs = phaseTimer.elapsed();
 
+    phaseTimer.restart();
     QSet<QString> manifestKeys;
     if (manifestValid) {
         const QJsonArray items = manifestDocument.object().value(QStringLiteral("items")).toArray();
-        for (const QJsonValue& itemValue : items) {
+        for (int itemIndex = 0; itemIndex < items.size(); ++itemIndex) {
+            const QJsonValue itemValue = items.at(itemIndex);
             if (!itemValue.isObject()) {
                 manifestValid = false;
+                invalidReason = QStringLiteral("manifest item %1 is not an object").arg(itemIndex);
                 break;
             }
             const QJsonObject item = itemValue.toObject();
             const QString fileName = item.value(QStringLiteral("file")).toString();
             const QJsonValue widthValue = item.value(QStringLiteral("width"));
             const QJsonValue heightValue = item.value(QStringLiteral("height"));
-            const auto isPositiveInteger = [](const QJsonValue& value) {
-                if (!value.isDouble()) {
-                    return false;
-                }
-                const double number = value.toDouble();
-                return std::isfinite(number) && number > 0.0
-                    && std::floor(number) == number
-                    && number <= static_cast<double>(std::numeric_limits<int>::max());
-            };
             const QString key = fileName.toLower();
             if (!isSafeRootFile(fileName, directory) || !isPositiveInteger(widthValue)
                 || !isPositiveInteger(heightValue) || manifestKeys.contains(key)) {
                 manifestValid = false;
+                invalidReason = QStringLiteral("manifest item %1 has an invalid file or dimensions")
+                                    .arg(itemIndex);
                 break;
             }
-            const auto it = byName.constFind(key);
-            if (it != byName.constEnd()) {
-                const int manifestWidth = widthValue.toInt();
-                const int manifestHeight = heightValue.toInt();
-                if (manifestWidth != it->width || manifestHeight != it->height) {
-                    manifestValid = false;
-                    break;
-                }
-                discovered.append(it.value());
-                manifestKeys.insert(key);
-            } else {
+            const auto it = filesByName.constFind(key);
+            if (it == filesByName.constEnd()) {
                 manifestValid = false;
+                invalidReason = QStringLiteral("manifest item is missing from the directory: %1")
+                                    .arg(fileName);
                 break;
             }
+            ResourceEntry entry;
+            if (!readResource(fileName, directory, widthValue.toInt(), heightValue.toInt(), &entry)) {
+                manifestValid = false;
+                invalidReason = QStringLiteral("resource cannot be read or has mismatched dimensions: %1")
+                                    .arg(fileName);
+                break;
+            }
+            discovered.append(std::move(entry));
+            manifestKeys.insert(key);
         }
     }
 
-    if (manifestValid && manifestKeys.size() != byName.size()) {
+    if (manifestValid && manifestKeys.size() != filesByName.size()) {
         manifestValid = false;
+        invalidReason = QStringLiteral("manifest and directory resource sets differ");
     }
     if (!manifestValid) {
         discovered.clear();
-        qWarning().noquote() << "Comic manifest or resource directory is invalid; using fallback:" << directory;
-    } else {
-        for (const ResourceEntry& entry : std::as_const(discovered)) {
-            if (!isWithinDirectory(entry.absolutePath, directory)) {
-                manifestValid = false;
-                break;
-            }
-        }
+        qWarning().noquote() << "ComicResourceModel: using fallback;" << invalidReason
+                             << "directory=" << directory;
     }
-    if (!manifestValid) {
-        discovered.clear();
-    }
+    const qint64 imageMetadataElapsedMs = phaseTimer.elapsed();
 
     resources_ = std::move(discovered);
     currentIndex_ = -1;
     if (!resources_.isEmpty()) {
         const auto currentIt = std::find_if(resources_.cbegin(), resources_.cend(),
                                             [&oldFileName](const ResourceEntry& entry) {
-                                                return entry.fileName == oldFileName;
+                                                return entry.fileName.compare(oldFileName,
+                                                                              Qt::CaseInsensitive) == 0;
                                             });
         currentIndex_ = currentIt != resources_.cend()
             ? static_cast<int>(std::distance(resources_.cbegin(), currentIt))
@@ -325,6 +354,22 @@ void ComicResourceModel::refresh()
     if (resourceListChanged) {
         emit resourcesChanged();
     }
+
+    const qint64 totalElapsedMs = totalTimer.elapsed();
+    qInfo().noquote() << QStringLiteral(
+        "event=comic_resources_scan resource_count=%1 valid=%2 fallback_available=%3 "
+        "fallback_elapsed_ms=%4 directory_scan_elapsed_ms=%5 manifest_elapsed_ms=%6 "
+        "image_metadata_elapsed_ms=%7 total_elapsed_ms=%8")
+            .arg(resources_.size())
+            .arg(manifestValid ? 1 : 0)
+            .arg(fallbackAvailable_ ? 1 : 0)
+            .arg(fallbackElapsedMs)
+            .arg(directoryElapsedMs)
+            .arg(manifestElapsedMs)
+            .arg(imageMetadataElapsedMs)
+            .arg(totalElapsedMs);
+    miacode::debug_log::appendStartupTimingStage(
+        QStringLiteral("ui/comic_resources_scan"), totalElapsedMs, totalElapsedMs);
 }
 
 QString ComicResourceModel::currentImageUrl() const
