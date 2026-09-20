@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QImage>
 #include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -22,6 +23,34 @@
 namespace {
 
 constexpr auto kFallbackResourcePath = ":/comics/fallback.jpg";
+constexpr int kBrightnessThumbnailSize = 32;
+constexpr double kImageLightThreshold = 0.5;
+
+bool readImageLight(QImageReader& reader, bool* imageLight)
+{
+    const QImage image = reader.read();
+    if (image.isNull() || image.width() <= 0 || image.height() <= 0) {
+        return false;
+    }
+    const QImage thumbnail = image.scaled(kBrightnessThumbnailSize,
+                                           kBrightnessThumbnailSize,
+                                           Qt::KeepAspectRatio,
+                                           Qt::FastTransformation)
+                                 .convertToFormat(QImage::Format_RGB32);
+    double totalBrightness = 0.0;
+    const int pixelCount = thumbnail.width() * thumbnail.height();
+    for (int y = 0; y < thumbnail.height(); ++y) {
+        for (int x = 0; x < thumbnail.width(); ++x) {
+            const QRgb pixel = thumbnail.pixel(x, y);
+            totalBrightness += (0.2126 * qRed(pixel) + 0.7152 * qGreen(pixel)
+                                + 0.0722 * qBlue(pixel)) / 255.0;
+        }
+    }
+    if (imageLight != nullptr && pixelCount > 0) {
+        *imageLight = totalBrightness / pixelCount >= kImageLightThreshold;
+    }
+    return true;
+}
 
 QString comicsDirectoryPath()
 {
@@ -68,9 +97,12 @@ bool ComicResourceModel::loadFallbackInfo()
 {
     QImageReader reader(QString::fromLatin1(kFallbackResourcePath));
     const QSize size = reader.size();
+    bool imageLight = false;
     fallbackWidth_ = size.width();
     fallbackHeight_ = size.height();
-    fallbackAvailable_ = reader.canRead() && fallbackWidth_ > 0 && fallbackHeight_ > 0;
+    fallbackAvailable_ = reader.canRead() && fallbackWidth_ > 0 && fallbackHeight_ > 0
+        && readImageLight(reader, &imageLight);
+    fallbackImageLight_ = imageLight;
     if (!fallbackAvailable_) {
         fallbackWidth_ = 0;
         fallbackHeight_ = 0;
@@ -131,7 +163,7 @@ bool ComicResourceModel::readResource(const QString& fileName,
     entry->width = size.width();
     entry->height = size.height();
     entry->aspectRatio = static_cast<double>(entry->width) / static_cast<double>(entry->height);
-    return true;
+    return readImageLight(reader, &entry->imageLight);
 }
 
 void ComicResourceModel::updateWatcher(const QString& comicsDirectory)
@@ -164,8 +196,10 @@ void ComicResourceModel::refresh()
     const QVector<ResourceEntry> oldResources = resources_;
     const QString oldUrl = currentImageUrl();
     const double oldAspectRatio = currentAspectRatio();
+    const bool oldImageLight = currentImageLight();
     const bool oldUsingFallback = usingFallback();
     const bool oldFallbackAvailable = fallbackAvailable_;
+    const bool oldFallbackImageLight = fallbackImageLight_;
     const int oldCount = oldResources.size();
     const QString oldFileName = !oldUsingFallback && currentIndex_ >= 0
         && currentIndex_ < resources_.size() ? resources_.at(currentIndex_).fileName : QString();
@@ -268,7 +302,8 @@ void ComicResourceModel::refresh()
                 || oldEntry.absolutePath != newEntry.absolutePath
                 || oldEntry.width != newEntry.width
                 || oldEntry.height != newEntry.height
-                || oldEntry.aspectRatio != newEntry.aspectRatio) {
+                || oldEntry.aspectRatio != newEntry.aspectRatio
+                || oldEntry.imageLight != newEntry.imageLight) {
                 resourceListChanged = true;
                 break;
             }
@@ -276,7 +311,9 @@ void ComicResourceModel::refresh()
     }
     if (oldCount != resources_.size() || oldUrl != currentImageUrl()
         || oldAspectRatio != currentAspectRatio() || oldUsingFallback != usingFallback()
-        || oldFallbackAvailable != fallbackAvailable_) {
+        || oldFallbackAvailable != fallbackAvailable_
+        || oldFallbackImageLight != fallbackImageLight_
+        || oldImageLight != currentImageLight()) {
         emit currentChanged();
     }
     if (resourceListChanged) {
@@ -294,6 +331,12 @@ double ComicResourceModel::currentAspectRatio() const
 {
     return currentIndex_ >= 0 && currentIndex_ < resources_.size()
         ? resources_.at(currentIndex_).aspectRatio : fallbackAspectRatio();
+}
+
+bool ComicResourceModel::currentImageLight() const
+{
+    return currentIndex_ >= 0 && currentIndex_ < resources_.size()
+        ? resources_.at(currentIndex_).imageLight : fallbackImageLight_;
 }
 
 bool ComicResourceModel::usingFallback() const
@@ -359,7 +402,12 @@ void ComicResourceModel::selectRandomResource()
     if (resources_.size() <= 1) {
         return;
     }
-    const int randomIndex = QRandomGenerator::global()->bounded(resources_.size());
+    const int currentIndex = usingFallback() ? -1 : currentIndex_;
+    int randomIndex = QRandomGenerator::global()->bounded(resources_.size());
+    if (currentIndex >= 0) {
+        const int randomOffset = QRandomGenerator::global()->bounded(resources_.size() - 1);
+        randomIndex = randomOffset >= currentIndex ? randomOffset + 1 : randomOffset;
+    }
     if (currentIndex_ != randomIndex) {
         currentIndex_ = randomIndex;
         emit currentChanged();

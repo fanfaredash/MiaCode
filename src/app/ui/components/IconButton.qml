@@ -15,6 +15,7 @@ AbstractButton {
     property bool compact: false
     property color glyphColorOverride: "transparent"
     property int glyphPixelSize: -1
+    property var glyphStateColors: null
     property int iconWidth: compact ? 14 : 16
     property int iconHeight: compact ? 14 : 16
     property var stateColors: Theme.colors.buttonState
@@ -36,8 +37,25 @@ AbstractButton {
     hoverEnabled: true
     Accessible.name: root.tooltip
 
-    readonly property color glyphColor:
-        root.hovered || root.down || root.visualFocus
+    readonly property color glyphColor: root.glyphStateColors
+        ? (!root.enabled && root.glyphStateColors.disabled !== undefined
+              ? root.glyphStateColors.disabled
+              : root.down && root.glyphStateColors.pressed !== undefined
+                  ? root.glyphStateColors.pressed
+                  : root.hovered && root.glyphStateColors.hovered !== undefined
+                      ? root.glyphStateColors.hovered
+                      : root.visualFocus && root.glyphStateColors.focused !== undefined
+                          ? root.glyphStateColors.focused
+                          : root.glyphStateColors.normal !== undefined
+                              ? root.glyphStateColors.normal
+                              : root.glyphColorOverride.a > 0
+                                  ? root.glyphColorOverride
+                                  : !root.enabled
+                                      ? Theme.colors.text.disabled
+                                      : (root.active || root.checked)
+                                          ? Theme.colors.text.active
+                                          : Theme.colors.text.secondary)
+        : root.hovered || root.down || root.visualFocus
             ? Theme.colors.text.active
             : root.glyphColorOverride.a > 0
                 ? root.glyphColorOverride

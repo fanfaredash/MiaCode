@@ -39,6 +39,12 @@ Item {
             ? 499 : Theme.dialogCompactHeight
         closePolicy: Popup.NoAutoClose
         title: root.progress ? root.progress.title : ""
+        onAboutToShow: {
+            if (root.chartExportActive && root.comicResources
+                    && root.comicResources.resourceCount > 1) {
+                root.comicResources.selectRandomResource()
+            }
+        }
 
         body: ColumnLayout {
             spacing: root.progressBodySpacing

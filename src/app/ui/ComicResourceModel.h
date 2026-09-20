@@ -12,6 +12,7 @@ class ComicResourceModel final : public QObject
     Q_OBJECT
     Q_PROPERTY(QString currentImageUrl READ currentImageUrl NOTIFY currentChanged)
     Q_PROPERTY(double currentAspectRatio READ currentAspectRatio NOTIFY currentChanged)
+    Q_PROPERTY(bool currentImageLight READ currentImageLight NOTIFY currentChanged)
     Q_PROPERTY(bool usingFallback READ usingFallback NOTIFY currentChanged)
     Q_PROPERTY(bool fallbackAvailable READ fallbackAvailable NOTIFY currentChanged)
     Q_PROPERTY(int resourceCount READ resourceCount NOTIFY resourcesChanged)
@@ -21,6 +22,7 @@ public:
 
     QString currentImageUrl() const;
     double currentAspectRatio() const;
+    bool currentImageLight() const;
     bool usingFallback() const;
     bool fallbackAvailable() const;
     int resourceCount() const;
@@ -45,6 +47,7 @@ private:
         int width = 0;
         int height = 0;
         double aspectRatio = 0.0;
+        bool imageLight = false;
     };
 
     void scheduleRefresh();
@@ -65,6 +68,7 @@ private:
     bool fallbackAvailable_ = false;
     int fallbackWidth_ = 0;
     int fallbackHeight_ = 0;
+    bool fallbackImageLight_ = false;
     QFileSystemWatcher watcher_;
     QTimer refreshTimer_;
 };

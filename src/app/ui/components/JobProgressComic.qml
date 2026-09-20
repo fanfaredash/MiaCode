@@ -19,14 +19,24 @@ Item {
     readonly property bool canSwitch: root.chartExportActive && root.active
         && root.resources !== null && root.resources.resourceCount >= 2
         && !root.switching && incomingImage.status !== Image.Loading
-    function relativeLuminance(colorValue) {
-        return 0.2126 * colorValue.r + 0.7152 * colorValue.g
-            + 0.0722 * colorValue.b
-    }
-
     readonly property color comicButtonGlyphColor:
-        relativeLuminance(Theme.colors.background.control) > 0.5
-            ? "#202020" : "#FFFFFF"
+        root.resources && root.resources.currentImageLight
+            ? Theme.comicButtonDarkGlyph : Theme.comicButtonLightGlyph
+    readonly property real comicButtonGlyphScale: 2.25
+    readonly property int comicButtonGlyphPixelSize:
+        Math.round(Theme.uiFontSize * root.comicButtonGlyphScale)
+    readonly property var comicButtonGlyphStateColors: ({
+        normal: root.comicButtonGlyphColor,
+        hovered: root.comicButtonGlyphColor,
+        pressed: root.comicButtonGlyphColor,
+        focused: root.comicButtonGlyphColor,
+        disabled: Theme.colors.text.disabled
+    })
+    readonly property var comicButtonStateColors: ({
+        hover: Theme.comicButtonBackground,
+        pressed: Theme.comicButtonBackground,
+        selected: Theme.comicButtonBackground
+    })
 
     function updateTimer() {
         slideTimer.running = root.visible && root.active && root.chartExportActive
@@ -225,6 +235,7 @@ Item {
             asynchronous: true
             fillMode: Image.PreserveAspectFit
             cache: false
+            retainWhileLoading: true
             z: 1
             onStatusChanged: {
                 if (status === Image.Error)
@@ -242,6 +253,7 @@ Item {
             asynchronous: true
             fillMode: Image.PreserveAspectFit
             cache: false
+            retainWhileLoading: true
             z: 2
             onStatusChanged: {
                 if (status === Image.Ready)
@@ -281,8 +293,9 @@ Item {
             anchors.leftMargin: Theme.panelPadding
             anchors.verticalCenter: parent.verticalCenter
             glyph: "‹"
-            glyphColorOverride: root.comicButtonGlyphColor
-            glyphPixelSize: Theme.uiFontSize + 6
+            glyphPixelSize: root.comicButtonGlyphPixelSize
+            glyphStateColors: root.comicButtonGlyphStateColors
+            stateColors: root.comicButtonStateColors
             tooltip: qsTrId("qml.previous_comic")
             Accessible.name: qsTrId("qml.previous_comic")
             Accessible.description: qsTrId("qml.show_previous_comic")
@@ -298,8 +311,9 @@ Item {
             anchors.rightMargin: Theme.panelPadding
             anchors.verticalCenter: parent.verticalCenter
             glyph: "›"
-            glyphColorOverride: root.comicButtonGlyphColor
-            glyphPixelSize: Theme.uiFontSize + 6
+            glyphPixelSize: root.comicButtonGlyphPixelSize
+            glyphStateColors: root.comicButtonGlyphStateColors
+            stateColors: root.comicButtonStateColors
             tooltip: qsTrId("qml.next_comic")
             Accessible.name: qsTrId("qml.next_comic")
             Accessible.description: qsTrId("qml.show_next_comic")
@@ -315,7 +329,7 @@ Item {
         interval: root.slideIntervalMs
         repeat: true
         triggeredOnStart: false
-        onTriggered: root.requestSlide(1)
+        onTriggered: root.resources.selectRandomResource()
     }
 
     ParallelAnimation {
