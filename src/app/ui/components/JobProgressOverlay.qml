@@ -34,7 +34,7 @@ Item {
     AppDialog {
         objectName: "jobProgressCard"
         visible: root.jobActive
-        preferredWidth: root.chartExportActive ? 388 : 420
+        preferredWidth: root.chartExportActive ? 498 : 420
         preferredHeight: root.chartExportActive
             ? 499 : Theme.dialogCompactHeight
         closePolicy: Popup.NoAutoClose
