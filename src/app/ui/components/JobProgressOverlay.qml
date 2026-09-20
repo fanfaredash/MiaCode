@@ -26,20 +26,22 @@ Item {
                 lines.length > 1 ? lines.slice(1).join(" ") : ""]
     }
     readonly property real comicFrameAspectRatio: 10 / 9
-    readonly property real comicPreferredHeight: root.chartExportActive
-        ? 528 / root.comicFrameAspectRatio : 0
+    readonly property real comicFrameWidth: 360
+    readonly property real comicFrameHeight: root.comicFrameWidth
+        / root.comicFrameAspectRatio
+    readonly property int progressBodySpacing: 10
 
     AppDialog {
         objectName: "jobProgressCard"
         visible: root.jobActive
         preferredWidth: root.chartExportActive ? 560 : 420
         preferredHeight: root.chartExportActive
-            ? 760 : Theme.dialogCompactHeight
+            ? Theme.dialogHeight : Theme.dialogCompactHeight
         closePolicy: Popup.NoAutoClose
         title: root.progress ? root.progress.title : ""
 
         body: ColumnLayout {
-            spacing: 10
+            spacing: root.progressBodySpacing
             Text {
                 objectName: "jobProgressLabel"
                 Layout.fillWidth: true
@@ -82,9 +84,11 @@ Item {
 
             JobProgressComic {
                 objectName: "jobProgressComic"
-                Layout.fillWidth: true
-                Layout.preferredHeight: root.chartExportActive
-                    ? root.comicPreferredHeight : 0
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: root.comicFrameWidth
+                Layout.preferredHeight: root.chartExportActive ? root.comicFrameHeight : 0
+                Layout.bottomMargin: root.chartExportActive
+                    ? root.progressBodySpacing * 2 : 0
                 resources: root.comicResources
                 active: root.jobActive
                 chartExportActive: root.chartExportActive

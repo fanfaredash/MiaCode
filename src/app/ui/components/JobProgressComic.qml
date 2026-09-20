@@ -19,6 +19,14 @@ Item {
     readonly property bool canSwitch: root.chartExportActive && root.active
         && root.resources !== null && root.resources.resourceCount >= 2
         && !root.switching && incomingImage.status !== Image.Loading
+    function relativeLuminance(colorValue) {
+        return 0.2126 * colorValue.r + 0.7152 * colorValue.g
+            + 0.0722 * colorValue.b
+    }
+
+    readonly property color comicButtonGlyphColor:
+        relativeLuminance(Theme.colors.background.control) > 0.5
+            ? "#202020" : "#FFFFFF"
 
     function updateTimer() {
         slideTimer.running = root.visible && root.active && root.chartExportActive
@@ -204,7 +212,7 @@ Item {
         color: Theme.colors.background.control
         radius: Theme.controlRadius
         border.color: Theme.colors.text.heading
-        border.width: 1
+        border.width: 0
         clip: true
 
         Image {
@@ -273,6 +281,8 @@ Item {
             anchors.leftMargin: Theme.panelPadding
             anchors.verticalCenter: parent.verticalCenter
             glyph: "‹"
+            glyphColorOverride: root.comicButtonGlyphColor
+            glyphPixelSize: Theme.uiFontSize + 6
             tooltip: qsTrId("qml.previous_comic")
             Accessible.name: qsTrId("qml.previous_comic")
             Accessible.description: qsTrId("qml.show_previous_comic")
@@ -288,6 +298,8 @@ Item {
             anchors.rightMargin: Theme.panelPadding
             anchors.verticalCenter: parent.verticalCenter
             glyph: "›"
+            glyphColorOverride: root.comicButtonGlyphColor
+            glyphPixelSize: Theme.uiFontSize + 6
             tooltip: qsTrId("qml.next_comic")
             Accessible.name: qsTrId("qml.next_comic")
             Accessible.description: qsTrId("qml.show_next_comic")
