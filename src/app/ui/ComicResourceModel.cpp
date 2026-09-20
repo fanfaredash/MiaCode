@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace {
 
@@ -98,6 +99,7 @@ bool ComicResourceModel::isSafeRootFile(const QString& fileName,
                                         QString* absolutePath) const
 {
     if (fileName.isEmpty() || fileName == QLatin1String(".") || fileName == QLatin1String("..")
+        || fileName.contains(QStringLiteral(".."))
         || fileName.contains(QLatin1Char('/')) || fileName.contains(QLatin1Char('\\'))
         || QDir::isAbsolutePath(fileName) || !isSupportedImageName(fileName)) {
         return false;
@@ -176,30 +178,64 @@ void ComicResourceModel::refresh()
 
     QVector<ResourceEntry> discovered;
     QHash<QString, ResourceEntry> byName;
+    bool directoryValid = true;
     const QDir comicsDir(directory);
-    const QFileInfoList files = comicsDir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot,
+    const QFileInfoList files = comicsDir.entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot,
                                                         QDir::Name | QDir::IgnoreCase);
     for (const QFileInfo& fileInfo : files) {
+        const QString lowerName = fileInfo.fileName().toLower();
+        if (fileInfo.fileName() == QStringLiteral("manifest.json")) {
+            continue;
+        }
+        if (fileInfo.isDir() || fileInfo.fileName().startsWith(QLatin1Char('.'))
+            || lowerName.endsWith(QStringLiteral(".tmp"))
+            || lowerName.endsWith(QStringLiteral(".part"))
+            || lowerName.endsWith(QStringLiteral(".bak"))) {
+            directoryValid = false;
+            continue;
+        }
+        if (!isSupportedImageName(fileInfo.fileName())) {
+            directoryValid = false;
+            continue;
+        }
         ResourceEntry entry;
         if (readResource(fileInfo.fileName(), directory, &entry)) {
-            byName.insert(entry.fileName, entry);
+            if (entry.fileName.compare(QStringLiteral("comic_001.jpg"), Qt::CaseInsensitive) != 0
+                && entry.fileName.compare(QStringLiteral("fallback.jpg"), Qt::CaseInsensitive) != 0) {
+                byName.insert(entry.fileName.toLower(), entry);
+            }
+        } else {
+            directoryValid = false;
         }
     }
 
     QFile manifestFile(comicsDir.filePath(QStringLiteral("manifest.json")));
     QJsonDocument manifestDocument;
-    bool manifestValid = false;
+    bool manifestValid = directoryValid;
     if (manifestFile.open(QIODevice::ReadOnly)) {
         QJsonParseError error;
         manifestDocument = QJsonDocument::fromJson(manifestFile.readAll(), &error);
-        manifestValid = error.error == QJsonParseError::NoError && manifestDocument.isObject()
-            && manifestDocument.object().value(QStringLiteral("version")).toInt(-1) == 1;
+        const QJsonObject manifest = manifestDocument.object();
+        const QJsonValue versionValue = manifest.value(QStringLiteral("version"));
+        manifestValid = manifestValid && error.error == QJsonParseError::NoError
+            && manifestDocument.isObject()
+            && versionValue.isDouble()
+            && std::isfinite(versionValue.toDouble())
+            && std::floor(versionValue.toDouble()) == versionValue.toDouble()
+            && versionValue.toInt(-1) == 1
+            && manifest.value(QStringLiteral("items")).isArray();
+    } else {
+        manifestValid = false;
     }
 
-    QSet<QString> added;
+    QSet<QString> manifestKeys;
     if (manifestValid) {
         const QJsonArray items = manifestDocument.object().value(QStringLiteral("items")).toArray();
         for (const QJsonValue& itemValue : items) {
+            if (!itemValue.isObject()) {
+                manifestValid = false;
+                break;
+            }
             const QJsonObject item = itemValue.toObject();
             const QString fileName = item.value(QStringLiteral("file")).toString();
             const QJsonValue widthValue = item.value(QStringLiteral("width"));
@@ -213,38 +249,45 @@ void ComicResourceModel::refresh()
                     && std::floor(number) == number
                     && number <= static_cast<double>(std::numeric_limits<int>::max());
             };
+            const QString key = fileName.toLower();
             if (!isSafeRootFile(fileName, directory) || !isPositiveInteger(widthValue)
-                || !isPositiveInteger(heightValue) || added.contains(fileName)) {
-                continue;
+                || !isPositiveInteger(heightValue) || manifestKeys.contains(key)) {
+                manifestValid = false;
+                break;
             }
-            const auto it = byName.constFind(fileName);
+            const auto it = byName.constFind(key);
             if (it != byName.constEnd()) {
                 const int manifestWidth = widthValue.toInt();
                 const int manifestHeight = heightValue.toInt();
                 if (manifestWidth != it->width || manifestHeight != it->height) {
-                    qWarning().noquote()
-                        << "Comic manifest dimensions mismatch:" << fileName
-                        << "manifest=" << QStringLiteral("%1x%2").arg(manifestWidth).arg(manifestHeight)
-                        << "actual=" << QStringLiteral("%1x%2").arg(it->width).arg(it->height);
+                    manifestValid = false;
+                    break;
                 }
                 discovered.append(it.value());
-                added.insert(fileName);
+                manifestKeys.insert(key);
+            } else {
+                manifestValid = false;
+                break;
             }
         }
     }
 
-    QStringList remainingNames;
-    remainingNames.reserve(byName.size());
-    for (auto it = byName.constBegin(); it != byName.constEnd(); ++it) {
-        if (!added.contains(it.key())) {
-            remainingNames.append(it.key());
+    if (manifestValid && manifestKeys.size() != byName.size()) {
+        manifestValid = false;
+    }
+    if (!manifestValid) {
+        discovered.clear();
+        qWarning().noquote() << "Comic manifest or resource directory is invalid; using fallback:" << directory;
+    } else {
+        for (const ResourceEntry& entry : std::as_const(discovered)) {
+            if (!isWithinDirectory(entry.absolutePath, directory)) {
+                manifestValid = false;
+                break;
+            }
         }
     }
-    std::sort(remainingNames.begin(), remainingNames.end(), [](const QString& left, const QString& right) {
-        return QString::compare(left, right, Qt::CaseInsensitive) < 0;
-    });
-    for (const QString& fileName : remainingNames) {
-        discovered.append(byName.value(fileName));
+    if (!manifestValid) {
+        discovered.clear();
     }
 
     resources_ = std::move(discovered);

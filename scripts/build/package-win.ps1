@@ -328,18 +328,25 @@ function Get-ComicExternalFiles {
         throw "Comic directory not found: $DirectoryPath"
     }
 
-    return @(Get-ChildItem -LiteralPath $DirectoryPath -File -Force |
-        Where-Object {
-            $isHidden = (($_.Attributes -band [System.IO.FileAttributes]::Hidden) -ne 0)
-            $lowerName = $_.Name.ToLowerInvariant()
-            $extension = $_.Extension.ToLowerInvariant()
-            !$isHidden `
-                -and $lowerName -notmatch '\.(tmp|part|bak)$' `
-                -and $extension -match '^\.(jpg|jpeg|png)$' `
-                -and $lowerName -ne 'comic_001.jpg' `
-                -and $lowerName -ne 'fallback.jpg'
-        } |
-        Sort-Object Name)
+    $images = @()
+    foreach ($entry in @(Get-ChildItem -LiteralPath $DirectoryPath -Force)) {
+        if ($entry.Name -eq 'manifest.json') {
+            continue
+        }
+        $isHidden = (($entry.Attributes -band [System.IO.FileAttributes]::Hidden) -ne 0)
+        $lowerName = $entry.Name.ToLowerInvariant()
+        if ($entry.PSIsContainer -or $isHidden -or $lowerName -match '\.(tmp|part|bak)$') {
+            throw "Illegal comic source entry: $($entry.FullName)"
+        }
+        if ($lowerName -eq 'comic_001.jpg' -or $lowerName -eq 'fallback.jpg') {
+            continue
+        }
+        if ($entry.Extension.ToLowerInvariant() -notmatch '^\.(jpg|jpeg|png)$') {
+            throw "Unsupported comic source entry: $($entry.FullName)"
+        }
+        $images += $entry
+    }
+    return @($images | Sort-Object Name)
 }
 
 function Test-ComicManifestFileName {
@@ -390,7 +397,9 @@ function Read-ComicManifest {
 
     $sourceNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($sourceImage in $SourceImages) {
-        [void]$sourceNames.Add($sourceImage.Name)
+        if (!$sourceNames.Add($sourceImage.Name)) {
+            throw "Comic source contains duplicate file names differing only by case: $($sourceImage.Name)"
+        }
     }
 
     $manifestNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
@@ -419,8 +428,8 @@ function Read-ComicManifest {
     }
 
     $unlistedNames = @($SourceImages | Where-Object { !$manifestNames.Contains($_.Name) } | Select-Object -ExpandProperty Name)
-    if ($unlistedNames.Count -gt 0) {
-        Write-Host "Comic directory append images: $($unlistedNames -join ', ')"
+    if ($unlistedNames.Count -gt 0 -or $sourceNames.Count -ne $manifestNames.Count) {
+        throw "Comic source image set differs from manifest; unlisted images: $($unlistedNames -join ', ')"
     }
     return $manifest
 }
@@ -448,7 +457,8 @@ function Sync-ComicResourcesToPackage {
     }
     New-Item -ItemType Directory -Path $comicDestinationDir -Force | Out-Null
     Copy-Item -LiteralPath $comicManifestPath -Destination (Join-Path $comicDestinationDir 'manifest.json') -Force
-    foreach ($sourceImage in $sourceImages) {
+    foreach ($item in @($manifest.items)) {
+        $sourceImage = $sourceImages | Where-Object { $_.Name -ieq ([string]$item.file) } | Select-Object -First 1
         Copy-Item -LiteralPath $sourceImage.FullName -Destination (Join-Path $comicDestinationDir $sourceImage.Name) -Force
     }
 

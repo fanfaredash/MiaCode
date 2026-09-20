@@ -827,7 +827,9 @@ foreach(comic_file IN LISTS MIACODE_COMIC_RESOURCE_CANDIDATES)
     string(TOLOWER "${comic_extension}" comic_lower_extension)
     if(comic_first_character STREQUAL "."
         OR comic_lower_name MATCHES "(\\.tmp|\\.part|\\.bak)$"
-        OR NOT comic_lower_extension MATCHES "^\\.(jpg|jpeg|png)$")
+        OR NOT comic_lower_extension MATCHES "^\\.(jpg|jpeg|png)$"
+        OR comic_lower_name MATCHES "^comic_001\\.jpg$"
+        OR comic_lower_name MATCHES "^fallback\\.jpg$")
         continue()
     endif()
     list(APPEND MIACODE_COMIC_EXTERNAL_FILES "${comic_file}")
