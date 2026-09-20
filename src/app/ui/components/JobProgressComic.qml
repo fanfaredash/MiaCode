@@ -13,6 +13,7 @@ Item {
     property int currentIndex: -1
     property int pendingIndex: -1
     property int pendingDirection: 0
+    property bool visibleCommitPending: false
     visible: root.active && root.chartExportActive
 
     readonly property bool hasVisibleImage: visibleImage.status === Image.Ready
@@ -99,11 +100,10 @@ Item {
         root.updateTimer()
     }
 
-    function finishModelSync() {
-        if (incomingImage.status !== Image.Ready)
+    function finishVisibleCommit() {
+        if (!root.visibleCommitPending || visibleImage.status !== Image.Ready)
             return
-        visibleImage.source = incomingImage.source
-        visibleImage.x = 0
+        root.visibleCommitPending = false
         incomingImage.source = ""
         incomingImage.x = root.width
         if (root.pendingIndex >= 0)
@@ -114,16 +114,16 @@ Item {
         root.updateTimer()
     }
 
-    function finishSlide() {
+    function stageVisibleCommit() {
+        if (incomingImage.status !== Image.Ready)
+            return
+        root.visibleCommitPending = true
         visibleImage.source = incomingImage.source
         visibleImage.x = 0
-        incomingImage.source = ""
-        incomingImage.x = root.width
-        root.currentIndex = root.pendingIndex
-        root.pendingIndex = -1
-        root.pendingDirection = 0
-        root.switching = false
-        root.updateTimer()
+    }
+
+    function finishSlide() {
+        root.stageVisibleCommit()
     }
 
     function handleIncomingReady() {
@@ -136,7 +136,7 @@ Item {
             return
         }
         if (root.pendingDirection === 0) {
-            finishModelSync()
+            stageVisibleCommit()
             return
         }
         if (root.switching)
@@ -167,6 +167,13 @@ Item {
     function handleVisibleError() {
         if (!root.active || !root.chartExportActive || !root.resources)
             return
+        if (root.visibleCommitPending) {
+            root.visibleCommitPending = false
+            incomingImage.source = ""
+            root.pendingIndex = -1
+            root.pendingDirection = 0
+            root.switching = false
+        }
         const fallbackUrl = root.resources.currentImageUrl
         if (visibleImage.source.toString() === fallbackUrl.toString()) {
             root.updateTimer()
@@ -182,6 +189,7 @@ Item {
         slideTimer.stop()
         if (slideAnimation.running)
             slideAnimation.stop()
+        root.visibleCommitPending = false
         root.switching = false
         root.pendingIndex = -1
         root.pendingDirection = 0
@@ -238,7 +246,9 @@ Item {
             retainWhileLoading: true
             z: 1
             onStatusChanged: {
-                if (status === Image.Error)
+                if (status === Image.Ready)
+                    root.finishVisibleCommit()
+                else if (status === Image.Error)
                     root.handleVisibleError()
             }
         }
