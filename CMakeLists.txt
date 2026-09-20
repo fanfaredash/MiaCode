@@ -845,8 +845,8 @@ qt_add_qml_module(MiaCode
         src/app/ui/editor/EditorTextStyle.h
         src/app/ui/ApplicationContext.cpp
         src/app/ui/ApplicationContext.h
-        src/app/ui/ComicResourceModel.cpp
-        src/app/ui/ComicResourceModel.h
+        src/app/services/ComicResourceModel.cpp
+        src/app/services/ComicResourceModel.h
         src/app/ui/document/CommandService.cpp
         src/app/ui/document/CommandService.h
         src/app/ui/chrome/ShortcutCommands.h

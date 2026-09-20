@@ -106,8 +106,8 @@ bool verifyManifestContract(QTextStream& err)
 
 bool verifyModelLifecycleContract(QTextStream& err)
 {
-    const QString header = readSource(QStringLiteral("src/app/ui/ComicResourceModel.h"));
-    const QString implementation = readSource(QStringLiteral("src/app/ui/ComicResourceModel.cpp"));
+    const QString header = readSource(QStringLiteral("src/app/services/ComicResourceModel.h"));
+    const QString implementation = readSource(QStringLiteral("src/app/services/ComicResourceModel.cpp"));
     bool ok = require(!header.isEmpty() && !implementation.isEmpty(),
                       QStringLiteral("the resource model sources are readable"), err);
     ok &= require(!header.contains(QStringLiteral("QFileSystemWatcher"))

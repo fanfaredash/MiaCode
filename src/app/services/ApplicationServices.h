@@ -8,7 +8,7 @@
 #include "PreviewAppearanceState.h"
 #include "ShellNotifications.h"
 #include "UiRequestService.h"
-#include "app/ui/ComicResourceModel.h"
+#include "ComicResourceModel.h"
 
 #include <QObject>
 
