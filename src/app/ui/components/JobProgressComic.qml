@@ -5,6 +5,8 @@ import MiaCode.UI
 Item {
     id: root
 
+    clip: true
+
     property var resources: null
     property bool active: false
     property bool chartExportActive: false

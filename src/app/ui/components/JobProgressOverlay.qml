@@ -108,7 +108,7 @@ Item {
 
             RowLayout {
                 objectName: "jobProgressComicControls"
-                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignHCenter
                 Layout.preferredHeight: root.chartExportActive ? root.comicFrameHeight : 0
                 Layout.bottomMargin: root.chartExportActive
                     ? root.progressBodySpacing * 2 : 0
