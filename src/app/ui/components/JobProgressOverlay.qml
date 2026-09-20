@@ -36,12 +36,6 @@ Item {
     readonly property real comicButtonGlyphScale: 3.375
     readonly property int comicButtonGlyphPixelSize:
         Math.round(Theme.uiFontSize * root.comicButtonGlyphScale)
-    readonly property real comicButtonActiveGlyphScale: 1.5
-    readonly property real comicButtonHitScale: 1.1
-    readonly property int comicButtonHitSize:
-        Math.round(root.comicButtonGlyphPixelSize
-                   * root.comicButtonActiveGlyphScale
-                   * root.comicButtonHitScale)
     readonly property var comicButtonGlyphStateColors: ({
         normal: root.comicButtonGlyphColor,
         hovered: root.comicButtonGlyphColor,
@@ -50,10 +44,9 @@ Item {
         disabled: Theme.colors.text.disabled
     })
     readonly property var comicButtonStateColors: ({
-        normal: "transparent",
         hover: Theme.comicButtonBackground,
         pressed: Theme.comicButtonBackground,
-        selected: "transparent"
+        selected: Theme.comicButtonBackground
     })
 
     AppDialog {
@@ -125,9 +118,6 @@ Item {
                     id: previousButton
                     glyph: "‹"
                     glyphPixelSize: root.comicButtonGlyphPixelSize
-                    glyphScale: 1
-                    activeGlyphScale: root.comicButtonActiveGlyphScale
-                    glyphScaleAnimationDuration: 100
                     glyphStateColors: root.comicButtonGlyphStateColors
                     stateColors: root.comicButtonStateColors
                     tooltip: qsTrId("qml.previous_comic")
@@ -136,8 +126,6 @@ Item {
                     visible: comic.canSwitch
                     enabled: comic.canSwitch
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: root.comicButtonHitSize
-                    Layout.preferredHeight: root.comicButtonHitSize
                     onClicked: comic.requestSlide(-1)
                 }
 
@@ -156,9 +144,6 @@ Item {
                     id: nextButton
                     glyph: "›"
                     glyphPixelSize: root.comicButtonGlyphPixelSize
-                    glyphScale: 1
-                    activeGlyphScale: root.comicButtonActiveGlyphScale
-                    glyphScaleAnimationDuration: 100
                     glyphStateColors: root.comicButtonGlyphStateColors
                     stateColors: root.comicButtonStateColors
                     tooltip: qsTrId("qml.next_comic")
@@ -167,8 +152,6 @@ Item {
                     visible: comic.canSwitch
                     enabled: comic.canSwitch
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: root.comicButtonHitSize
-                    Layout.preferredHeight: root.comicButtonHitSize
                     onClicked: comic.requestSlide(1)
                 }
             }

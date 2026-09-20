@@ -15,9 +15,6 @@ AbstractButton {
     property bool compact: false
     property color glyphColorOverride: "transparent"
     property int glyphPixelSize: -1
-    property real glyphScale: 1
-    property real activeGlyphScale: 1
-    property int glyphScaleAnimationDuration: 100
     property var glyphStateColors: null
     property int iconWidth: compact ? 14 : 16
     property int iconHeight: compact ? 14 : 16
@@ -109,14 +106,6 @@ AbstractButton {
                 ? root.glyphPixelSize : Theme.uiFontSize + 2
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            scale: root.enabled && (root.hovered || root.down)
-                ? root.activeGlyphScale : root.glyphScale
-            Behavior on scale {
-                NumberAnimation {
-                    duration: root.glyphScaleAnimationDuration
-                    easing.type: Easing.OutCubic
-                }
-            }
         }
     }
 
