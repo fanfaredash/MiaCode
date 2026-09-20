@@ -516,7 +516,12 @@ QtObject {
     readonly property var colors: activeTheme.colors
     readonly property color comicButtonDarkGlyph: darkColors.background.control
     readonly property color comicButtonLightGlyph: darkColors.text.heading
-    readonly property color comicButtonBackground: darkColors.border.normal
+    readonly property color comicButtonBackground: {
+        const base = Qt.color(colors.background.panel)
+        return activeTheme.dark
+            ? Qt.lighter(base, 112)
+            : Qt.darker(base, 112)
+    }
 
     readonly property string uiFont: preferences ? preferences.uiFontFamily : ""
     readonly property font codeFont: preferences ? preferences.codeFont : Qt.font({})
