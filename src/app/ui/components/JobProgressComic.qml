@@ -17,17 +17,37 @@ Item {
     property int pendingDirection: 0
     property bool visibleCommitPending: false
     property var navigationHistory: []
+    property int navigationCursor: -1
     property bool chartExportInitialized: false
     visible: root.active && root.chartExportActive
 
     readonly property bool hasVisibleImage: visibleImage.status === Image.Ready
-    readonly property bool canGoBack: root.navigationHistory.length > 0
+    readonly property bool canGoBack: root.navigationCursor > 0
     readonly property bool canSwitch: root.chartExportActive && root.active
         && root.resources !== null && root.resources.resourceCount >= 2
         && !root.switching && incomingImage.status !== Image.Loading
 
     function clearNavigationHistory() {
         root.navigationHistory = []
+        root.navigationCursor = -1
+    }
+
+    function normalizeNavigationHistory() {
+        const count = root.resources ? root.resources.resourceCount : 0
+        const validHistory = []
+        const oldCursor = root.navigationCursor
+        let normalizedCursor = -1
+        for (let historyIndex = 0; historyIndex < root.navigationHistory.length; ++historyIndex) {
+            const index = root.navigationHistory[historyIndex]
+            if (index >= 0 && index < count) {
+                if (historyIndex === oldCursor)
+                    normalizedCursor = validHistory.length
+                validHistory.push(index)
+            }
+        }
+        root.navigationHistory = validHistory
+        root.navigationCursor = normalizedCursor >= 0
+            ? normalizedCursor : Math.min(Math.max(oldCursor, -1), validHistory.length - 1)
     }
 
     function currentResourceIndex() {
@@ -37,37 +57,67 @@ Item {
         return root.modelIndexForUrl(root.resources.currentImageUrl)
     }
 
-    function pushCurrentResource() {
-        const index = root.currentIndex >= 0
-            ? root.currentIndex : root.currentResourceIndex()
+    function recordCurrentResource(index) {
+        if (!root.resources || index < 0 || index >= root.resources.resourceCount)
+            return
+        root.normalizeNavigationHistory()
+        if (root.navigationCursor >= 0
+                && root.navigationHistory[root.navigationCursor] === index) {
+            return
+        }
 
-        if (index >= 0)
-            root.navigationHistory = root.navigationHistory.concat([index])
+        const historyPrefix = root.navigationCursor >= 0
+            ? root.navigationHistory.slice(0, root.navigationCursor + 1)
+            : []
+        root.navigationHistory = historyPrefix.concat([index])
+        root.navigationCursor = root.navigationHistory.length - 1
     }
 
-    function selectRandomNext() {
+    function appendRandomResource() {
         if (!root.canSwitch || !root.resources
                 || root.resources.resourceCount < 2) {
             return
         }
 
-        root.pushCurrentResource()
+        root.pendingDirection = 1
         root.resources.selectRandomResource()
+    }
+
+    function selectNextFromHistoryOrRandom() {
+        if (!root.canSwitch || !root.resources)
+            return
+
+        root.normalizeNavigationHistory()
+        if (root.navigationCursor + 1 < root.navigationHistory.length) {
+            const nextIndex = root.navigationHistory[root.navigationCursor + 1]
+            if (nextIndex < 0 || nextIndex >= root.resources.resourceCount)
+                return
+            root.navigationCursor += 1
+            root.pendingDirection = 1
+            root.resources.selectResource(nextIndex)
+            return
+        }
+
+        root.appendRandomResource()
+    }
+
+    function selectRandomNext() {
+        root.selectNextFromHistoryOrRandom()
     }
 
     function selectPreviousFromHistory() {
         if (!root.canSwitch || !root.canGoBack || !root.resources)
             return
 
-        const previousIndex = root.navigationHistory[root.navigationHistory.length - 1]
-        root.navigationHistory = root.navigationHistory.slice(
-            0, root.navigationHistory.length - 1)
+        root.normalizeNavigationHistory()
+        const previousIndex = root.navigationHistory[root.navigationCursor - 1]
 
         if (previousIndex < 0 || previousIndex >= root.resources.resourceCount)
             return
         if (previousIndex === root.currentResourceIndex())
             return
 
+        root.navigationCursor -= 1
         root.pendingDirection = -1
         root.resources.selectResource(previousIndex)
     }
@@ -94,45 +144,35 @@ Item {
         return -1
     }
 
+    function startImageTransition(direction) {
+        if (direction !== 1 && direction !== -1)
+            return
+        root.pendingDirection = direction
+        incomingImage.x = direction < 0 ? -root.width : root.width
+        root.switching = true
+        root.updateTimer()
+        slideAnimation.start()
+    }
+
     function syncFromModel() {
         if (!root.active || !root.chartExportActive || !root.resources || root.switching)
             return
         const modelUrl = root.resources.currentImageUrl
         if (modelUrl.length === 0)
             return
+        const modelIndex = root.modelIndexForUrl(modelUrl)
+        root.recordCurrentResource(modelIndex)
         if (visibleImage.source.toString() === modelUrl.toString()) {
-            root.currentIndex = modelIndexForUrl(modelUrl)
+            root.currentIndex = modelIndex
             updateTimer()
             return
         }
         const transitionDirection = root.pendingDirection
-        root.pendingIndex = modelIndexForUrl(modelUrl)
+        root.pendingIndex = modelIndex
         root.pendingDirection = transitionDirection
         incomingImage.x = transitionDirection < 0 ? -root.width : root.width
         incomingImage.source = modelUrl
         updateTimer()
-    }
-
-    function requestSlide(direction) {
-        if (!root.canSwitch || (direction !== 1 && direction !== -1))
-            return
-
-        const count = root.resources.resourceCount
-        if (count < 2)
-            return
-
-        const baseIndex = root.currentIndex >= 0 && root.currentIndex < count
-            ? root.currentIndex : 0
-        const targetIndex = (baseIndex + direction + count) % count
-        const targetUrl = modelUrlAt(targetIndex)
-        if (targetUrl.length === 0)
-            return
-
-        root.pendingIndex = targetIndex
-        root.pendingDirection = direction
-        incomingImage.x = direction > 0 ? root.width : -root.width
-        incomingImage.source = targetUrl
-        root.updateTimer()
     }
 
     function finishVisibleCommit() {
@@ -170,15 +210,13 @@ Item {
             root.updateTimer()
             return
         }
-        if (root.pendingDirection === 0) {
+        if (!root.hasVisibleImage) {
             stageVisibleCommit()
             return
         }
         if (root.switching)
             return
-        root.switching = true
-        root.updateTimer()
-        slideAnimation.start()
+        root.startImageTransition(root.pendingDirection === 0 ? 1 : root.pendingDirection)
     }
 
     function handleIncomingError() {
@@ -230,13 +268,24 @@ Item {
         root.pendingDirection = 0
         incomingImage.source = ""
         incomingImage.x = root.width
+        visibleImage.source = ""
+        root.currentIndex = -1
     }
 
-    function beginChartExport() {
+    function initializeChartExport() {
         root.clearNavigationHistory()
+        root.currentIndex = -1
+        root.pendingDirection = 0
 
-        if (root.resources && root.resources.resourceCount > 1)
+        if (!root.resources || root.resources.resourceCount === 0)
+            return
+        if (root.resources.resourceCount > 1)
             root.resources.selectRandomResource()
+        else
+            root.resources.selectResource(0)
+        root.recordCurrentResource(root.currentResourceIndex())
+        if (root.navigationHistory.length > 0)
+            root.navigationCursor = 0
     }
 
     Component.onCompleted: syncFromModel()
@@ -244,7 +293,7 @@ Item {
         if (root.active) {
             if (root.chartExportActive && !root.chartExportInitialized) {
                 root.chartExportInitialized = true
-                root.beginChartExport()
+                root.initializeChartExport()
             }
             root.syncFromModel()
         } else {
@@ -263,7 +312,7 @@ Item {
         }
         if (!root.chartExportInitialized) {
             root.chartExportInitialized = true
-            root.beginChartExport()
+            root.initializeChartExport()
         }
         if (root.active)
             root.syncFromModel()
@@ -279,7 +328,10 @@ Item {
     Connections {
         target: root.resources
         function onCurrentChanged() { root.syncFromModel() }
-        function onResourcesChanged() { root.syncFromModel() }
+        function onResourcesChanged() {
+            root.normalizeNavigationHistory()
+            root.syncFromModel()
+        }
     }
 
     Rectangle {
