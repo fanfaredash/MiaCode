@@ -52,21 +52,6 @@ AppDialog {
             0, Math.min(keepY, Math.max(0, shortcutList.contentHeight - shortcutList.height)))
     }
 
-    function describeShortcut(event) {
-        // Modifier-only presses keep the capture armed: they are the first half
-        // of a chord, not a binding.
-        if (event.key === Qt.Key_Control || event.key === Qt.Key_Shift
-                || event.key === Qt.Key_Alt || event.key === Qt.Key_Meta)
-            return ""
-        let parts = []
-        if (event.modifiers & Qt.ControlModifier) parts.push("Ctrl")
-        if (event.modifiers & Qt.AltModifier) parts.push("Alt")
-        if (event.modifiers & Qt.ShiftModifier) parts.push("Shift")
-        if (event.modifiers & Qt.MetaModifier) parts.push("Meta")
-        parts.push(root.shortcuts.keyName(event.key))
-        return parts.join("+")
-    }
-
     body: ColumnLayout {
         spacing: 10
 
@@ -367,7 +352,10 @@ AppDialog {
                         root.capturingId = ""
                         return
                     }
-                    const text = root.describeShortcut(event)
+                    if (event.key === Qt.Key_Control || event.key === Qt.Key_Shift
+                            || event.key === Qt.Key_Alt || event.key === Qt.Key_Meta)
+                        return
+                    const text = root.shortcuts.shortcutTextForKeyEvent(event.key, event.modifiers)
                     if (text.length === 0)
                         return
                     root.shortcuts.setShortcutText(root.capturingId, text)

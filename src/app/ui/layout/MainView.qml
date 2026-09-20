@@ -335,13 +335,7 @@ Item {
     }
 
     Shortcut {
-        sequence: StandardKey.Close
-        enabled: root.editorActive
-        onActivated: splitView.requestCloseActiveEditor()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+F4"
+        sequences: [StandardKey.Close]
         enabled: root.editorActive
         onActivated: splitView.requestCloseActiveEditor()
     }

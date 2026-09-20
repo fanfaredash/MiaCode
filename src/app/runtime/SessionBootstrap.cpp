@@ -413,12 +413,12 @@ Session::Session(miacode::ApplicationServices& services, QObject* parent)
     timelineQuickStateBridge_->setFollowProgressEnabled(previewProgressFollowEnabled_);
     timelineQuickStateBridge_->setTimelineSyncEnabled(timelineSyncEnabled_);
     timelineQuickStateBridge_->setZoomWheelShortcuts(
-        miacode::ui::ShortcutRegistry::instance().shortcutTexts(
+        {miacode::ui::ShortcutRegistry::instance().shortcutText(
             QStringLiteral("timeline.zoom_in"),
-            {QStringLiteral("Ctrl+WheelUp")}),
-        miacode::ui::ShortcutRegistry::instance().shortcutTexts(
+            QStringLiteral("Ctrl+WheelUp"))},
+        {miacode::ui::ShortcutRegistry::instance().shortcutText(
             QStringLiteral("timeline.zoom_out"),
-            {QStringLiteral("Ctrl+WheelDown")}));
+            QStringLiteral("Ctrl+WheelDown"))});
     playback_->refreshTimelineWaveformPhaseCompensation();
     connect(timelineQuickStateBridge_,
             &TimelineQuickStateBridge::renderCadenceTick,

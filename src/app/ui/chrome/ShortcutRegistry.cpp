@@ -14,116 +14,45 @@
 namespace miacode::ui {
 namespace {
 
-const QStringList& editableShortcutIds()
-{
-    static const QStringList ids{
-        QStringLiteral("transform.mirror_lr"),
-        QStringLiteral("transform.mirror_ud"),
-        QStringLiteral("transform.rotate_180"),
-        QStringLiteral("transform.rotate_ccw_45"),
-        QStringLiteral("transform.rotate_cw_45"),
-        QStringLiteral("transform.subdivision_up"),
-        QStringLiteral("transform.subdivision_down"),
-        QStringLiteral("transform.subdivision_half_up"),
-        QStringLiteral("transform.subdivision_half_down"),
-        QStringLiteral("transform.toggle_break"),
-        QStringLiteral("transform.toggle_ex"),
-        QStringLiteral("transform.toggle_firework"),
-        QStringLiteral("transform.random_rotate"),
-        QStringLiteral("transform.clear_complete_elements"),
-        QStringLiteral("transform.reset_tap_notes"),
-        QStringLiteral("preview.stop_or_play"),
-        QStringLiteral("preview.play_pause_global"),
-        QStringLiteral("preview.speed_down"),
-        QStringLiteral("preview.speed_up"),
-        QStringLiteral("preview.pause_display_hold"),
-        QStringLiteral("timeline.zoom_in"),
-        QStringLiteral("timeline.zoom_out"),
-        QStringLiteral("editor.font_decrease"),
-        QStringLiteral("editor.font_increase"),
-        QStringLiteral("editor.overwrite_mode"),
-    };
-    return ids;
-}
-
-bool isEditableShortcutId(const QString& id)
-{
-    return editableShortcutIds().contains(id) || id.startsWith(QStringLiteral("extension."));
-}
-
-QStringList editableShortcutIdsFromDefinitions(const QHash<QString, ShortcutRegistry::ShortcutDefinition>& definitions)
-{
-    QStringList ids = editableShortcutIds();
-    for (auto it = definitions.constBegin(); it != definitions.constEnd(); ++it) {
-        if (it.key().startsWith(QStringLiteral("extension.")) && !ids.contains(it.key())) {
-            ids.append(it.key());
-        }
-    }
-    return ids;
-}
-
 QString userOverridePath()
 {
     return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("shortcuts.json"));
 }
 
-QStringList parseShortcutTextValue(const QJsonValue& value)
+QString parseShortcutTextValue(const QJsonValue& value)
 {
-    QStringList shortcuts;
-    const auto appendShortcut = [&shortcuts](const QString& text) {
-        const QString normalized = miacode::input_shortcut::normalizeGestureText(text);
-        if (normalized.isEmpty() || shortcuts.contains(normalized)) {
-            return;
-        }
-        shortcuts.append(normalized);
-    };
+    return value.isString()
+        ? miacode::input_shortcut::normalizeGestureText(value.toString())
+        : QString();
+}
 
+QStringList parseStringList(const QJsonValue& value)
+{
+    QStringList values;
+    const auto appendValue = [&values](const QString& value) {
+        const QString trimmed = value.trimmed();
+        if (!trimmed.isEmpty() && !values.contains(trimmed)) {
+            values.append(trimmed);
+        }
+    };
     if (value.isString()) {
-        appendShortcut(value.toString());
+        appendValue(value.toString());
     } else if (value.isArray()) {
-        const QJsonArray array = value.toArray();
-        for (const QJsonValue& entry : array) {
+        for (const QJsonValue& entry : value.toArray()) {
             if (entry.isString()) {
-                appendShortcut(entry.toString());
+                appendValue(entry.toString());
             }
         }
     }
-    return shortcuts;
+    return values;
 }
 
-QStringList parseShortcutObject(const QJsonObject& object)
+QString parseShortcutObject(const QJsonObject& object)
 {
     if (object.contains(QStringLiteral("shortcut"))) {
         return parseShortcutTextValue(object.value(QStringLiteral("shortcut")));
     }
     return parseShortcutTextValue(object.value(QStringLiteral("default")));
-}
-
-QJsonValue sequenceJsonValue(const QStringList& shortcuts)
-{
-    if (shortcuts.size() == 1) {
-        return shortcuts.constFirst();
-    }
-    QJsonArray array;
-    for (const QString& shortcut : shortcuts) {
-        if (!shortcut.isEmpty()) {
-            array.append(shortcut);
-        }
-    }
-    return array;
-}
-
-QStringList shortcutTextsFromKeySequences(const QList<QKeySequence>& sequences)
-{
-    QStringList texts;
-    for (const QKeySequence& sequence : sequences) {
-        const QString text = miacode::input_shortcut::normalizeGestureText(
-            sequence.toString(QKeySequence::PortableText));
-        if (!text.isEmpty() && !texts.contains(text)) {
-            texts.append(text);
-        }
-    }
-    return texts;
 }
 
 }  // namespace
@@ -147,6 +76,7 @@ void ShortcutRegistry::reload()
     defaultShortcutTexts_.clear();
     shortcutTexts_.clear();
     userOverrides_.clear();
+    editableShortcutIds_.clear();
 
     loadDefaults();
 
@@ -161,28 +91,18 @@ void ShortcutRegistry::reload()
 
 QKeySequence ShortcutRegistry::sequence(const QString& id, const QKeySequence& fallback) const
 {
-    const QList<QKeySequence> matches = sequences(id, fallback.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{fallback});
-    return matches.isEmpty() ? QKeySequence() : matches.constFirst();
+    return shortcuts_.value(id, fallback);
 }
 
-QList<QKeySequence> ShortcutRegistry::sequences(
-    const QString& id,
-    const QList<QKeySequence>& fallback) const
+QString ShortcutRegistry::shortcutText(const QString& id, const QString& fallback) const
 {
-    const QList<QKeySequence> matches = shortcuts_.value(id);
-    return matches.isEmpty() ? fallback : matches;
-}
-
-QStringList ShortcutRegistry::shortcutTexts(const QString& id, const QStringList& fallback) const
-{
-    const QStringList matches = shortcutTexts_.value(id);
-    return matches.isEmpty() ? fallback : matches;
+    return shortcutTexts_.value(id, fallback);
 }
 
 QList<ShortcutRegistry::ShortcutDefinition> ShortcutRegistry::editableShortcuts() const
 {
     QList<ShortcutDefinition> result;
-    for (const QString& id : editableShortcutIdsFromDefinitions(definitions_)) {
+    for (const QString& id : editableShortcutIds_) {
         const ShortcutDefinition definition = definitions_.value(id);
         if (!definition.id.isEmpty()) {
             result.append(definition);
@@ -191,12 +111,12 @@ QList<ShortcutRegistry::ShortcutDefinition> ShortcutRegistry::editableShortcuts(
     return result;
 }
 
-QList<QKeySequence> ShortcutRegistry::defaultSequences(const QString& id) const
+QKeySequence ShortcutRegistry::defaultSequence(const QString& id) const
 {
     return defaultShortcuts_.value(id);
 }
 
-QStringList ShortcutRegistry::defaultShortcutTexts(const QString& id) const
+QString ShortcutRegistry::defaultShortcutText(const QString& id) const
 {
     return defaultShortcutTexts_.value(id);
 }
@@ -204,31 +124,32 @@ QStringList ShortcutRegistry::defaultShortcutTexts(const QString& id) const
 bool ShortcutRegistry::registerExtensionShortcut(
     const QString& id,
     const QString& label,
-    const QList<QKeySequence>& defaultSequences)
+    const QKeySequence& defaultSequence)
 {
     const QString normalizedId = id.trimmed();
     if (!normalizedId.startsWith(QStringLiteral("extension.")) || label.trimmed().isEmpty()) {
         return false;
     }
-    const QList<QKeySequence> validDefaults = defaultSequences.isEmpty()
-        ? QList<QKeySequence>{}
-        : defaultSequences;
-    const QStringList defaultTexts = shortcutTextsFromKeySequences(validDefaults);
+    const QKeySequence validDefault = defaultSequence;
+    const QString defaultText = validDefault.toString(QKeySequence::PortableText);
     definitions_.insert(normalizedId, {
         normalizedId,
         QString(),
         label,
         label,
-        validDefaults,
-        defaultTexts,
+        validDefault,
+        defaultText,
     });
-    if (!validDefaults.isEmpty()) {
-        defaultShortcuts_.insert(normalizedId, validDefaults);
-        defaultShortcutTexts_.insert(normalizedId, defaultTexts);
+    if (!validDefault.isEmpty()) {
+        defaultShortcuts_.insert(normalizedId, validDefault);
+        defaultShortcutTexts_.insert(normalizedId, defaultText);
+    }
+    if (!editableShortcutIds_.contains(normalizedId)) {
+        editableShortcutIds_.append(normalizedId);
     }
     if (!userOverrides_.contains(normalizedId)) {
-        shortcuts_.insert(normalizedId, validDefaults);
-        shortcutTexts_.insert(normalizedId, defaultTexts);
+        shortcuts_.insert(normalizedId, validDefault);
+        shortcutTexts_.insert(normalizedId, defaultText);
     }
     return true;
 }
@@ -247,10 +168,10 @@ bool ShortcutRegistry::setUserShortcut(const QString& id, const QKeySequence& se
 bool ShortcutRegistry::setUserShortcutText(const QString& id, const QString& shortcutText)
 {
     const QString normalized = miacode::input_shortcut::normalizeGestureText(shortcutText);
-    if (!isEditableShortcutId(id) || normalized.isEmpty()) {
+    if (!editableShortcutIds_.contains(id) || normalized.isEmpty()) {
         return false;
     }
-    userOverrides_.insert(id, {normalized});
+    userOverrides_.insert(id, normalized);
     if (!saveUserOverrides()) {
         return false;
     }
@@ -260,7 +181,7 @@ bool ShortcutRegistry::setUserShortcutText(const QString& id, const QString& sho
 
 bool ShortcutRegistry::resetUserShortcut(const QString& id)
 {
-    if (!isEditableShortcutId(id)) {
+    if (!editableShortcutIds_.contains(id)) {
         return false;
     }
     userOverrides_.remove(id);
@@ -273,7 +194,7 @@ bool ShortcutRegistry::resetUserShortcut(const QString& id)
 
 bool ShortcutRegistry::resetEditableShortcuts()
 {
-    for (const QString& id : editableShortcutIdsFromDefinitions(definitions_)) {
+    for (const QString& id : editableShortcutIds_) {
         userOverrides_.remove(id);
     }
     if (!saveUserOverrides()) {
@@ -310,32 +231,33 @@ void ShortcutRegistry::mergeJsonBytes(const QByteArray& bytes)
     }
 
     const QJsonObject root = document.object();
+    if (root.contains(QStringLiteral("editable"))) {
+        editableShortcutIds_ = parseStringList(root.value(QStringLiteral("editable")));
+    }
     const QJsonObject actions = root.value(QStringLiteral("actions")).toObject();
     for (auto it = actions.constBegin(); it != actions.constEnd(); ++it) {
         const QJsonObject actionObject = it.value().toObject();
-        const QStringList parsed = parseShortcutObject(actionObject);
-        if (!parsed.isEmpty()) {
-            if (!defaultShortcuts_.contains(it.key()) && actionObject.contains(QStringLiteral("default"))) {
-                const QStringList defaults = parseShortcutTextValue(actionObject.value(QStringLiteral("default")));
-                defaultShortcutTexts_.insert(it.key(), defaults);
-                defaultShortcuts_.insert(
-                    it.key(),
-                    miacode::input_shortcut::keyboardSequencesFromGestureTexts(defaults));
+        const QString parsed = parseShortcutObject(actionObject);
+        if (!defaultShortcuts_.contains(it.key()) && actionObject.contains(QStringLiteral("default"))) {
+            const QString defaultText = parseShortcutTextValue(actionObject.value(QStringLiteral("default")));
+            if (!defaultText.isEmpty()) {
+                defaultShortcutTexts_.insert(it.key(), defaultText);
+                defaultShortcuts_.insert(it.key(), QKeySequence(defaultText, QKeySequence::PortableText));
             }
-            if (isEditableShortcutId(it.key()) && !definitions_.contains(it.key())) {
-                definitions_.insert(it.key(), {
-                    it.key(),
-                    actionObject.value(QStringLiteral("label_key")).toString(),
-                    actionObject.value(QStringLiteral("label_zh")).toString(),
-                    actionObject.value(QStringLiteral("label_en")).toString(),
-                    defaultShortcuts_.value(it.key()),
-                    defaultShortcutTexts_.value(it.key()),
-                });
-            }
-            shortcutTexts_.insert(it.key(), parsed);
-            shortcuts_.insert(
+        }
+        if (!definitions_.contains(it.key())) {
+            definitions_.insert(it.key(), {
                 it.key(),
-                miacode::input_shortcut::keyboardSequencesFromGestureTexts(parsed));
+                actionObject.value(QStringLiteral("label_key")).toString(),
+                actionObject.value(QStringLiteral("label_zh")).toString(),
+                actionObject.value(QStringLiteral("label_en")).toString(),
+                defaultShortcuts_.value(it.key()),
+                defaultShortcutTexts_.value(it.key()),
+            });
+        }
+        if (!parsed.isEmpty()) {
+            shortcutTexts_.insert(it.key(), parsed);
+            shortcuts_.insert(it.key(), QKeySequence(parsed, QKeySequence::PortableText));
             if (actionObject.contains(QStringLiteral("shortcut"))) {
                 userOverrides_.insert(it.key(), parsed);
             }
@@ -345,18 +267,18 @@ void ShortcutRegistry::mergeJsonBytes(const QByteArray& bytes)
     const QJsonObject contextual = root.value(QStringLiteral("contextual")).toObject();
     for (auto it = contextual.constBegin(); it != contextual.constEnd(); ++it) {
         const QJsonObject shortcutObject = it.value().toObject();
-        const QStringList parsed = parseShortcutObject(shortcutObject);
+        const QString parsed = parseShortcutObject(shortcutObject);
         if (parsed.isEmpty()) {
             continue;
         }
         if (!defaultShortcuts_.contains(it.key()) && shortcutObject.contains(QStringLiteral("default"))) {
-            const QStringList defaults = parseShortcutTextValue(shortcutObject.value(QStringLiteral("default")));
-            defaultShortcutTexts_.insert(it.key(), defaults);
-            defaultShortcuts_.insert(
-                it.key(),
-                miacode::input_shortcut::keyboardSequencesFromGestureTexts(defaults));
+            const QString defaultText = parseShortcutTextValue(shortcutObject.value(QStringLiteral("default")));
+            if (!defaultText.isEmpty()) {
+                defaultShortcutTexts_.insert(it.key(), defaultText);
+                defaultShortcuts_.insert(it.key(), QKeySequence(defaultText, QKeySequence::PortableText));
+            }
         }
-        if (isEditableShortcutId(it.key()) && !definitions_.contains(it.key())) {
+        if (editableShortcutIds_.contains(it.key()) && !definitions_.contains(it.key())) {
             definitions_.insert(it.key(), {
                 it.key(),
                 shortcutObject.value(QStringLiteral("label_key")).toString(),
@@ -367,9 +289,7 @@ void ShortcutRegistry::mergeJsonBytes(const QByteArray& bytes)
             });
         }
         shortcutTexts_.insert(it.key(), parsed);
-        shortcuts_.insert(
-            it.key(),
-            miacode::input_shortcut::keyboardSequencesFromGestureTexts(parsed));
+        shortcuts_.insert(it.key(), QKeySequence(parsed, QKeySequence::PortableText));
         if (shortcutObject.contains(QStringLiteral("shortcut"))) {
             userOverrides_.insert(it.key(), parsed);
         }
@@ -386,9 +306,9 @@ bool ShortcutRegistry::saveUserOverrides() const
     );
 
     QJsonObject actions;
-    for (const QString& id : editableShortcutIdsFromDefinitions(definitions_)) {
-        const QStringList shortcuts = userOverrides_.value(id);
-        if (shortcuts.isEmpty()) {
+    for (const QString& id : editableShortcutIds_) {
+        const QString shortcut = userOverrides_.value(id);
+        if (shortcut.isEmpty()) {
             continue;
         }
         const ShortcutDefinition definition = definitions_.value(id);
@@ -402,7 +322,7 @@ bool ShortcutRegistry::saveUserOverrides() const
         if (!definition.labelEn.isEmpty()) {
             object.insert(QStringLiteral("label_en"), definition.labelEn);
         }
-        object.insert(QStringLiteral("shortcut"), sequenceJsonValue(shortcuts));
+        object.insert(QStringLiteral("shortcut"), shortcut);
         actions.insert(id, object);
     }
     root.insert(QStringLiteral("actions"), actions);

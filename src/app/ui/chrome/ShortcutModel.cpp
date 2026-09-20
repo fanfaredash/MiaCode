@@ -52,8 +52,8 @@ QVariantList ShortcutModel::editableShortcuts() const
     QVariantList rows;
     ShortcutRegistry& registry = ShortcutRegistry::instance();
     for (const ShortcutRegistry::ShortcutDefinition& definition : registry.editableShortcuts()) {
-        const QStringList current = registry.shortcutTexts(definition.id);
-        const QStringList defaults = registry.defaultShortcutTexts(definition.id);
+        const QString current = registry.shortcutText(definition.id);
+        const QString defaults = registry.defaultShortcutText(definition.id);
         QVariantMap row;
         row.insert(QStringLiteral("id"), definition.id);
         // Labels stay raw here. The shell resolves labelKey with qsTrId,
@@ -62,8 +62,11 @@ QVariantList ShortcutModel::editableShortcuts() const
         row.insert(
             QStringLiteral("labelFallback"),
             definition.labelEn.isEmpty() ? definition.id : definition.labelEn);
-        row.insert(QStringLiteral("shortcutText"), current.join(QStringLiteral(", ")));
-        row.insert(QStringLiteral("defaultText"), defaults.join(QStringLiteral(", ")));
+        const auto nativeText = [](const QString& text) {
+            return QKeySequence(text, QKeySequence::PortableText).toString(QKeySequence::NativeText);
+        };
+        row.insert(QStringLiteral("shortcutText"), nativeText(current));
+        row.insert(QStringLiteral("defaultText"), nativeText(defaults));
         row.insert(QStringLiteral("isDefault"), current == defaults);
         rows.append(row);
     }
@@ -86,9 +89,12 @@ void ShortcutModel::resetShortcut(const QString& id)
     }
 }
 
-QString ShortcutModel::keyName(int key) const
+QString ShortcutModel::shortcutTextForKeyEvent(int key, int modifiers) const
 {
-    return QKeySequence(key).toString(QKeySequence::PortableText);
+    const auto keyboardModifiers = Qt::KeyboardModifiers(modifiers)
+        & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+    return QKeySequence(QKeyCombination(keyboardModifiers, Qt::Key(key)))
+        .toString(QKeySequence::PortableText);
 }
 
 void ShortcutModel::resetAllShortcuts()

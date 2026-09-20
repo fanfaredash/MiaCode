@@ -16,23 +16,22 @@ public:
         QString labelKey;
         QString labelZh;
         QString labelEn;
-        QList<QKeySequence> defaultSequences;
-        QStringList defaultShortcutTexts;
+        QKeySequence defaultSequence;
+        QString defaultShortcutText;
     };
 
     static ShortcutRegistry& instance();
 
     QKeySequence sequence(const QString& id, const QKeySequence& fallback = QKeySequence()) const;
-    QList<QKeySequence> sequences(const QString& id, const QList<QKeySequence>& fallback = {}) const;
-    QStringList shortcutTexts(const QString& id, const QStringList& fallback = {}) const;
+    QString shortcutText(const QString& id, const QString& fallback = QString()) const;
     QList<ShortcutDefinition> editableShortcuts() const;
-    QList<QKeySequence> defaultSequences(const QString& id) const;
-    QStringList defaultShortcutTexts(const QString& id) const;
+    QKeySequence defaultSequence(const QString& id) const;
+    QString defaultShortcutText(const QString& id) const;
 
     bool registerExtensionShortcut(
         const QString& id,
         const QString& label,
-        const QList<QKeySequence>& defaultSequences);
+        const QKeySequence& defaultSequence);
     bool setUserShortcut(const QString& id, const QKeySequence& sequence);
     bool setUserShortcutText(const QString& id, const QString& shortcutText);
     bool resetUserShortcut(const QString& id);
@@ -48,10 +47,11 @@ private:
     bool saveUserOverrides() const;
 
     QHash<QString, ShortcutDefinition> definitions_;
-    QHash<QString, QList<QKeySequence>> defaultShortcuts_;
-    QHash<QString, QList<QKeySequence>> shortcuts_;
-    QHash<QString, QStringList> defaultShortcutTexts_;
-    QHash<QString, QStringList> shortcutTexts_;
-    QHash<QString, QStringList> userOverrides_;
+    QHash<QString, QKeySequence> defaultShortcuts_;
+    QHash<QString, QKeySequence> shortcuts_;
+    QHash<QString, QString> defaultShortcutTexts_;
+    QHash<QString, QString> shortcutTexts_;
+    QHash<QString, QString> userOverrides_;
+    QStringList editableShortcutIds_;
 };
 } // namespace miacode::ui

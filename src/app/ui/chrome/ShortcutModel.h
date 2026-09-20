@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QVariantList>
 #include <QString>
+#include <QStringList>
 
 namespace miacode::ui {
 
@@ -37,15 +38,13 @@ public:
     Q_INVOKABLE QString standardDisplayText(int standardKey) const;
     Q_INVOKABLE void reload();
 
-    // Shortcut editing. editableShortcuts() returns one row per command:
-    // { id, label, shortcutText, defaultText, isDefault }.
+    // Shortcut editing. editableShortcuts() returns one row per command.
     Q_INVOKABLE QVariantList editableShortcuts() const;
     Q_INVOKABLE bool setShortcutText(const QString& id, const QString& shortcutText);
     Q_INVOKABLE void resetShortcut(const QString& id);
     Q_INVOKABLE void resetAllShortcuts();
-    // Portable name for one key code, so QML can compose a binding string
-    // without knowing Qt's key-name table.
-    Q_INVOKABLE QString keyName(int key) const;
+    // Converts a captured key event into Qt's portable storage syntax.
+    Q_INVOKABLE QString shortcutTextForKeyEvent(int key, int modifiers) const;
 
 signals:
     void revisionChanged();

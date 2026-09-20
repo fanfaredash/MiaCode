@@ -160,11 +160,8 @@ int main(int argc, char** argv)
     QStringList clashes;
     for (const MenuStandardKey& key : menuStandardKeys()) {
         for (const auto& definition : miacode::ui::ShortcutRegistry::instance().editableShortcuts()) {
-            for (const QKeySequence& bound :
-                 miacode::ui::ShortcutRegistry::instance().sequences(definition.id)) {
-                if (bound.isEmpty() || bound != key.sequence) {
-                    continue;
-                }
+            const QKeySequence bound = miacode::ui::ShortcutRegistry::instance().sequence(definition.id);
+            if (!bound.isEmpty() && bound == key.sequence) {
                 clashes.append(QStringLiteral("%1 StandardKey.%2 (%3) == %4")
                                    .arg(key.file,
                                         key.keyName,

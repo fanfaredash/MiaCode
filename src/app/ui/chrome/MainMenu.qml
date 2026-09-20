@@ -338,7 +338,6 @@ Item {
                         count > 0 ? contentHeight / count : 0
                     implicitHeight: Math.min(contentHeight, averageItemHeight * 10)
                     model: restoreBackupMenu.contentModel
-                    delegate: restoreBackupMenu.delegate
                     clip: true
                     interactive: contentHeight > height
                     boundsBehavior: Flickable.StopAtBounds
@@ -363,6 +362,7 @@ Item {
             }
             AppMenuAction {
                 text: qsTrId("qml.close_document")
+                shortcutText: root.shortcuts.standardDisplayText(StandardKey.Close)
                 enabled: root.commandsEnabled && root.documentAvailable
                 onTriggered: root.commands.closeDocumentRequested()
             }

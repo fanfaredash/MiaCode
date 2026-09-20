@@ -4,6 +4,16 @@
     "Action and shortcut entries are read by the app.",
     "Users may copy this file next to MiaCode.exe as shortcuts.json and override action/shortcut sequences without rebuilding."
   ],
+  "editable": [
+    "transform.mirror_lr", "transform.mirror_ud", "transform.rotate_180",
+    "transform.rotate_ccw_45", "transform.rotate_cw_45", "transform.subdivision_up",
+    "transform.subdivision_down", "transform.subdivision_half_up", "transform.subdivision_half_down",
+    "transform.toggle_break", "transform.toggle_ex", "transform.toggle_firework",
+    "transform.random_rotate", "transform.clear_complete_elements", "transform.reset_tap_notes",
+    "preview.stop_or_play", "preview.play_pause_global", "preview.speed_down", "preview.speed_up",
+    "preview.pause_display_hold", "timeline.zoom_in", "timeline.zoom_out",
+    "editor.font_decrease", "editor.font_increase", "editor.overwrite_mode"
+  ],
   "actions": {
     "file.quit": {
       "label_key": "shortcut.file.quit",
@@ -73,7 +83,7 @@
       "label_key": "document.subdivision_plus_half",
       "label_zh": "分音提升半档",
       "label_en": "Subdivision +1/2",
-      "default": ["Ctrl+Shift+=", "Ctrl++"],
+      "default": "Ctrl+Shift+=",
       "context": "application",
       "owner": "MainWindow.BootstrapAndMenus"
     },
@@ -121,7 +131,6 @@
       "label_key": "shortcut.transform.clear_complete_elements",
       "label_zh": "一键清空要素",
       "label_en": "Clear Complete Elements",
-      "default": "Ctrl+Q",
       "context": "application",
       "owner": "MainWindow.BootstrapAndMenus"
     },
@@ -129,7 +138,6 @@
       "label_key": "shortcut.transform.reset_tap_notes",
       "label_zh": "重置摆键",
       "label_en": "Reset Tap Notes",
-      "default": "Ctrl+Alt+W",
       "context": "editor",
       "owner": "QML SourceEditor"
     },
