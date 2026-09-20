@@ -85,7 +85,10 @@ Item {
     readonly property url effectiveJacket:
         (backgroundImage.toString().length > 0) ? backgroundImage
                                                  : (logoImage.toString().length > 0 ? logoImage : "")
-    // Backdrop source: the custom image when set, else the 曲绘/logo fallback.
+    // Backdrop source: the custom image when set, else the 曲绘/logo fallback. A
+    // source that is present but only fails at LOAD time is caught inside bgFill
+    // (see bgFallback) — it cannot be resolved here, because a source bound to its
+    // own Image's status is the binding loop QML refuses to evaluate.
     readonly property url effectiveBackdrop:
         (backdropImage.toString().length > 0) ? backdropImage : effectiveJacket
 
@@ -188,15 +191,43 @@ Item {
     //    micro-motion texture (grain/warp/caustic). The texture is applied ONLY to
     //    this backdrop layer (rendered below the card), so the difficulty card is
     //    never affected. Pipeline: jacket -> blur (to texture) -> shader -> draw.
-    Image {
+    //    bgFill is a two-layer stack rather than one Image: the 曲绘 is resolved from
+    //    the chart folder by filename + existence, so a bg.jpg holding a format the
+    //    bundled Qt image plugins can't read (webp/tiff/avif saved under a .jpg
+    //    name), a truncated file, or an image past QImageReader's allocation limit
+    //    all arrive looking valid and fail only at load. bgFill then never reached
+    //    Ready, the shader below stayed hidden, and the ENTIRE intro played on the
+    //    black base + dim tint with no backdrop at all — while ffmpeg decoded that
+    //    same file for the chart background downstream, so the export succeeded and
+    //    nothing else looked wrong. bgFallback covers that case; its source stays
+    //    EMPTY (never decoded) unless bgPreferred actually errored.
+    Item {
         id: bgFill
         anchors.fill: parent
-        source: root.effectiveBackdrop
-        fillMode: Image.PreserveAspectCrop
         visible: false
-        asynchronous: false
-        smooth: true
-        mipmap: true
+        readonly property bool ready: bgPreferred.status === Image.Ready
+                                      || bgFallback.status === Image.Ready
+
+        Image {
+            id: bgPreferred
+            anchors.fill: parent
+            source: root.effectiveBackdrop
+            fillMode: Image.PreserveAspectCrop
+            visible: status === Image.Ready
+            asynchronous: false
+            smooth: true
+            mipmap: true
+        }
+        Image {
+            id: bgFallback
+            anchors.fill: parent
+            source: bgPreferred.status === Image.Error ? root.logoImage : ""
+            fillMode: Image.PreserveAspectCrop
+            visible: status === Image.Ready
+            asynchronous: false
+            smooth: true
+            mipmap: true
+        }
     }
     MultiEffect {
         id: blurredBg
@@ -222,7 +253,7 @@ Item {
         property real amp: root.bgTexAmp
         property int mode: root.bgTexMode
         opacity: root.cardOpacity()
-        visible: opacity > 0 && bgFill.status === Image.Ready
+        visible: opacity > 0 && bgFill.ready
         fragmentShader: "qrc:/src/intro/shaders/bg_texture.frag.qsb"
     }
     Rectangle {
