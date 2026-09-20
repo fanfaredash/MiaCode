@@ -178,6 +178,7 @@
             'LICENSE_SCOPE.md',
             'THIRD_PARTY_NOTICES.md',
             'app\MiaCode.exe',
+            'app\resources\comics',
             'app\ffmpeg\ffmpeg.exe',
             'app-qt:Qt6Core', 'app-qt:Qt6Gui', 'app-qt:Qt6Multimedia',
             'app-qt:Qt6Network', 'app-qt:Qt6OpenGL', 'app-qt:Qt6Quick', 'app-qt:Qt6Qml',

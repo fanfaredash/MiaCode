@@ -321,6 +321,159 @@ function Remove-PackagedDllIfPresent {
     }
 }
 
+function Get-ComicExternalFiles {
+    param([string]$DirectoryPath)
+
+    if (!(Test-Path -LiteralPath $DirectoryPath -PathType Container)) {
+        throw "Comic directory not found: $DirectoryPath"
+    }
+
+    return @(Get-ChildItem -LiteralPath $DirectoryPath -File -Force |
+        Where-Object {
+            $isHidden = (($_.Attributes -band [System.IO.FileAttributes]::Hidden) -ne 0)
+            $lowerName = $_.Name.ToLowerInvariant()
+            $extension = $_.Extension.ToLowerInvariant()
+            !$isHidden `
+                -and $lowerName -notmatch '\.(tmp|part|bak)$' `
+                -and $extension -match '^\.(jpg|jpeg|png)$' `
+                -and $lowerName -ne 'comic_001.jpg' `
+                -and $lowerName -ne 'fallback.jpg'
+        } |
+        Sort-Object Name)
+}
+
+function Test-ComicManifestFileName {
+    param([string]$FileName)
+
+    if ([string]::IsNullOrWhiteSpace($FileName) `
+        -or [System.IO.Path]::IsPathRooted($FileName) `
+        -or $FileName.Contains('/') `
+        -or $FileName.Contains('\') `
+        -or $FileName.Contains('..')) {
+        return $false
+    }
+
+    $leafName = [System.IO.Path]::GetFileName($FileName)
+    if ($leafName -ne $FileName) {
+        return $false
+    }
+    $lowerName = $FileName.ToLowerInvariant()
+    return $lowerName -match '\.(jpg|jpeg|png)$' `
+        -and $lowerName -ne 'comic_001.jpg' `
+        -and $lowerName -ne 'fallback.jpg'
+}
+
+function Read-ComicManifest {
+    param(
+        [string]$ManifestPath,
+        [System.IO.FileInfo[]]$SourceImages
+    )
+
+    if (!(Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
+        throw "Comic manifest not found: $ManifestPath"
+    }
+
+    try {
+        $manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+    } catch {
+        throw "Comic manifest is not valid JSON: $ManifestPath ($($_.Exception.Message))"
+    }
+
+    $versionIsInteger = $manifest.version -is [byte] -or $manifest.version -is [int16] `
+        -or $manifest.version -is [int32] -or $manifest.version -is [int64]
+    if ($null -eq $manifest -or !$versionIsInteger -or $manifest.version -ne 1) {
+        throw "Comic manifest version must be integer 1: $ManifestPath"
+    }
+    if ($null -eq $manifest.items -or !($manifest.items -is [System.Array])) {
+        throw "Comic manifest items must be an array: $ManifestPath"
+    }
+
+    $sourceNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($sourceImage in $SourceImages) {
+        [void]$sourceNames.Add($sourceImage.Name)
+    }
+
+    $manifestNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($item in @($manifest.items)) {
+        if ($null -eq $item.file -or $null -eq $item.width -or $null -eq $item.height) {
+            throw "Comic manifest items require file, width, and height: $ManifestPath"
+        }
+        $fileName = [string]$item.file
+        if (!(Test-ComicManifestFileName -FileName $fileName)) {
+            throw "Unsafe or unsupported comic manifest file name '$fileName': $ManifestPath"
+        }
+        $width = [double]$item.width
+        $height = [double]$item.height
+        if ([double]::IsNaN($width) -or [double]::IsInfinity($width) `
+            -or [double]::IsNaN($height) -or [double]::IsInfinity($height) `
+            -or $width -le 0 -or $height -le 0 `
+            -or [math]::Floor($width) -ne $width -or [math]::Floor($height) -ne $height) {
+            throw "Comic manifest dimensions must be positive integers for '$fileName': $ManifestPath"
+        }
+        if (!($manifestNames.Add($fileName))) {
+            throw "Comic manifest contains duplicate file name '$fileName': $ManifestPath"
+        }
+        if (!$sourceNames.Contains($fileName)) {
+            throw "Comic manifest references missing source image '$fileName': $ManifestPath"
+        }
+    }
+
+    $unlistedNames = @($SourceImages | Where-Object { !$manifestNames.Contains($_.Name) } | Select-Object -ExpandProperty Name)
+    if ($unlistedNames.Count -gt 0) {
+        Write-Host "Comic directory append images: $($unlistedNames -join ', ')"
+    }
+    return $manifest
+}
+
+function Sync-ComicResourcesToPackage {
+    param(
+        [string]$BuildOutputDir,
+        [string]$AppDir
+    )
+
+    $comicSourceDir = Join-Path $BuildOutputDir 'resources\comics'
+    $comicDestinationDir = Join-Path $AppDir 'resources\comics'
+    $comicManifestPath = Join-Path $comicSourceDir 'manifest.json'
+    $sourceImages = Get-ComicExternalFiles -DirectoryPath $comicSourceDir
+    $manifest = Read-ComicManifest -ManifestPath $comicManifestPath -SourceImages $sourceImages
+
+    Write-Host "Comic source directory: $comicSourceDir"
+    Write-Host "Comic package directory: $comicDestinationDir"
+    Write-Host "Comic manifest item count: $($manifest.items.Count)"
+    Write-Host "Comic external image count: $($sourceImages.Count)"
+    Write-Host "Source external image names: $((@($sourceImages | Select-Object -ExpandProperty Name) -join ', '))"
+
+    if (Test-Path -LiteralPath $comicDestinationDir) {
+        Remove-Item -LiteralPath $comicDestinationDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $comicDestinationDir -Force | Out-Null
+    Copy-Item -LiteralPath $comicManifestPath -Destination (Join-Path $comicDestinationDir 'manifest.json') -Force
+    foreach ($sourceImage in $sourceImages) {
+        Copy-Item -LiteralPath $sourceImage.FullName -Destination (Join-Path $comicDestinationDir $sourceImage.Name) -Force
+    }
+
+    $destinationDirectories = @(Get-ChildItem -LiteralPath $comicDestinationDir -Directory -Force)
+    if ($destinationDirectories.Count -gt 0) {
+        throw "Comic package directory contains unexpected subdirectories: $($destinationDirectories.Name -join ', ')"
+    }
+    $destinationImages = Get-ComicExternalFiles -DirectoryPath $comicDestinationDir
+    $sourceNames = @($sourceImages | Select-Object -ExpandProperty Name)
+    $destinationNames = @($destinationImages | Select-Object -ExpandProperty Name)
+    $difference = Compare-Object -ReferenceObject $sourceNames -DifferenceObject $destinationNames
+    if ($null -ne $difference) {
+        throw "Comic source and package image sets differ: $($difference | Out-String)"
+    }
+    $destinationEntries = @(Get-ChildItem -LiteralPath $comicDestinationDir -File -Force | Select-Object -ExpandProperty Name)
+    $allowedEntries = @('manifest.json') + $destinationNames
+    $unexpectedEntries = Compare-Object -ReferenceObject $allowedEntries -DifferenceObject $destinationEntries
+    if ($null -ne $unexpectedEntries) {
+        throw "Comic package directory contains unexpected files: $($unexpectedEntries | Out-String)"
+    }
+
+    Write-Host "Destination external image count: $($destinationImages.Count)"
+    Write-Host "Destination external image names: $($destinationNames -join ', ')"
+}
+
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $BuildDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $BuildDir
 if (![string]::IsNullOrWhiteSpace($QtRoot)) {
@@ -614,6 +767,8 @@ if ($IncludeDevTools) {
         }
     }
 }
+
+Sync-ComicResourcesToPackage -BuildOutputDir $buildOutputDir -AppDir $appDir
 
 $assetsSrc = Join-Path $repoRoot "assets"
 if (Test-Path $assetsSrc) {
