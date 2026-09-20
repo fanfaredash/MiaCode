@@ -98,6 +98,20 @@ void PreviewStageMediaHost::setHidePv(bool hide)
     }
     hidePv_ = hide;
     emit hidePvChanged();
+    reloadCurrentMediaPreservingPlayback();
+}
+
+void PreviewStageMediaHost::setMissingMediaFallbackEnabled(bool enabled)
+{
+    if (missingMediaFallbackEnabled_ == enabled) {
+        return;
+    }
+    missingMediaFallbackEnabled_ = enabled;
+    reloadCurrentMediaPreservingPlayback();
+}
+
+void PreviewStageMediaHost::reloadCurrentMediaPreservingPlayback()
+{
     if (chartPath_.isEmpty()) {
         return;
     }
@@ -119,7 +133,6 @@ void PreviewStageMediaHost::setHidePv(bool hide)
         setPlayheadSeconds(restoreSecond);
     }
 }
-
 
 QImage PreviewStageMediaHost::currentBackgroundImage() const
 {
@@ -268,15 +281,13 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath,
         return;
     }
 
-    if (resolvedPath.isEmpty()) {
+    mediaPath_ = resolvedPath;
+    if (mediaPath_.isEmpty()) {
         appendPreviewStageMediaLog(
             QStringLiteral("set_chart_path"),
-            QStringLiteral("chart=%1 kind=none").arg(chartPath_)
-        );
+            QStringLiteral("chart=%1 media=(none) kind=none").arg(chartPath_));
         return;
     }
-
-    mediaPath_ = resolvedPath;
     const bool isVideo = miacode::chart_assets::isVideoBackgroundPath(mediaPath_);
     if (isVideo) {
         loadVideoMedia(mediaPath_);
@@ -471,17 +482,24 @@ QString PreviewStageMediaHost::resolveStageMediaPath(
     if (resolved.isEmpty()) {
         resolved = resolveMediaPath(chartPath);
     }
-    if (!hidePv_ || !miacode::chart_assets::isVideoBackgroundPath(resolved)) {
+    if (resolved.isEmpty()) {
+        return missingMediaFallbackEnabled_
+            ? miacode::chart_assets::resolveDisplayBackgroundImagePath(chartPath)
+            : QString();
+    }
+    if (!hidePv_ && miacode::chart_assets::isVideoBackgroundPath(resolved)) {
         return resolved;
     }
-    return miacode::chart_assets::resolveBackgroundMediaPath(
-        chartPath, /*includeVideoCandidates=*/false);
+    const QString imagePath = miacode::chart_assets::resolveUsableBackgroundImagePath(chartPath);
+    if (!imagePath.isEmpty() || !missingMediaFallbackEnabled_) {
+        return imagePath;
+    }
+    return miacode::chart_assets::resolveDisplayBackgroundImagePath(chartPath);
 }
-
 
 void PreviewStageMediaHost::loadImageMedia(const QString& path)
 {
-    imageSource_ = QUrl::fromLocalFile(path);
+    imageSource_ = miacode::chart_assets::displayBackgroundImageUrl(path);
     // Also keep a decoded QImage copy alongside the QML
     // PreviewStageMediaItem's imageSource_ binding, exposed via
     // currentBackgroundImage().

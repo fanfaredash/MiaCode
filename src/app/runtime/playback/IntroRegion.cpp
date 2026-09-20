@@ -101,8 +101,7 @@ void miacode::runtime::PlaybackCoordinator::setupExportIntroOverlayData()
     // map (introBannerStyleMap → backdropImage/backdropBlurEnabled/cardShadowEnabled).
     // Passing the custom backdrop as backgroundImage (the old behavior) wrongly
     // replaced the card jacket and ignored the blur toggle.
-    const QUrl jacketUrl =
-        spec.jacketPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(spec.jacketPath);
+    const QUrl jacketUrl = miacode::chart_assets::displayBackgroundImageUrl(spec.jacketPath);
     // Overlay the dialog's difficulty-card custom fonts onto the lead-in template
     // copy so the main-timeline audition matches the export (same FontLibrary
     // override as the export mount + the dialog preview).

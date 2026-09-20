@@ -1,5 +1,6 @@
 #include "tools/video_export/VideoExportQuickRenderBackend.h"
 
+#include "common/ChartAssetPaths.h"
 #include "common/IntroConfig.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
@@ -296,9 +297,7 @@ bool VideoExportQuickRenderBackend::setupIntro(const IntroBannerSpec& intro, QSt
         return false;
     }
     const QVariantMap track = introBannerTrackMap(intro);
-    const QUrl jacketUrl = intro.jacketPath.isEmpty()
-        ? QUrl()
-        : QUrl::fromLocalFile(intro.jacketPath);
+    const QUrl jacketUrl = miacode::chart_assets::displayBackgroundImageUrl(intro.jacketPath);
 
     // Load + parse the banner template here (C++), not via the QML's async
     // XMLHttpRequest: the headless export render loop never pumps the event

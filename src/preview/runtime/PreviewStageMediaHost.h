@@ -68,6 +68,7 @@ public:
     bool chartHasVideoBackground() const;
     bool hidePv() const;
     void setHidePv(bool hide);
+    void setMissingMediaFallbackEnabled(bool enabled);
     bool mediaVisible() const;
     void setMediaVisible(bool visible);
     QUrl imageSource() const;
@@ -178,6 +179,7 @@ private:
     using PvMemoryBoundary = miacode::preview::pv_memory::BoundaryReason;
 
     void clearMedia();
+    void reloadCurrentMediaPreservingPlayback();
     QString resolveMediaPath(const QString& chartPath) const;
     QString resolveStageMediaPath(const QString& chartPath, const QString& chartVideoOverridePath) const;
     void loadImageMedia(const QString& path);
@@ -289,6 +291,7 @@ private:
     double videoFrameToImageMaxFps_ = 30.0;
     bool mediaVisible_ = true;
     bool hidePv_ = false;
+    bool missingMediaFallbackEnabled_ = false;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     double layoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
 #ifdef MIACODE_USE_QTAVPLAYER

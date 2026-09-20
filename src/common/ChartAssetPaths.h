@@ -1,9 +1,13 @@
 #pragma once
 
+#include "common/IntroConfig.h"
+
 #include <QDir>
 #include <QFileInfo>
+#include <QImage>
 #include <QString>
 #include <QStringList>
+#include <QUrl>
 
 namespace miacode::chart_assets {
 
@@ -138,6 +142,33 @@ inline QString resolveBackgroundMediaPath(const QString& chartPath, bool include
         return QString();
     }
     return resolveBackgroundMediaPathForDirectory(QFileInfo(chartPath).absolutePath(), includeVideoCandidates);
+}
+
+inline QString resolveUsableBackgroundImagePath(const QString& chartPath)
+{
+    const QString path = resolveBackgroundMediaPath(chartPath, /*includeVideoCandidates=*/false);
+    if (!path.isEmpty() && !QImage(path).isNull()) {
+        return path;
+    }
+    return QString();
+}
+
+inline QString resolveDisplayBackgroundImagePath(const QString& chartPath)
+{
+    const QString path = resolveUsableBackgroundImagePath(chartPath);
+    if (!path.isEmpty()) {
+        return path;
+    }
+    return QString::fromLatin1(miacode::intro::kLogoFallbackResourcePath);
+}
+
+inline QUrl displayBackgroundImageUrl(const QString& path)
+{
+    const QString trimmed = path.trimmed();
+    if (trimmed.startsWith(QStringLiteral(":"))) {
+        return QUrl(QStringLiteral("qrc") + trimmed);
+    }
+    return trimmed.isEmpty() ? QUrl() : QUrl::fromLocalFile(trimmed);
 }
 
 inline QString resolvePreferredBackgroundMediaPath(

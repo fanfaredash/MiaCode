@@ -15,6 +15,7 @@
 #include "common/PreviewSfxAssets.h"
 #include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
 #include "app/ui/export/ExportSession.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/video_export/VideoExportController.h"
@@ -481,6 +482,9 @@ void miacode::runtime::VideoExportHost::beginExportPreviewSession(const VideoExp
     // visible + the export's chosen outline variant for its lifetime so the
     // user sees the real exported look, ignoring the "暂停时显示判定区" pause-hide option.
     session_.exportPreviewActive_ = true;
+    if (session_.previewStageMediaHost_ != nullptr) {
+        session_.previewStageMediaHost_->setMissingMediaFallbackEnabled(true);
+    }
     session_.applyEffectivePreviewOutlineVariantToCanvas();
     session_.applyPreviewStageMediaRouteVisualSettings();
     // While the export dialog/panel is up the debug HUD is replaced by
@@ -519,6 +523,9 @@ void miacode::runtime::VideoExportHost::endExportPreviewSession()
     }
     // Restore normal paused-preview behaviour — the pause-hide option applies again.
     session_.exportPreviewActive_ = false;
+    if (session_.previewStageMediaHost_ != nullptr) {
+        session_.previewStageMediaHost_->setMissingMediaFallbackEnabled(false);
+    }
     session_.applyEffectivePreviewOutlineVariantToCanvas();
     session_.applyPreviewStageMediaRouteVisualSettings();
     session_.setPreviewCanvasAspectRatio(1.0, false);

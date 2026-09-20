@@ -1,5 +1,6 @@
 #include "tools/cover_export/CoverCompositeRenderer.h"
 
+#include "common/ChartAssetPaths.h"
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 
@@ -33,12 +34,6 @@ void ensureComposerQmlTypesRegistered()
         return true;
     }();
     Q_UNUSED(registered);
-}
-
-QUrl localFileUrlOrEmpty(const QString& path)
-{
-    const QString trimmed = path.trimmed();
-    return trimmed.isEmpty() ? QUrl() : QUrl::fromLocalFile(trimmed);
 }
 
 class CoverChartImageProvider final : public QQuickImageProvider
@@ -102,8 +97,8 @@ void applyComposerInputs(QQuickItem* root,
     root->setProperty("coverLayout", QVariant::fromValue<QObject*>(model));
     root->setProperty("coverTemplate", inputs.templateMap);
     root->setProperty("trackOverrides", inputs.trackOverrides);
-    root->setProperty("jacketImage", localFileUrlOrEmpty(inputs.jacketPath));
-    root->setProperty("backgroundImage", localFileUrlOrEmpty(inputs.backgroundPath));
+    root->setProperty("jacketImage", miacode::chart_assets::displayBackgroundImageUrl(inputs.jacketPath));
+    root->setProperty("backgroundImage", miacode::chart_assets::displayBackgroundImageUrl(inputs.backgroundPath));
     root->setProperty("backgroundMode", static_cast<int>(inputs.backgroundMode));
     root->setProperty("blurEnabled", inputs.blurBackground);
     root->setProperty("coverBgBrightness", inputs.coverBgBrightness);

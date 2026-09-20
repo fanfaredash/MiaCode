@@ -1,5 +1,6 @@
 #include "export/CoverExportSession.h"
 
+#include "common/ChartAssetPaths.h"
 #include "core/chart/document/SimaiDocument.h"
 #include "app/services/PlaybackControl.h"
 #include "tools/cover_export/CoverCompositionState.h"
@@ -126,7 +127,7 @@ QVariantMap CoverExportSession::trackOverrides() const
 
 QUrl CoverExportSession::jacketImage() const
 {
-    return task_.intro.jacketPath.trimmed().isEmpty() ? QUrl() : QUrl::fromLocalFile(task_.intro.jacketPath);
+    return miacode::chart_assets::displayBackgroundImageUrl(task_.intro.jacketPath);
 }
 
 QUrl CoverExportSession::backgroundImage() const

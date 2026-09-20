@@ -34,7 +34,8 @@ inline constexpr int kHudRevealFrame = 349;       // == cycle2End (wipe fully re
 // qrc locations (bundled via resources/intro.qrc + resources/app_icons.qrc).
 inline constexpr char kOverlayQmlUrl[] = "qrc:/intro/qml/IntroOverlay.qml";
 inline constexpr char kBannerTemplateUrl[] = "qrc:/intro/templates/maimai_banner.json";
-inline constexpr char kLogoFallbackUrl[] = "qrc:/icons/app.png";
+inline constexpr char kLogoFallbackUrl[] = "qrc:/icons/app-original.png";
+inline constexpr char kLogoFallbackResourcePath[] = ":/icons/app-original.png";
 // Opening SFX, mixed at the FRONT of the export audio (output t=0 == intro
 // start) over the silent front-pad. QFile/resource path form (no "qrc" scheme).
 inline constexpr char kOpeningSfxResource[] = ":/intro/audio/track_start.wav";

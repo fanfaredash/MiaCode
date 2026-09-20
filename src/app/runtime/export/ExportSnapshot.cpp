@@ -113,7 +113,7 @@ IntroBannerSpec buildIntroBannerSpec(
     intro.bpm = introBpmString(miacode::chart_clock::clockBpmForChart(document, chartBody));
     intro.jacketPath = chartPath.isEmpty()
         ? QString()
-        : miacode::chart_assets::resolveBackgroundMediaPath(chartPath, /*includeVideoCandidates=*/false);
+        : miacode::chart_assets::resolveDisplayBackgroundImagePath(chartPath);
     return intro;
 }
 
@@ -484,6 +484,11 @@ void miacode::runtime::VideoExportHost::installExportPreviewAuditionScene(int di
         startSecond = clampToDuration(session_.exportPreviewEntrySeedSecond_);
     }
     session_.exportPreviewEntrySeedSecond_ = -1.0;
+    session_.syncPreviewStageMediaRouteChartPath(
+        session_.currentFilePath_,
+        session_.lastTrackPath_,
+        startSecond,
+        session_.applicationServices_.workspace().document().videoPath);
     // Non-command write: installing the audition scene at a carried-over or
     // default position, not a seek — see PlaybackStateAuthority.h.
     if (auto* authority = session_.applicationServices_.playbackStateAuthority(); authority != nullptr) {

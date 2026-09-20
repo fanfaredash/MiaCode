@@ -13,10 +13,7 @@
 //     can never break the layout or wrap to a second line.
 //   • LV accepts only [0-9] and '+' (lvDigitSequence drops everything else);
 //     the prefab atlas has no glyph for arbitrary text.
-//   • a missing 曲绘 (jacketImage) falls back to the miacode logo (logoImage),
-//     and so does one that is PRESENT but never reaches Image.Ready (see the
-//     jacketFallback Image) — the slot's backing is the frame's solid black, so a
-//     source that only fails at DECODE time would otherwise read as a black hole.
+//   • a missing 曲绘 (jacketImage) falls back to the miacode logo (logoImage).
 
 import QtQuick
 import QtQuick.Effects
@@ -38,7 +35,7 @@ Item {
     property bool cacheStaticImages: true
     property bool cacheDynamicImages: true
     // Fallback art when no 曲绘 is available (see effectiveJacket).
-    property url logoImage: "qrc:/icons/app.png"
+    property url logoImage: "qrc:/icons/app-original.png"
     property var trackOverrides: ({})
     // When the host supplies a parsed template object (the integrated export
     // injects it from C++ so it doesn't depend on an async XMLHttpRequest that
@@ -67,10 +64,7 @@ Item {
     // four edges land on whole DEVICE pixels, not just whole logical pixels.
     readonly property real renderDpr: Math.max(1, Screen.devicePixelRatio)
 
-    // Resolved jacket: the chart 曲绘 if present, else the miacode logo. A 曲绘 that
-    // is present but only fails at LOAD time is handled in the slot itself (see the
-    // jacketFallback Image) — it cannot be resolved here, because a source bound to
-    // its own Image's status is the binding loop QML refuses to evaluate.
+    // Resolved jacket: the chart 曲绘 if present, else the miacode logo.
     readonly property url effectiveJacket:
         (jacketImage.toString().length > 0) ? jacketImage
                                             : (logoImage.toString().length > 0 ? logoImage : "")
@@ -691,44 +685,19 @@ Item {
             clip: true
             opacity: root.stageOpacity("jacket")
 
-            // Neutral slot fill, drawn BEHIND the art rather than instead of it. The
-            // frame's own slot is solid black, so gating this on "no url" alone left
-            // a black hole whenever the url was set but never loaded. PreserveAspectCrop
-            // always covers the slot, so this only shows while the art is absent, still
-            // loading, or (logo included) undecodable.
-            Rectangle {
-                anchors.fill: parent
-                color: "#1F1F26"
-            }
-            // Logo fallback for a 曲绘 that is PRESENT but undecodable. jacketImage is
-            // resolved from the chart folder by filename + existence, so a bg.jpg
-            // holding a format the bundled Qt image plugins can't read (webp/tiff/avif
-            // saved under a .jpg name), a truncated file, or an image past
-            // QImageReader's allocation limit all arrive looking valid and fail only
-            // here — ffmpeg decodes that same file for the chart background downstream,
-            // so the export succeeds and nothing else reports a problem. The source
-            // stays EMPTY (never decoded) unless the 曲绘 actually errored, and it reads
-            // jacketArt's status rather than feeding back into jacketArt's own source,
-            // which is what keeps this out of a binding loop.
             Image {
-                id: jacketFallback
-                anchors.fill: parent
-                source: jacketArt.status === Image.Error ? root.logoImage : ""
-                cache: root.cacheStaticImages
-                fillMode: Image.PreserveAspectCrop
-                visible: status === Image.Ready
-                smooth: true
-                mipmap: true
-            }
-            Image {
-                id: jacketArt
                 anchors.fill: parent
                 source: root.effectiveJacket
                 cache: root.cacheDynamicImages
                 fillMode: Image.PreserveAspectCrop
-                visible: status === Image.Ready
+                visible: root.effectiveJacket.toString().length > 0
                 smooth: true
                 mipmap: true
+            }
+            Rectangle {
+                anchors.fill: parent
+                color: "#1F1F26"
+                visible: root.effectiveJacket.toString().length === 0
             }
         }
 
