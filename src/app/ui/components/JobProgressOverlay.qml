@@ -15,10 +15,10 @@ Item {
     readonly property bool jobActive: !!root.progress && root.progress.active
     readonly property bool chartExportActive: !!root.progress
         && root.progress.active
-        && root.progress.taskTypeName === "chartExport"
+        && root.progress.chartExport
     readonly property bool genericActive: !!root.progress
         && root.progress.active
-        && root.progress.taskTypeName !== "chartExport"
+        && !root.progress.chartExport
     readonly property var chartExportLabelLines: {
         const label = root.progress ? String(root.progress.label || "") : ""
         const lines = label.split(/\r?\n/)

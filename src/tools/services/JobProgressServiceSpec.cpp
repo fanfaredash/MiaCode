@@ -23,7 +23,10 @@ bool verifyLifecycle(QTextStream& err)
     miacode::JobProgressService service;
     QSignalSpy changed(&service, &miacode::JobProgressService::changed);
 
-    bool ok = require(!service.active() && service.percent() == 0,
+    bool ok = require(!service.active() && service.percent() == 0
+                          && service.taskType() == miacode::JobProgressService::TaskType::Generic
+                          && !service.chartExport()
+                          && service.taskTypeName() == QStringLiteral("generic"),
                       QStringLiteral("an idle service reports no job"), err);
 
     service.begin(QStringLiteral("Pack as ZIP"), QStringLiteral("Preparing"), true);
@@ -32,6 +35,10 @@ bool verifyLifecycle(QTextStream& err)
                       && service.label() == QStringLiteral("Preparing")
                       && service.percent() == 0 && changed.count() == 1,
                   QStringLiteral("begin publishes the job in one notification"), err);
+    ok &= require(service.taskType() == miacode::JobProgressService::TaskType::Generic
+                      && !service.chartExport()
+                      && service.taskTypeName() == QStringLiteral("generic"),
+                  QStringLiteral("the three-argument begin defaults to a generic task"), err);
 
     service.report(42, QStringLiteral("Packing 3/7"));
     ok &= require(service.percent() == 42 && service.label() == QStringLiteral("Packing 3/7")
@@ -58,7 +65,10 @@ bool verifyLifecycle(QTextStream& err)
     service.end();
     ok &= require(!service.active() && service.percent() == 0 && service.title().isEmpty()
                       && service.label().isEmpty() && !service.cancellable()
-                      && !service.indeterminate(),
+                      && !service.indeterminate()
+                      && service.taskType() == miacode::JobProgressService::TaskType::Generic
+                      && !service.chartExport()
+                      && service.taskTypeName() == QStringLiteral("generic"),
                   QStringLiteral("end clears the job back to idle"), err);
 
     const int afterEnd = changed.count();
@@ -66,6 +76,20 @@ bool verifyLifecycle(QTextStream& err)
     service.report(50, QStringLiteral("ignored"));
     ok &= require(changed.count() == afterEnd && service.percent() == 0,
                   QStringLiteral("reporting or ending while idle is a no-op"), err);
+
+    service.begin(QStringLiteral("Export chart"), QStringLiteral("Rendering"), true,
+                  miacode::JobProgressService::TaskType::ChartExport);
+    ok &= require(service.taskType() == miacode::JobProgressService::TaskType::ChartExport
+                      && service.chartExport()
+                      && service.taskTypeName() == QStringLiteral("chartExport"),
+                  QStringLiteral("a chart-export begin publishes the typed task state"), err);
+    const int afterChartBegin = changed.count();
+    service.end();
+    ok &= require(changed.count() == afterChartBegin + 1
+                      && service.taskType() == miacode::JobProgressService::TaskType::Generic
+                      && !service.chartExport()
+                      && service.taskTypeName() == QStringLiteral("generic"),
+                  QStringLiteral("ending a chart-export task restores generic state"), err);
     return ok;
 }
 

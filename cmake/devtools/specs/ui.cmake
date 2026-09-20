@@ -380,3 +380,15 @@ miacode_add_spec(comic_resource_model_contract_spec
 )
 target_compile_definitions(comic_resource_model_contract_spec PRIVATE
     "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+miacode_add_spec(job_progress_controls_contract_spec
+    OWNER src/app/ui
+    CONTRACT qml-ui.job-progress-controls-contract
+    DOMAIN ui KIND source-contract RISK normal
+    EXECUTION ctest STATUS active PLATFORM all
+    SOURCES
+        src/tools/ui/JobProgressControlsContractSpec.cpp
+    LIBS Qt6::Core
+)
+target_compile_definitions(job_progress_controls_contract_spec PRIVATE
+    "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")

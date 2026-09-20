@@ -9,6 +9,11 @@ JobProgressService::JobProgressService(QObject* parent)
 {
 }
 
+bool JobProgressService::chartExport() const
+{
+    return taskType_ == TaskType::ChartExport;
+}
+
 QString JobProgressService::taskTypeName() const
 {
     switch (taskType_) {
