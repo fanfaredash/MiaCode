@@ -31,9 +31,7 @@ public:
     Q_PROPERTY(bool indeterminate READ indeterminate NOTIFY changed)
     Q_PROPERTY(bool cancellable READ cancellable NOTIFY changed)
     Q_PROPERTY(bool cancelRequested READ cancelRequested NOTIFY changed)
-    Q_PROPERTY(TaskType taskType READ taskType NOTIFY changed)
     Q_PROPERTY(bool chartExport READ chartExport NOTIFY changed)
-    Q_PROPERTY(QString taskTypeName READ taskTypeName NOTIFY changed)
 
     explicit JobProgressService(QObject* parent = nullptr);
 
@@ -47,9 +45,7 @@ public:
     quint64 token() const { return token_; }
     bool cancellable() const { return cancellable_; }
     bool cancelRequested() const { return cancelRequested_; }
-    TaskType taskType() const { return taskType_; }
     bool chartExport() const;
-    QString taskTypeName() const;
 
     // Returns the new job's token.
     quint64 begin(const QString& title,

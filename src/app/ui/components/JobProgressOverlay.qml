@@ -10,63 +10,30 @@ Item {
 
     // A miacode::JobProgressService instance.
     property var progress: null
-    property var comicResources: null
+    property var imageResources: null
 
     readonly property bool jobActive: !!root.progress && root.progress.active
     readonly property bool chartExportActive: !!root.progress
         && root.progress.active
         && root.progress.chartExport
-    readonly property bool genericActive: !!root.progress
-        && root.progress.active
-        && !root.progress.chartExport
     readonly property var chartExportLabelLines: {
         const label = root.progress ? String(root.progress.label || "") : ""
         const lines = label.split(/\r?\n/)
         return [lines.length > 0 ? lines[0] : "",
                 lines.length > 1 ? lines.slice(1).join(" ") : ""]
     }
-    readonly property real comicFrameAspectRatio: 10 / 9
-    readonly property real comicFrameWidth: 340
-    readonly property real comicFrameHeight: root.comicFrameWidth
-        / root.comicFrameAspectRatio
-    // An empty comic directory hides the whole comic region instead of leaving
-    // an empty frame behind.
-    readonly property bool hasComicResources: root.comicResources !== null
-        && root.comicResources.resourceCount > 0
+    readonly property real imageAspectRatio: 10 / 9
+    readonly property real imageWidth: 340
+    readonly property real imageHeight: root.imageWidth / root.imageAspectRatio
+    readonly property bool hasImageResources: root.imageResources !== null
+        && root.imageResources.resourceCount > 0
     readonly property int progressBodySpacing: 10
-    // Comic button colors live with the comic controls so the theme keeps only
-    // generic palette tokens. The glyph stays legible against the comic frame in
-    // both modes, and the chrome follows the panel behind it.
-    readonly property color comicButtonGlyphColor:
-        Theme.activeTheme.dark
-            ? Theme.darkColors.text.heading : Theme.darkColors.background.control
-    readonly property real comicButtonGlyphScale: 3.375
-    readonly property int comicButtonGlyphPixelSize:
-        Math.round(Theme.uiFontSize * root.comicButtonGlyphScale)
-    readonly property color comicButtonBackground: {
-        const base = Qt.color(Theme.colors.background.panel)
-        return Theme.activeTheme.dark
-            ? Qt.lighter(base, 1.6)
-            : Qt.darker(base, 1.18)
-    }
-    readonly property var comicButtonGlyphStateColors: ({
-        normal: root.comicButtonGlyphColor,
-        hovered: root.comicButtonGlyphColor,
-        pressed: root.comicButtonGlyphColor,
-        focused: root.comicButtonGlyphColor,
-        disabled: Theme.colors.text.disabled
-    })
-    readonly property var comicButtonStateColors: ({
-        hover: root.comicButtonBackground,
-        pressed: root.comicButtonBackground,
-        selected: root.comicButtonBackground
-    })
 
     AppDialog {
         objectName: "jobProgressCard"
         visible: root.jobActive
-        preferredWidth: root.chartExportActive ? 468 : 420
-        preferredHeight: root.chartExportActive
+        preferredWidth: root.chartExportActive && root.hasImageResources ? 520 : 420
+        preferredHeight: root.chartExportActive && root.hasImageResources
             ? 499 : Theme.dialogCompactHeight
         closePolicy: Popup.NoAutoClose
         title: root.progress ? root.progress.title : ""
@@ -113,50 +80,58 @@ Item {
                 value: root.progress ? root.progress.percent : 0
             }
 
-            RowLayout {
-                objectName: "jobProgressComicControls"
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredHeight: root.chartExportActive && root.hasComicResources
-                    ? root.comicFrameHeight : 0
-                Layout.bottomMargin: root.chartExportActive
+            Item {
+                objectName: "jobProgressImageControls"
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.chartExportActive && root.hasImageResources
+                    ? root.imageHeight : 0
+                Layout.bottomMargin: root.chartExportActive && root.hasImageResources
                     ? root.progressBodySpacing * 2 : 0
-                spacing: Theme.panelPadding
 
-                // Mirrors the next button on the opposite side so the comic
-                // itself sits centred in the dialog. Without it the whole
-                // [comic][button] group is centred and the comic lands left of
-                // centre by (spacing + buttonWidth) / 2.
-                Item {
-                    Layout.preferredWidth: nextButton.implicitWidth
-                    Layout.preferredHeight: 1
-                }
-
-                JobProgressComic {
-                    id: comic
-                    objectName: "jobProgressComic"
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: root.comicFrameWidth
-                    Layout.preferredHeight: root.chartExportActive ? root.comicFrameHeight : 0
-                    resources: root.comicResources
-                    active: root.jobActive
-                    chartExportActive: root.chartExportActive
+                ImageSequence {
+                    id: imageSequence
+                    objectName: "jobProgressImageSequence"
+                    anchors.fill: parent
+                    imageWidth: root.imageWidth
+                    resources: root.imageResources
+                    active: root.chartExportActive
+                    z: 0
                 }
 
                 IconButton {
-                    id: nextButton
-                    glyph: "›"
-                    glyphPixelSize: root.comicButtonGlyphPixelSize
-                    glyphStateColors: root.comicButtonGlyphStateColors
-                    stateColors: root.comicButtonStateColors
-                    tooltip: qsTrId("qml.next_comic")
-                    Accessible.name: qsTrId("qml.next_comic")
-                    Accessible.description: qsTrId("qml.show_next_comic")
+                    iconSource: Qt.resolvedUrl("icons/chevron-left.svg")
+                    iconWidth: 20
+                    iconHeight: 20
+                    width: 48
+                    height: 56
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    z: 1
+                    tooltip: qsTrId("qml.navigate_back")
+                    Accessible.name: qsTrId("qml.navigate_back")
                     visible: root.chartExportActive
-                        && root.comicResources !== null
-                        && root.comicResources.resourceCount >= 2
-                    enabled: comic.canSwitch
-                    Layout.alignment: Qt.AlignVCenter
-                    onClicked: comic.selectRandomNext()
+                        && root.imageResources !== null
+                        && root.imageResources.resourceCount >= 2
+                    enabled: imageSequence.canSwitch
+                    onClicked: imageSequence.selectPrevious()
+                }
+
+                IconButton {
+                    iconSource: Qt.resolvedUrl("icons/chevron-right.svg")
+                    iconWidth: 20
+                    iconHeight: 20
+                    width: 48
+                    height: 56
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    z: 1
+                    tooltip: qsTrId("qml.navigate_forward")
+                    Accessible.name: qsTrId("qml.navigate_forward")
+                    visible: root.chartExportActive
+                        && root.imageResources !== null
+                        && root.imageResources.resourceCount >= 2
+                    enabled: imageSequence.canSwitch
+                    onClicked: imageSequence.selectNext()
                 }
             }
 

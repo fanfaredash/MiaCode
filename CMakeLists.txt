@@ -678,7 +678,7 @@ set(MIACODE_UI_QML_FILES
     src/app/ui/components/SettingsSection.qml
     src/app/ui/components/AboutDialog.qml
     src/app/ui/components/JobProgressOverlay.qml
-    src/app/ui/components/JobProgressComic.qml
+    src/app/ui/components/ImageSequence.qml
     src/app/ui/chrome/WindowGestureArea.qml
     src/app/ui/chrome/WindowTitleBar.qml
     src/app/ui/chrome/WindowCaptionButtons.qml
@@ -754,6 +754,8 @@ set(MIACODE_UI_ICON_FILES
     src/app/ui/resources/icons/panel-left.svg
     src/app/ui/resources/icons/panel-bottom.svg
     src/app/ui/resources/icons/panel-right.svg
+    src/app/ui/resources/icons/chevron-left.svg
+    src/app/ui/resources/icons/chevron-right.svg
     src/app/ui/resources/icons/settings.svg
     src/app/ui/resources/icons/chart.svg
     src/app/ui/resources/icons/export.svg
@@ -807,8 +809,8 @@ qt_add_qml_module(MiaCode
         src/app/ui/editor/EditorTextStyle.h
         src/app/ui/ApplicationContext.cpp
         src/app/ui/ApplicationContext.h
-        src/app/services/ComicResourceModel.cpp
-        src/app/services/ComicResourceModel.h
+        src/app/services/ImageResourceModel.cpp
+        src/app/services/ImageResourceModel.h
         src/app/ui/document/CommandService.cpp
         src/app/ui/document/CommandService.h
         src/app/ui/chrome/ShortcutCommands.h

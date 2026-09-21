@@ -14,17 +14,6 @@ bool JobProgressService::chartExport() const
     return taskType_ == TaskType::ChartExport;
 }
 
-QString JobProgressService::taskTypeName() const
-{
-    switch (taskType_) {
-    case TaskType::ChartExport:
-        return QStringLiteral("chartExport");
-    case TaskType::Generic:
-        return QStringLiteral("generic");
-    }
-    return QStringLiteral("generic");
-}
-
 quint64 JobProgressService::begin(const QString& title,
                                   const QString& label,
                                   bool cancellable,

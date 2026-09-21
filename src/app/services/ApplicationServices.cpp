@@ -25,7 +25,6 @@ ApplicationServices::ApplicationServices(QObject* parent)
     , editorSync_(this)
     , uiRequests_(this)
     , jobProgress_(this)
-    , comicResources_(this)
     , previewAppearance_(this)
     , shellNotifications_(this)
 {

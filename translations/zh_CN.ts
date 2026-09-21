@@ -4121,6 +4121,14 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Back</source>
         <translation>返回</translation>
     </message>
+    <message id="qml.navigate_back">
+        <source>Back</source>
+        <translation>后退</translation>
+    </message>
+    <message id="qml.navigate_forward">
+        <source>Forward</source>
+        <translation>前进</translation>
+    </message>
     <message id="qml.background_mask_opacity">
         <source>Background mask opacity</source>
         <translation>背景蒙版不透明度</translation>
@@ -4200,18 +4208,6 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
     <message id="qml.close_document">
         <source>Close document</source>
         <translation>关闭文档</translation>
-    </message>
-    <message id="qml.comic_resource_unavailable">
-        <source>Comic resource unavailable</source>
-        <translation>漫画资源不可用</translation>
-    </message>
-    <message id="qml.next_comic">
-        <source>Next comic</source>
-        <translation>下一张漫画</translation>
-    </message>
-    <message id="qml.show_next_comic">
-        <source>Show next comic</source>
-        <translation>显示下一张漫画</translation>
     </message>
     <message id="qml.collapse_bookmarks">
         <source>Collapse bookmarks</source>

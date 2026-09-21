@@ -13,8 +13,6 @@ AbstractButton {
     property string tooltip
     property bool active: false
     property bool compact: false
-    property int glyphPixelSize: -1
-    property var glyphStateColors: null
     property int iconWidth: compact ? 14 : 16
     property int iconHeight: compact ? 14 : 16
     property var stateColors: Theme.colors.buttonState
@@ -42,26 +40,7 @@ AbstractButton {
             : root.active || root.checked || root.hovered || root.visualFocus
                 ? Theme.colors.text.active
                 : Theme.colors.text.secondary
-    readonly property color glyphColor: {
-        const fallback = root.defaultGlyphColor
-        if (root.glyphStateColors !== null) {
-            if (!root.enabled)
-                return root.glyphStateColors.disabled !== undefined
-                    ? root.glyphStateColors.disabled : fallback
-            if (root.down)
-                return root.glyphStateColors.pressed !== undefined
-                    ? root.glyphStateColors.pressed : fallback
-            if (root.hovered)
-                return root.glyphStateColors.hovered !== undefined
-                    ? root.glyphStateColors.hovered : fallback
-            if (root.visualFocus)
-                return root.glyphStateColors.focused !== undefined
-                    ? root.glyphStateColors.focused : fallback
-            return root.glyphStateColors.normal !== undefined
-                ? root.glyphStateColors.normal : fallback
-        }
-        return fallback
-    }
+    readonly property color glyphColor: root.defaultGlyphColor
 
     contentItem: Item {
         anchors.fill: parent
@@ -100,8 +79,7 @@ AbstractButton {
             text: root.glyph
             color: root.glyphColor
             font.family: Theme.uiFont
-            font.pixelSize: root.glyphPixelSize > 0
-                ? root.glyphPixelSize : Theme.uiFontSize + 2
+            font.pixelSize: Theme.uiFontSize + 2
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }

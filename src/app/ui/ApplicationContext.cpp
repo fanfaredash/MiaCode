@@ -7,6 +7,7 @@ ApplicationContext::ApplicationContext(miacode::ApplicationServices& services,
                                              QObject* parent)
     : QObject(parent)
     , services_(services)
+    , imageResources_(QStringLiteral("comics"), this)
     , preferences_(this)
     , appBackground_(&services.uiRequests(), {}, {}, this)
     , document_(services.shellNotifications(), services.workspace(), services.files(), services.analysis(),
@@ -90,7 +91,7 @@ QObject* ApplicationContext::uiRequests() { return &services_.uiRequests(); }
 
 QObject* ApplicationContext::jobProgress() { return &services_.jobProgress(); }
 
-QObject* ApplicationContext::comicResources() { return &services_.comicResources(); }
+QObject* ApplicationContext::imageResources() { return &imageResources_; }
 
 QObject* ApplicationContext::mediaTools() { return &mediaTools_; }
 

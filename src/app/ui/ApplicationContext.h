@@ -19,6 +19,7 @@
 #include "latency/LatencyModel.h"
 #include "pet/PetOverlayController.h"
 #include "app/services/ApplicationServices.h"
+#include "app/services/ImageResourceModel.h"
 
 #include <QObject>
 
@@ -49,7 +50,7 @@ class ApplicationContext final : public QObject
     // Shared Widgets-free UI boundary, hosted once by MainView.qml.
     Q_PROPERTY(QObject* uiRequests READ uiRequests CONSTANT)
     Q_PROPERTY(QObject* jobProgress READ jobProgress CONSTANT)
-    Q_PROPERTY(QObject* comicResources READ comicResources CONSTANT)
+    Q_PROPERTY(QObject* imageResources READ imageResources CONSTANT)
     Q_PROPERTY(QObject* mediaTools READ mediaTools CONSTANT)
     Q_PROPERTY(QObject* preferencesModel READ preferencesModel CONSTANT)
     Q_PROPERTY(QObject* audioSettings READ audioSettings CONSTANT)
@@ -83,7 +84,7 @@ public:
     QObject* platform();
     QObject* uiRequests();
     QObject* jobProgress();
-    QObject* comicResources();
+    QObject* imageResources();
     QObject* mediaTools();
     QObject* preferencesModel();
     QObject* audioSettings();
@@ -99,6 +100,7 @@ signals:
 
 private:
     miacode::ApplicationServices& services_;
+    ImageResourceModel imageResources_;
     WorkbenchSettings preferences_;
     miacode::ui::AppBackgroundModel appBackground_;
     DocumentModel document_;

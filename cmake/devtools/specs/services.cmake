@@ -127,8 +127,6 @@ miacode_add_spec(editor_page_router_spec
         src/timeline/TimelineSlowRefresh.cpp
         src/app/ui/preferences/PreferenceDocument.h
         src/app/ui/preferences/PreferenceDocument.cpp
-        src/app/services/ComicResourceModel.h
-        src/app/services/ComicResourceModel.cpp
         src/app/services/ApplicationServices.h
         src/app/services/ApplicationServices.cpp
         src/app/services/AnalysisService.h
@@ -173,8 +171,6 @@ miacode_add_spec(export_engine_spec
         src/timeline/TimelineSlowRefresh.cpp
         src/app/ui/preferences/PreferenceDocument.h
         src/app/ui/preferences/PreferenceDocument.cpp
-        src/app/services/ComicResourceModel.h
-        src/app/services/ComicResourceModel.cpp
         src/app/services/ApplicationServices.h
         src/app/services/ApplicationServices.cpp
         src/app/services/AnalysisService.h
@@ -236,8 +232,6 @@ miacode_add_spec(application_services_spec
         src/timeline/TimelineSlowRefresh.cpp
         src/app/ui/preferences/PreferenceDocument.h
         src/app/ui/preferences/PreferenceDocument.cpp
-        src/app/services/ComicResourceModel.h
-        src/app/services/ComicResourceModel.cpp
         src/app/services/ApplicationServices.h
         src/app/services/ApplicationServices.cpp
         src/app/services/AnalysisService.h
