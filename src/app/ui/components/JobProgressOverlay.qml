@@ -10,24 +10,98 @@ Item {
 
     // A miacode::JobProgressService instance.
     property var progress: null
+    property var comicResources: null
 
     readonly property bool jobActive: !!root.progress && root.progress.active
+    readonly property bool chartExportActive: !!root.progress
+        && root.progress.active
+        && root.progress.chartExport
+    readonly property bool genericActive: !!root.progress
+        && root.progress.active
+        && !root.progress.chartExport
+    readonly property var chartExportLabelLines: {
+        const label = root.progress ? String(root.progress.label || "") : ""
+        const lines = label.split(/\r?\n/)
+        return [lines.length > 0 ? lines[0] : "",
+                lines.length > 1 ? lines.slice(1).join(" ") : ""]
+    }
+    readonly property real comicFrameAspectRatio: 10 / 9
+    readonly property real comicFrameWidth: 340
+    readonly property real comicFrameHeight: root.comicFrameWidth
+        / root.comicFrameAspectRatio
+    // An empty comic directory hides the whole comic region instead of leaving
+    // an empty frame behind.
+    readonly property bool hasComicResources: root.comicResources !== null
+        && root.comicResources.resourceCount > 0
+    readonly property int progressBodySpacing: 10
+    // Comic button colors live with the comic controls so the theme keeps only
+    // generic palette tokens. The glyph stays legible against the comic frame in
+    // both modes, and the chrome follows the panel behind it.
+    readonly property color comicButtonGlyphColor:
+        Theme.activeTheme.dark
+            ? Theme.darkColors.text.heading : Theme.darkColors.background.control
+    readonly property real comicButtonGlyphScale: 3.375
+    readonly property int comicButtonGlyphPixelSize:
+        Math.round(Theme.uiFontSize * root.comicButtonGlyphScale)
+    readonly property color comicButtonBackground: {
+        const base = Qt.color(Theme.colors.background.panel)
+        return Theme.activeTheme.dark
+            ? Qt.lighter(base, 1.6)
+            : Qt.darker(base, 1.18)
+    }
+    readonly property var comicButtonGlyphStateColors: ({
+        normal: root.comicButtonGlyphColor,
+        hovered: root.comicButtonGlyphColor,
+        pressed: root.comicButtonGlyphColor,
+        focused: root.comicButtonGlyphColor,
+        disabled: Theme.colors.text.disabled
+    })
+    readonly property var comicButtonStateColors: ({
+        hover: root.comicButtonBackground,
+        pressed: root.comicButtonBackground,
+        selected: root.comicButtonBackground
+    })
 
     AppDialog {
         objectName: "jobProgressCard"
         visible: root.jobActive
-        preferredWidth: 420
+        preferredWidth: root.chartExportActive ? 468 : 420
+        preferredHeight: root.chartExportActive
+            ? 499 : Theme.dialogCompactHeight
         closePolicy: Popup.NoAutoClose
         title: root.progress ? root.progress.title : ""
 
         body: ColumnLayout {
-            spacing: 10
+            spacing: root.progressBodySpacing
             Text {
                 objectName: "jobProgressLabel"
                 Layout.fillWidth: true
+                visible: !root.chartExportActive
                 text: root.progress ? root.progress.label : ""
                 color: Theme.colors.text.secondary
                 wrapMode: Text.WordWrap
+            }
+
+            Text {
+                objectName: "jobProgressChartExportLabelLine1"
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.chartExportActive ? Theme.uiFontSize + 4 : 0
+                visible: root.chartExportActive
+                text: root.chartExportLabelLines[0]
+                color: Theme.colors.text.secondary
+                elide: Text.ElideRight
+                maximumLineCount: 1
+            }
+
+            Text {
+                objectName: "jobProgressChartExportLabelLine2"
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.chartExportActive ? Theme.uiFontSize + 4 : 0
+                visible: root.chartExportActive
+                text: root.chartExportLabelLines[1]
+                color: Theme.colors.text.secondary
+                elide: Text.ElideRight
+                maximumLineCount: 1
             }
 
             ProgressBar {
@@ -37,6 +111,53 @@ Item {
                 to: 100
                 indeterminate: !!root.progress && root.progress.indeterminate
                 value: root.progress ? root.progress.percent : 0
+            }
+
+            RowLayout {
+                objectName: "jobProgressComicControls"
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredHeight: root.chartExportActive && root.hasComicResources
+                    ? root.comicFrameHeight : 0
+                Layout.bottomMargin: root.chartExportActive
+                    ? root.progressBodySpacing * 2 : 0
+                spacing: Theme.panelPadding
+
+                // Mirrors the next button on the opposite side so the comic
+                // itself sits centred in the dialog. Without it the whole
+                // [comic][button] group is centred and the comic lands left of
+                // centre by (spacing + buttonWidth) / 2.
+                Item {
+                    Layout.preferredWidth: nextButton.implicitWidth
+                    Layout.preferredHeight: 1
+                }
+
+                JobProgressComic {
+                    id: comic
+                    objectName: "jobProgressComic"
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: root.comicFrameWidth
+                    Layout.preferredHeight: root.chartExportActive ? root.comicFrameHeight : 0
+                    resources: root.comicResources
+                    active: root.jobActive
+                    chartExportActive: root.chartExportActive
+                }
+
+                IconButton {
+                    id: nextButton
+                    glyph: "›"
+                    glyphPixelSize: root.comicButtonGlyphPixelSize
+                    glyphStateColors: root.comicButtonGlyphStateColors
+                    stateColors: root.comicButtonStateColors
+                    tooltip: qsTrId("qml.next_comic")
+                    Accessible.name: qsTrId("qml.next_comic")
+                    Accessible.description: qsTrId("qml.show_next_comic")
+                    visible: root.chartExportActive
+                        && root.comicResources !== null
+                        && root.comicResources.resourceCount >= 2
+                    enabled: comic.canSwitch
+                    Layout.alignment: Qt.AlignVCenter
+                    onClicked: comic.selectRandomNext()
+                }
             }
 
         }

@@ -21,6 +21,7 @@ Item {
     readonly property var platform: applicationContext.platform
     readonly property var uiRequests: applicationContext.uiRequests
     readonly property var jobProgress: applicationContext.jobProgress
+    readonly property var comicResources: applicationContext.comicResources
     readonly property var mediaTools: applicationContext.mediaTools
     readonly property var preferencesModel: applicationContext.preferencesModel
     readonly property var latency: applicationContext.latency
@@ -516,6 +517,7 @@ Item {
         objectName: "shellJobProgress"
         anchors.fill: parent
         progress: root.jobProgress
+        comicResources: root.comicResources
     }
 
     // Window-level tool overlays keep the current center page mounted.

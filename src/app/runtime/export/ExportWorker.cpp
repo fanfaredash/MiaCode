@@ -787,7 +787,8 @@ bool miacode::runtime::VideoExportHost::launchVideoExportWorker(const VideoExpor
         session_.videoExportJobToken_ = jobProgress->begin(
             qtTrId("dialog.video_export.title"),
             qtTrId("dialog.video_export.progress.preparing"),
-            /*cancellable=*/true);
+            /*cancellable=*/true,
+            miacode::JobProgressService::TaskType::ChartExport);
     }
 
     auto* process = new QProcess(&session_);

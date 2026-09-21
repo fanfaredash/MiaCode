@@ -678,6 +678,7 @@ set(MIACODE_UI_QML_FILES
     src/app/ui/components/SettingsSection.qml
     src/app/ui/components/AboutDialog.qml
     src/app/ui/components/JobProgressOverlay.qml
+    src/app/ui/components/JobProgressComic.qml
     src/app/ui/chrome/WindowGestureArea.qml
     src/app/ui/chrome/WindowTitleBar.qml
     src/app/ui/chrome/WindowCaptionButtons.qml
@@ -806,6 +807,8 @@ qt_add_qml_module(MiaCode
         src/app/ui/editor/EditorTextStyle.h
         src/app/ui/ApplicationContext.cpp
         src/app/ui/ApplicationContext.h
+        src/app/services/ComicResourceModel.cpp
+        src/app/services/ComicResourceModel.h
         src/app/ui/document/CommandService.cpp
         src/app/ui/document/CommandService.h
         src/app/ui/chrome/ShortcutCommands.h

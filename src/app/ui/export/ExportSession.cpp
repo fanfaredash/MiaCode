@@ -634,7 +634,8 @@ void ExportSession::startExport()
             batchJobToken = jobProgress->begin(
                 batchJobTitle,
                 qtTrId("export.preparing_package"),
-                /*cancellable=*/true);
+                /*cancellable=*/true,
+                miacode::JobProgressService::TaskType::ChartExport);
         }
         callbacks.progressChanged = [jobProgress, batchJobToken](int percent, const QString& label) {
             if (jobProgress != nullptr && jobProgress->token() == batchJobToken) {
