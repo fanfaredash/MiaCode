@@ -621,8 +621,10 @@ QImage buildCircularDimMaskImage(
         QRectF(0.0, 0.0, static_cast<double>(width), static_cast<double>(height)),
         layoutSquareScale
     );
+    const double outerRadius = qMax(1.0, layoutSide * 0.5);
     const double centerX = (static_cast<double>(width) - 1.0) * 0.5;
     const double centerY = (static_cast<double>(height) - 1.0) * 0.5;
+    constexpr double kCircleEdgeHalfWidth = 0.5;
 
     for (int y = 0; y < height; ++y) {
         uchar* row = mask.scanLine(y);
@@ -630,17 +632,25 @@ QImage buildCircularDimMaskImage(
         for (int x = 0; x < width; ++x) {
             const double dx = static_cast<double>(x) - centerX;
             const double radius = std::sqrt(dx * dx + dy * dy);
+            const double interiorAlpha = miacode::preview_video::dimAlphaForRadius(
+                qMin(radius, qMax(0.0, outerRadius - miacode::preview_video::kGeometryEpsilon)),
+                outerDimAlpha,
+                innerDimAlpha,
+                layoutSide,
+                layoutRingDiameterRatio,
+                smoothBrightness
+            );
+            const double edgeT = qBound(
+                0.0,
+                (radius - (outerRadius - kCircleEdgeHalfWidth)) / (2.0 * kCircleEdgeHalfWidth),
+                1.0
+            );
+            const double smoothEdgeT = edgeT * edgeT * (3.0 - 2.0 * edgeT);
+            const double circleCoverage = 1.0 - smoothEdgeT;
             const int alpha = qBound(
                 0,
                 qRound(
-                    miacode::preview_video::dimAlphaForRadius(
-                        radius,
-                        outerDimAlpha,
-                        innerDimAlpha,
-                        layoutSide,
-                        layoutRingDiameterRatio,
-                        smoothBrightness
-                    ) * 255.0
+                    (outerDimAlpha + (interiorAlpha - outerDimAlpha) * circleCoverage) * 255.0
                 ),
                 255
             );
@@ -672,6 +682,7 @@ QImage buildCircularMediaMaskImage(
     const double radius = qMax(1.0, layoutSide * 0.5);
     const double centerX = (static_cast<double>(width) - 1.0) * 0.5;
     const double centerY = (static_cast<double>(height) - 1.0) * 0.5;
+    constexpr double kCircleEdgeHalfWidth = 0.5;
 
     for (int y = 0; y < height; ++y) {
         uchar* row = mask.scanLine(y);
@@ -679,7 +690,13 @@ QImage buildCircularMediaMaskImage(
         for (int x = 0; x < width; ++x) {
             const double dx = static_cast<double>(x) - centerX;
             const double distance = std::sqrt(dx * dx + dy * dy);
-            row[x] = distance <= radius ? 255 : 0;
+            const double edgeT = qBound(
+                0.0,
+                (distance - (radius - kCircleEdgeHalfWidth)) / (2.0 * kCircleEdgeHalfWidth),
+                1.0
+            );
+            const double smoothEdgeT = edgeT * edgeT * (3.0 - 2.0 * edgeT);
+            row[x] = static_cast<uchar>(qRound((1.0 - smoothEdgeT) * 255.0));
         }
     }
     return mask;

@@ -28,26 +28,26 @@ void main()
     float outerRadius = max(1.0, layoutSquareSide * 0.5);
     float radius = distance(vPosition, stageCenter);
 
-    float alpha = outerDarkAlpha;
-    if (radius < outerRadius) {
-        if (smoothBrightness < 0.5) {
-            alpha = innerDarkAlpha;
-        } else {
-            float ringRadius = outerRadius * geometryParams.w;
-            float blendStart = (outerRadius + ringRadius) * 0.5;
-            if (radius <= blendStart) {
-                alpha = innerDarkAlpha;
-            } else {
-                float blendSpan = outerRadius - blendStart;
-                if (blendSpan <= 1e-6) {
-                    alpha = innerDarkAlpha;
-                } else {
-                    float t = smoothStep01((radius - blendStart) / blendSpan);
-                    alpha = innerDarkAlpha + (outerDarkAlpha - innerDarkAlpha) * t;
-                }
-            }
+    float innerAlpha = innerDarkAlpha;
+    if (smoothBrightness >= 0.5) {
+        float ringRadius = outerRadius * geometryParams.w;
+        float blendStart = (outerRadius + ringRadius) * 0.5;
+        float blendSpan = outerRadius - blendStart;
+        if (blendSpan > 1e-6 && radius > blendStart) {
+            float t = smoothStep01((radius - blendStart) / blendSpan);
+            innerAlpha = innerDarkAlpha + (outerDarkAlpha - innerDarkAlpha) * t;
         }
     }
+
+    // Keep the circle boundary coverage-aware. A hard radius comparison makes
+    // the dim layer stair-step at small preview sizes and fractional DPRs.
+    float edgeHalfWidth = max(fwidth(radius) * 0.5, 0.5);
+    float circleCoverage = 1.0 - smoothstep(
+        outerRadius - edgeHalfWidth,
+        outerRadius + edgeHalfWidth,
+        radius
+    );
+    float alpha = mix(outerDarkAlpha, innerAlpha, circleCoverage);
 
     alpha *= qt_Opacity;
     if (alpha <= 0.0) {
