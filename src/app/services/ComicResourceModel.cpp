@@ -37,10 +37,12 @@ bool isSupportedImageName(const QString& fileName)
 
 namespace miacode::ui {
 
+// Construction deliberately does not scan: refresh() runs when the chart-export
+// comic area is first shown, so application startup never probes the comic
+// images. Until then the model reports an empty resource set.
 ComicResourceModel::ComicResourceModel(QObject* parent)
     : QObject(parent)
 {
-    refresh();
 }
 
 void ComicResourceModel::refresh()

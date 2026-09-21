@@ -8,7 +8,9 @@ namespace miacode::ui {
 
 // Discovers the readable comic images shipped under the shared assets root
 // (assets/comics) and exposes the minimal interface the random carousel needs.
-// An absent or empty directory yields an empty resource set; individual
+// Scanning is deferred until the carousel is first shown: construction leaves
+// the resource set empty and the caller drives refresh() when it needs the
+// images. An absent or empty directory yields an empty resource set; individual
 // unreadable images are skipped so the remaining ones still rotate.
 class ComicResourceModel final : public QObject
 {

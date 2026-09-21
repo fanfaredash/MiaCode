@@ -19,6 +19,8 @@ Item {
     property var navigationHistory: []
     property int navigationCursor: -1
     property bool chartExportInitialized: false
+    property bool resourcesScanned: false
+    property bool scanningResources: false
     visible: root.active && root.chartExportActive && root.hasResources
 
     readonly property bool hasResources: root.resources !== null
@@ -157,7 +159,8 @@ Item {
     }
 
     function syncFromModel() {
-        if (!root.active || !root.chartExportActive || !root.resources || root.switching)
+        if (!root.active || !root.chartExportActive || !root.resources || root.switching
+                || root.scanningResources)
             return
         const modelUrl = root.resources.currentImageUrl
         if (modelUrl.length === 0)
@@ -266,10 +269,24 @@ Item {
         root.currentIndex = -1
     }
 
+    // The comic directory is probed at most once per session, the first time the
+    // chart-export comic area is shown, so startup never scans it. The scan's own
+    // notifications are held off the carousel state machine so the first image is
+    // only committed by the explicit selection below.
+    function ensureResourcesScanned() {
+        if (root.resourcesScanned || !root.resources)
+            return
+        root.resourcesScanned = true
+        root.scanningResources = true
+        root.resources.refresh()
+        root.scanningResources = false
+    }
+
     function initializeChartExport() {
         root.clearNavigationHistory()
         root.currentIndex = -1
         root.pendingDirection = 0
+        root.ensureResourcesScanned()
 
         if (!root.resources || root.resources.resourceCount === 0)
             return
