@@ -142,32 +142,6 @@ void ComicResourceModel::selectResource(int index)
     emit currentChanged();
 }
 
-void ComicResourceModel::selectNextResource()
-{
-    if (resources_.isEmpty()) {
-        return;
-    }
-    const int nextIndex = currentIndex_ < 0 ? 0 : (currentIndex_ + 1) % resources_.size();
-    if (currentIndex_ != nextIndex) {
-        currentIndex_ = nextIndex;
-        emit currentChanged();
-    }
-}
-
-void ComicResourceModel::selectPreviousResource()
-{
-    if (resources_.isEmpty()) {
-        return;
-    }
-    const int previousIndex = currentIndex_ < 0
-        ? resources_.size() - 1
-        : (currentIndex_ + resources_.size() - 1) % resources_.size();
-    if (currentIndex_ != previousIndex) {
-        currentIndex_ = previousIndex;
-        emit currentChanged();
-    }
-}
-
 void ComicResourceModel::selectRandomResource()
 {
     if (resources_.size() <= 1) {

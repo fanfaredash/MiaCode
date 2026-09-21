@@ -34,12 +34,21 @@ Item {
     readonly property bool hasComicResources: root.comicResources !== null
         && root.comicResources.resourceCount > 0
     readonly property int progressBodySpacing: 10
+    // Comic button colors live with the comic controls so the theme keeps only
+    // generic palette tokens. The glyph stays legible against the comic frame in
+    // both modes, and the chrome follows the panel behind it.
     readonly property color comicButtonGlyphColor:
         Theme.activeTheme.dark
-            ? Theme.comicButtonLightGlyph : Theme.comicButtonDarkGlyph
+            ? Theme.darkColors.text.heading : Theme.darkColors.background.control
     readonly property real comicButtonGlyphScale: 3.375
     readonly property int comicButtonGlyphPixelSize:
         Math.round(Theme.uiFontSize * root.comicButtonGlyphScale)
+    readonly property color comicButtonBackground: {
+        const base = Qt.color(Theme.colors.background.panel)
+        return Theme.activeTheme.dark
+            ? Qt.lighter(base, 1.6)
+            : Qt.darker(base, 1.18)
+    }
     readonly property var comicButtonGlyphStateColors: ({
         normal: root.comicButtonGlyphColor,
         hovered: root.comicButtonGlyphColor,
@@ -48,9 +57,9 @@ Item {
         disabled: Theme.colors.text.disabled
     })
     readonly property var comicButtonStateColors: ({
-        hover: Theme.comicButtonBackground,
-        pressed: Theme.comicButtonBackground,
-        selected: Theme.comicButtonBackground
+        hover: root.comicButtonBackground,
+        pressed: root.comicButtonBackground,
+        selected: root.comicButtonBackground
     })
 
     AppDialog {
@@ -112,23 +121,6 @@ Item {
                 Layout.bottomMargin: root.chartExportActive
                     ? root.progressBodySpacing * 2 : 0
                 spacing: Theme.panelPadding
-
-                IconButton {
-                    id: previousButton
-                    glyph: "‹"
-                    glyphPixelSize: root.comicButtonGlyphPixelSize
-                    glyphStateColors: root.comicButtonGlyphStateColors
-                    stateColors: root.comicButtonStateColors
-                    tooltip: qsTrId("qml.previous_comic")
-                    Accessible.name: qsTrId("qml.previous_comic")
-                    Accessible.description: qsTrId("qml.show_previous_comic")
-                    visible: root.chartExportActive
-                        && root.comicResources !== null
-                        && root.comicResources.resourceCount >= 2
-                    enabled: comic.canSwitch && comic.canGoBack
-                    Layout.alignment: Qt.AlignVCenter
-                    onClicked: comic.selectPreviousFromHistory()
-                }
 
                 JobProgressComic {
                     id: comic

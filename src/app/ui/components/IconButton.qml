@@ -13,7 +13,6 @@ AbstractButton {
     property string tooltip
     property bool active: false
     property bool compact: false
-    property color glyphColorOverride: "transparent"
     property int glyphPixelSize: -1
     property var glyphStateColors: null
     property int iconWidth: compact ? 14 : 16
@@ -61,8 +60,6 @@ AbstractButton {
             return root.glyphStateColors.normal !== undefined
                 ? root.glyphStateColors.normal : fallback
         }
-        if (root.enabled && root.glyphColorOverride.a > 0)
-            return root.glyphColorOverride
         return fallback
     }
 

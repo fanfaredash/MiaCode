@@ -4201,14 +4201,6 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Comic resource unavailable</source>
         <translation>Comic resource unavailable</translation>
     </message>
-    <message id="qml.previous_comic">
-        <source>Previous comic</source>
-        <translation>Previous comic</translation>
-    </message>
-    <message id="qml.show_previous_comic">
-        <source>Show previous comic</source>
-        <translation>Show previous comic</translation>
-    </message>
     <message id="qml.next_comic">
         <source>Next comic</source>
         <translation>Next comic</translation>

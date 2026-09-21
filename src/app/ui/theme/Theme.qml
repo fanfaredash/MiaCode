@@ -514,14 +514,6 @@ QtObject {
     readonly property string activeThemeToken: preferences ? preferences.activeThemeToken : "dark"
     readonly property var activeTheme: themeCatalog[activeThemeToken] || themeCatalog.dark
     readonly property var colors: activeTheme.colors
-    readonly property color comicButtonDarkGlyph: darkColors.background.control
-    readonly property color comicButtonLightGlyph: darkColors.text.heading
-    readonly property color comicButtonBackground: {
-        const base = Qt.color(colors.background.panel)
-        return activeTheme.dark
-            ? Qt.lighter(base, 1.6)
-            : Qt.darker(base, 1.18)
-    }
 
     readonly property string uiFont: preferences ? preferences.uiFontFamily : ""
     readonly property font codeFont: preferences ? preferences.codeFont : Qt.font({})
