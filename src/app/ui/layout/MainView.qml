@@ -132,6 +132,19 @@ Item {
         root.preferences.sidebarVisible = state.sidebarVisible
     }
 
+    // PageHost is the authority for overlay navigation. Keep the activity bar
+    // projection in step with it even when a page is opened by a runtime signal
+    // (for example, exporting a selection from the source editor).
+    function syncSidebarViewToPage() {
+        if (root.pages.activePageId === "export"
+                || root.pages.activePageId === "cover")
+            state.activeSidebarView = "export"
+        else if (root.pages.activePageId === "latency")
+            state.activeSidebarView = "tools"
+        else if (root.pages.activePageId === "")
+            state.activeSidebarView = "chart"
+    }
+
     function undo() {
         splitView.undo()
     }
@@ -483,6 +496,10 @@ Item {
     Connections {
         target: root.pages
 
+        function onActivePageIdChanged() {
+            root.syncSidebarViewToPage()
+        }
+
         function onOverlayPageLeft() {
             if (root.pendingDifficultyActivation <= 0)
                 return
@@ -495,13 +512,7 @@ Item {
 
         function onNavigationRejected() {
             root.pendingDifficultyActivation = 0
-            if (root.pages.activePageId === "export"
-                    || root.pages.activePageId === "cover")
-                state.activeSidebarView = "export"
-            else if (root.pages.activePageId === "latency")
-                state.activeSidebarView = "tools"
-            else
-                state.activeSidebarView = "chart"
+            root.syncSidebarViewToPage()
         }
     }
 

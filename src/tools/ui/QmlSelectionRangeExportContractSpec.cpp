@@ -117,6 +117,7 @@ bool verifySelectionRangeExportContract(QTextStream& err)
     const QString sessionImpl =
         readSource(QStringLiteral("src/app/ui/export/ExportSession.cpp"));
     const QString pageHost = readSource(QStringLiteral("src/app/ui/layout/PageHost.cpp"));
+    const QString mainView = readSource(QStringLiteral("src/app/ui/layout/MainView.qml"));
     const QString sourceEditor =
         readSource(QStringLiteral("src/app/ui/editor/SourceEditor.qml"));
     const QString runtimeForwarding =
@@ -127,7 +128,8 @@ bool verifySelectionRangeExportContract(QTextStream& err)
 
     bool ok = require(
         !syncHeader.isEmpty() && !syncImpl.isEmpty() && !sessionHeader.isEmpty()
-            && !sessionImpl.isEmpty() && !pageHost.isEmpty() && !sourceEditor.isEmpty()
+            && !sessionImpl.isEmpty() && !pageHost.isEmpty() && !mainView.isEmpty()
+            && !sourceEditor.isEmpty()
             && !runtimeForwarding.isEmpty() && !timelineFlow.isEmpty() && !timelineModel.isEmpty(),
         QStringLiteral("selection-range-export contract sources are readable"),
         err);
@@ -241,6 +243,19 @@ bool verifySelectionRangeExportContract(QTextStream& err)
         menuAction.contains(QStringLiteral("syncController.requestSelectionRangeExport"))
             && !menuAction.contains(QStringLiteral("openVideoExportPage")),
         QStringLiteral("the menu action defers navigation to the runtime instead of racing it"),
+        err);
+
+    // Selection export enters the page from the runtime, so the activity bar
+    // must follow PageHost's page-id signal rather than only the sidebar click.
+    const QString sidebarSyncBody =
+        functionBody(mainView, QStringLiteral("function syncSidebarViewToPage"));
+    ok &= require(
+        mainView.contains(QStringLiteral("function onActivePageIdChanged()"))
+            && mainView.contains(QStringLiteral("root.syncSidebarViewToPage()"))
+            && sidebarSyncBody.contains(QStringLiteral("state.activeSidebarView = \"export\""))
+            && sidebarSyncBody.contains(QStringLiteral("state.activeSidebarView = \"tools\""))
+            && sidebarSyncBody.contains(QStringLiteral("root.pages.activePageId === \"\"")),
+        QStringLiteral("runtime page entry synchronizes the export activity-bar selection"),
         err);
 
     return ok;

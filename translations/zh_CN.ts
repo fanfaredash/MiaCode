@@ -4283,7 +4283,7 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
     </message>
     <message id="qml.export_selection">
         <source>Export selection</source>
-        <translation>导出选区</translation>
+        <translation>导出所选区间</translation>
     </message>
     <message id="qml.find_and_replace">
         <source>Find and replace</source>

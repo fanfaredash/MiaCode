@@ -9,6 +9,7 @@
 #include <QTextStream>
 #include <QtTest/QTest>
 
+#include <algorithm>
 #include <memory>
 
 #ifndef MIACODE_QML_SPEC_IMPORT_ROOT
@@ -728,6 +729,75 @@ bool verifyVisualRangeSelectorDragsTheSharedPreview(QTextStream& err)
     return ok;
 }
 
+bool verifyVisualRangePlayheadKeepsDeviceWidth(QTextStream& err)
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(MIACODE_QML_SPEC_IMPORT_ROOT));
+    const std::unique_ptr<QObject> root = createHarness(engine, err);
+    auto* window = root ? qobject_cast<QQuickWindow*>(root.get()) : nullptr;
+    if (!require(window != nullptr,
+                 QStringLiteral("the playhead harness creates a real QML window"), err)) {
+        return false;
+    }
+    window->show();
+    Q_UNUSED(QTest::qWaitForWindowExposed(window));
+    QCoreApplication::processEvents();
+
+    QObject* preview = root->findChild<QObject*>(QStringLiteral("fakePreviewSession"));
+    QObject* session = root->findChild<QObject*>(QStringLiteral("fakeExportSession"));
+    if (!require(preview != nullptr && session != nullptr,
+                 QStringLiteral("the playhead harness exposes its export and preview sessions"), err)) {
+        return false;
+    }
+
+    session->setProperty("settingsTab", QStringLiteral("output"));
+    QCoreApplication::processEvents();
+    auto* selector = root->findChild<QQuickItem*>(QStringLiteral("exportRangeSelector"));
+    auto* lane = root->findChild<QQuickItem*>(QStringLiteral("exportRangeLane"));
+    auto* playhead = root->findChild<QQuickItem*>(QStringLiteral("exportRangePlayhead"));
+    auto* timestamp = root->findChild<QQuickItem*>(QStringLiteral("exportRangeTimestamp"));
+    if (!require(selector != nullptr && lane != nullptr && playhead != nullptr && timestamp != nullptr,
+                 QStringLiteral("opening the output tab creates the range selector geometry"), err)) {
+        return false;
+    }
+
+    const qreal dpr = std::max<qreal>(1.0, selector->property("renderDpr").toReal());
+    bool ok = true;
+    const QList<qreal> playheadSeconds{0.125, 37.37, 119.875, 239.25};
+    for (const qreal second : playheadSeconds) {
+        preview->setProperty("positionSeconds", second);
+        QCoreApplication::processEvents();
+
+        const qreal left = playhead->mapToScene(QPointF(0, 0)).x();
+        const qreal right = playhead->mapToScene(QPointF(playhead->width(), 0)).x();
+        const qreal deviceWidth = (right - left) * dpr;
+        ok &= require(qAbs(left * dpr - qRound(left * dpr)) < 0.001
+                          && qAbs(right * dpr - qRound(right * dpr)) < 0.001,
+                      QStringLiteral("the playback marker edges stay on device pixels at %1s")
+                          .arg(second, 0, 'f', 3), err);
+        ok &= require(qAbs(deviceWidth - 2.0) < 0.001,
+                      QStringLiteral("the playback marker remains two device pixels wide at %1s (width=%2)")
+                          .arg(second, 0, 'f', 3)
+                          .arg(deviceWidth, 0, 'f', 3), err);
+    }
+
+    qreal timestampWidth = -1.0;
+    const QList<qreal> timestampSeconds{0.001, 9.999, 10.0, 60.0, 600.0};
+    for (const qreal second : timestampSeconds) {
+        selector->setProperty("hoverSecond", second);
+        QCoreApplication::processEvents();
+        const qreal width = timestamp->width();
+        if (timestampWidth < 0.0)
+            timestampWidth = width;
+        ok &= require(qAbs(width - timestampWidth) < 0.001,
+                      QStringLiteral("the timestamp bubble keeps a stable width at %1s (width=%2 baseline=%3)")
+                          .arg(second, 0, 'f', 3)
+                          .arg(width, 0, 'f', 3)
+                          .arg(timestampWidth, 0, 'f', 3), err);
+    }
+    return ok;
+}
+
 bool verifyVisualRangeSelectorSeparatesPointerTargetsAndLayout(QTextStream& err)
 {
     QQmlEngine engine;
@@ -1007,6 +1077,7 @@ int main(int argc, char** argv)
     QTextStream err(stderr);
     const bool ok = verifyRealExportPageControls(err) && verifyBatchInputsOwnASettingsTab(err)
         && verifyVisualRangeSelectorDragsTheSharedPreview(err)
+        && verifyVisualRangePlayheadKeepsDeviceWidth(err)
         && verifyVisualRangeSelectorSeparatesPointerTargetsAndLayout(err)
         && verifyRequestHostLoop(err)
         && verifySynchronousChoiceSequenceKeepsTheNextDialogOpen(err);

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 import MiaCode.UI
 
 Item {
@@ -25,6 +26,10 @@ Item {
                                                           Number(exportSession.exportEndSeconds) || 0))
     readonly property real playheadSeconds: Math.max(0, Math.min(totalSeconds,
                                                                   Number(previewSession.positionSeconds) || 0))
+    // The lane can land on fractional logical coordinates on a fractional-DPR
+    // display. Keep narrow playback geometry on the device-pixel grid so its
+    // apparent width does not change as the center moves between samples.
+    readonly property real renderDpr: Math.max(1, Number(Screen.devicePixelRatio) || 1)
     readonly property real timestampBandHeight: 0
     // What the overlay reads out. Hovering asks "what is under my pointer";
     // dragging asks "where is the thing I am moving", and those are not the
@@ -33,6 +38,10 @@ Item {
     // meaning to anyone.
     readonly property real displaySecond: draggingTarget.length > 0 ? dragPreviewSecond
                                                                     : hoverSecond
+    readonly property real timestampWidth: Math.max(1,
+                                                     Math.ceil(Math.max(
+                                                         timestampMetrics.advanceWidth,
+                                                         durationTimestampMetrics.advanceWidth)))
 
     implicitHeight: timestampBandHeight + lane.height + Theme.captionFontSize + 6
     Layout.fillWidth: true
@@ -91,10 +100,30 @@ Item {
         draggingTarget = ""
     }
 
+    TextMetrics {
+        id: timestampMetrics
+
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.captionFontSize
+        // Eight is normally the widest proportional digit. The duration
+        // metric below also covers longer-than-99-minute charts.
+        text: "88:88.888"
+    }
+
+    TextMetrics {
+        id: durationTimestampMetrics
+
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.captionFontSize
+        text: root.formatSecond(root.totalSeconds)
+    }
+
     Text {
         id: timestamp
 
         objectName: "exportRangeTimestamp"
+        width: root.timestampWidth
+        horizontalAlignment: Text.AlignHCenter
         x: Math.max(0, Math.min(root.width - width,
                                 lane.xForSecond(root.displaySecond) - width * 0.5))
         y: -height
@@ -130,6 +159,31 @@ Item {
         readonly property real handleHeight: 14
         readonly property real handleHitRadius: handleWidth * 0.5 + 3
         readonly property real minimumVisualSelectionWidth: handleWidth * 3
+        readonly property int playheadWidthDevicePixels: 2
+        // Use the lane's scene origin when snapping. mapToItem() is an
+        // invokable rather than a property, so read it at each geometry
+        // evaluation; caching it in a binding can retain the pre-layout origin.
+        function sceneOriginX() {
+            const mapped = lane.mapToItem(null, 0, 0)
+            return mapped && isFinite(mapped.x) ? mapped.x : 0
+        }
+        readonly property int playheadCenterDeviceX: {
+            const originX = sceneOriginX()
+            return Math.round((originX + xForSecond(root.playheadSeconds)) * root.renderDpr)
+        }
+        readonly property int playheadLeftDeviceX:
+            playheadCenterDeviceX - Math.floor(playheadWidthDevicePixels * 0.5)
+        readonly property int playheadRightDeviceX:
+            playheadCenterDeviceX + Math.ceil(playheadWidthDevicePixels * 0.5)
+        readonly property real playheadLeftX: {
+            const originX = sceneOriginX()
+            return playheadLeftDeviceX / root.renderDpr - originX
+        }
+        readonly property real playheadRightX: {
+            return playheadLeftX + playheadWidth
+        }
+        readonly property real playheadWidth:
+            playheadWidthDevicePixels / root.renderDpr
         readonly property real actualStartX: xForSecond(root.startSeconds)
         readonly property real actualEndX: xForSecond(root.endSeconds)
         readonly property real availableTrackWidth: Math.max(1, width - sideInset * 2)
@@ -187,10 +241,14 @@ Item {
         }
 
         Rectangle {
-            x: lane.xForSecond(root.playheadSeconds) - width * 0.5
+            id: playhead
+
+            objectName: "exportRangePlayhead"
+            x: lane.playheadLeftX
             y: 1
-            width: 2
+            width: lane.playheadWidth
             height: lane.height - 2
+            antialiasing: false
             color: Theme.colors.syntax.warning
 
             Rectangle {
@@ -200,6 +258,7 @@ Item {
                 width: 8
                 height: 6
                 rotation: 45
+                antialiasing: false
                 color: Theme.colors.syntax.warning
             }
         }
