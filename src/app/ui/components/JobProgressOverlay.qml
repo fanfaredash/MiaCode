@@ -122,6 +122,15 @@ Item {
                     ? root.progressBodySpacing * 2 : 0
                 spacing: Theme.panelPadding
 
+                // Mirrors the next button on the opposite side so the comic
+                // itself sits centred in the dialog. Without it the whole
+                // [comic][button] group is centred and the comic lands left of
+                // centre by (spacing + buttonWidth) / 2.
+                Item {
+                    Layout.preferredWidth: nextButton.implicitWidth
+                    Layout.preferredHeight: 1
+                }
+
                 JobProgressComic {
                     id: comic
                     objectName: "jobProgressComic"
