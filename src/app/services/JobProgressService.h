@@ -34,6 +34,10 @@ public:
     Q_PROPERTY(TaskType taskType READ taskType NOTIFY changed)
     Q_PROPERTY(bool chartExport READ chartExport NOTIFY changed)
     Q_PROPERTY(QString taskTypeName READ taskTypeName NOTIFY changed)
+    // Identifies the job currently owning the surface. Every begin() raises it,
+    // so a consumer can re-initialize per job even when the task type — and
+    // therefore chartExport — does not change (a chart export replacing another).
+    Q_PROPERTY(quint64 token READ token NOTIFY changed)
 
     explicit JobProgressService(QObject* parent = nullptr);
 

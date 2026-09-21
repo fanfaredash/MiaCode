@@ -15,7 +15,10 @@ Item {
     property int currentIndex: -1
     property int pendingIndex: -1
     property bool visibleCommitPending: false
-    property bool chartExportInitialized: false
+    // Identity of the job the comic surface is serving. A new begin() always
+    // raises it, so re-initialization does not depend on a task-type edge.
+    property real taskToken: 0
+    property real initializedTaskToken: 0
     property bool resourcesScanned: false
     property bool scanningResources: false
     visible: root.active && root.chartExportActive && root.hasResources
@@ -181,8 +184,18 @@ Item {
         root.scanningResources = false
     }
 
-    function initializeChartExport() {
-        root.currentIndex = -1
+    // Initializes the carousel once per job. Keying on the job token rather than
+    // on a chartExportActive edge also covers a chart export that replaces
+    // another one without an idle gap, where the task type never changes and no
+    // edge would arrive. Re-entry therefore still clears the previous image,
+    // animation, and pending state before selecting the new one.
+    function ensureChartExportInitialized() {
+        if (!root.active || !root.chartExportActive || root.taskToken <= 0)
+            return
+        if (root.initializedTaskToken === root.taskToken)
+            return
+        root.initializedTaskToken = root.taskToken
+        stopBanner()
         root.ensureResourcesScanned()
 
         if (!root.resources || root.resources.resourceCount === 0)
@@ -191,34 +204,29 @@ Item {
             root.resources.selectRandomResource()
         else
             root.resources.selectResource(0)
+        root.syncFromModel()
     }
 
     Component.onCompleted: syncFromModel()
+    // A new job always re-initializes, including one that replaces a running
+    // chart export without an idle gap.
+    onTaskTokenChanged: ensureChartExportInitialized()
     onActiveChanged: {
         if (root.active) {
-            if (root.chartExportActive && !root.chartExportInitialized) {
-                root.chartExportInitialized = true
-                root.initializeChartExport()
-            }
+            root.ensureChartExportInitialized()
             root.syncFromModel()
         } else {
-            root.chartExportInitialized = false
             stopBanner()
         }
         updateTimer()
     }
     onChartExportActiveChanged: {
-        if (!root.chartExportActive) {
-            root.chartExportInitialized = false
-            stopBanner()
-            return
-        }
-        if (!root.chartExportInitialized) {
-            root.chartExportInitialized = true
-            root.initializeChartExport()
-        }
-        if (root.active)
+        if (root.chartExportActive) {
+            root.ensureChartExportInitialized()
             root.syncFromModel()
+        } else {
+            stopBanner()
+        }
         updateTimer()
     }
     onVisibleChanged: updateTimer()

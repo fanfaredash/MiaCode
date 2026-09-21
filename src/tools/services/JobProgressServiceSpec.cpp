@@ -129,13 +129,81 @@ bool verifyCooperativeCancel(QTextStream& err)
     return ok;
 }
 
+// The comic surface is driven by the task type, so the boundary between a
+// chart-export job and every other job has to stay exact — including the case
+// where one job replaces another without an idle gap in between.
+bool verifyTaskTypeBoundary(QTextStream& err)
+{
+    miacode::JobProgressService service;
+
+    // The comic region reads the job identity from QML, so the token has to be a
+    // readable, notifying property rather than a plain C++ accessor.
+    const QMetaObject* const meta = &miacode::JobProgressService::staticMetaObject;
+    const int tokenIndex = meta->indexOfProperty("token");
+    const int chartIndex = meta->indexOfProperty("chartExport");
+    bool ok = require(tokenIndex >= 0 && chartIndex >= 0
+                          && meta->property(tokenIndex).isReadable()
+                          && meta->property(tokenIndex).hasNotifySignal()
+                          && meta->property(chartIndex).isReadable()
+                          && meta->property(chartIndex).hasNotifySignal(),
+                      QStringLiteral("the job token and chart-export flag are readable QML properties"), err);
+    ok &= require(tokenIndex < 0 || QString::fromLatin1(meta->property(tokenIndex).notifySignal().name())
+                           == QStringLiteral("changed"),
+                  QStringLiteral("the job token notifies on the shared changed signal"), err);
+
+    const quint64 firstExport = service.begin(
+        QStringLiteral("Export chart"), QStringLiteral("Rendering"), true,
+        miacode::JobProgressService::TaskType::ChartExport);
+    ok &= require(service.active() && service.chartExport()
+                      && service.taskTypeName() == QStringLiteral("chartExport"),
+                  QStringLiteral("a chart export publishes the typed surface"), err);
+
+    // Re-entry: a second chart export replaces the first without an end(), so
+    // neither active nor chartExport changes value. The raised token is what
+    // tells a consumer a different job now owns the surface.
+    const quint64 secondExport = service.begin(
+        QStringLiteral("Export chart"), QStringLiteral("Rendering again"), true,
+        miacode::JobProgressService::TaskType::ChartExport);
+    ok &= require(service.active() && service.chartExport()
+                      && secondExport != firstExport && secondExport > firstExport,
+                  QStringLiteral("a replacing chart export keeps the type but raises the token"), err);
+    ok &= require(service.percent() == 0 && service.label() == QStringLiteral("Rendering again")
+                      && !service.cancelRequested(),
+                  QStringLiteral("a replacing job restarts clean at zero percent"), err);
+
+    // A generic job taking the surface over must stand the comic region down.
+    service.begin(QStringLiteral("Pack as ZIP"), QStringLiteral("Preparing"), true);
+    ok &= require(service.active() && !service.chartExport()
+                      && service.taskTypeName() == QStringLiteral("generic"),
+                  QStringLiteral("a generic job taking over clears the chart-export flag"), err);
+
+    // And a chart export taking it back must raise it again.
+    const quint64 thirdExport = service.begin(
+        QStringLiteral("Export chart"), QStringLiteral("Final pass"), true,
+        miacode::JobProgressService::TaskType::ChartExport);
+    ok &= require(service.chartExport() && thirdExport > secondExport,
+                  QStringLiteral("a chart export taking over raises the flag again"), err);
+
+    service.end();
+    ok &= require(!service.active() && !service.chartExport()
+                      && service.taskType() == miacode::JobProgressService::TaskType::Generic
+                      && service.token() == thirdExport,
+                  QStringLiteral("ending a chart export returns to the idle generic state"), err);
+
+    service.end();
+    ok &= require(!service.chartExport(),
+                  QStringLiteral("a repeated end() never claims the comic surface"), err);
+    return ok;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
 {
     QCoreApplication app(argc, argv);
     QTextStream err(stderr);
-    const bool ok = verifyLifecycle(err) && verifyCooperativeCancel(err);
+    const bool ok = verifyLifecycle(err) && verifyCooperativeCancel(err)
+        && verifyTaskTypeBoundary(err);
     if (ok) {
         QTextStream out(stdout);
         out << "job_progress_service_spec ok" << Qt::endl;

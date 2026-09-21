@@ -83,6 +83,32 @@ bool verifyProgressOverlay(QTextStream& out)
                       && source.contains(QStringLiteral("glyphStateColors: root.comicButtonGlyphStateColors"))
                       && source.contains(QStringLiteral("stateColors: root.comicButtonStateColors")),
                   QStringLiteral("comic button colors are computed locally over the shared state-color hook"), out);
+
+    // The comic component is handed the job identity, not just the task type, so
+    // it can re-initialize for every job rather than for every type change.
+    ok &= require(source.contains(QStringLiteral("taskToken: root.progress ? root.progress.token : 0")),
+                  QStringLiteral("the overlay hands the comic component the job token"), out);
+    return ok;
+}
+
+// A generic job must keep exactly the progress controls it had before the comic
+// region existed, and must be unable to reach the comic at all.
+bool verifyGenericTaskSurface(QTextStream& out)
+{
+    const QString source = readSource(QStringLiteral("src/app/ui/components/JobProgressOverlay.qml"));
+    bool ok = require(!source.isEmpty(), QStringLiteral("JobProgressOverlay.qml is readable"), out);
+    ok &= require(source.contains(QStringLiteral("objectName: \"jobProgressBar\""))
+                      && source.contains(QStringLiteral("value: root.progress ? root.progress.percent : 0"))
+                      && source.contains(QStringLiteral("indeterminate: !!root.progress && root.progress.indeterminate")),
+                  QStringLiteral("the progress bar keeps reading the typed job state"), out);
+    ok &= require(source.contains(QStringLiteral("closePolicy: Popup.NoAutoClose"))
+                      && source.contains(QStringLiteral("visible: !!root.progress && root.progress.cancellable"))
+                      && source.contains(QStringLiteral("root.progress.requestCancel()")),
+                  QStringLiteral("the generic cancel footer and close policy are unchanged"), out);
+    // The comic row only has height under the chart-export state, so a generic
+    // job collapses it to zero and never shows the frame or its button.
+    ok &= require(source.contains(QStringLiteral("root.chartExportActive && root.hasComicResources")),
+                  QStringLiteral("the comic row collapses for every non-chart-export job"), out);
     return ok;
 }
 
@@ -126,13 +152,53 @@ bool verifySingleRandomRotation(QTextStream& out)
                       && !source.contains(QStringLiteral("pendingDirection")),
                   QStringLiteral("navigation history, previous selection, and the direction state are removed"), out);
 
-    // A new task initializes independently and an inactive region clears any
-    // pending image state.
-    ok &= require(source.contains(QStringLiteral("property bool chartExportInitialized: false"))
-                      && source.contains(QStringLiteral("root.chartExportInitialized = true"))
-                      && source.contains(QStringLiteral("root.chartExportInitialized = false"))
-                      && source.contains(QStringLiteral("visibleImage.source = \"\"")),
-                  QStringLiteral("tasks initialize independently and inactive regions clear pending state"), out);
+    // Only a chart export reaches the carousel, so a generic job never shows the
+    // comic region and never triggers a scan from it.
+    ok &= require(source.contains(QStringLiteral(
+                      "visible: root.active && root.chartExportActive && root.hasResources")),
+                  QStringLiteral("the comic area is gated on the chart-export state"), out);
+
+    // Each job initializes the carousel exactly once, keyed on the job token.
+    // A chart export replacing another never changes the task type, so a
+    // chartExportActive edge alone would leave the previous job's image up.
+    ok &= require(source.contains(QStringLiteral("property real taskToken: 0"))
+                      && source.contains(QStringLiteral("property real initializedTaskToken: 0"))
+                      && source.contains(QStringLiteral("function ensureChartExportInitialized()"))
+                      && source.contains(QStringLiteral("if (root.initializedTaskToken === root.taskToken)"))
+                      && source.contains(QStringLiteral("root.initializedTaskToken = root.taskToken"))
+                      && source.contains(QStringLiteral(
+                          "onTaskTokenChanged: ensureChartExportInitialized()")),
+                  QStringLiteral("each job re-initializes once, keyed on the job token"), out);
+
+    // Initialization clears the previous job's state before selecting again.
+    const int ensureInit = source.indexOf(QStringLiteral("function ensureChartExportInitialized()"));
+    const int selectRandom = source.indexOf(QStringLiteral("root.resources.selectRandomResource()"), ensureInit);
+    ok &= require(ensureInit >= 0
+                      && source.indexOf(QStringLiteral("stopBanner()"), ensureInit) > ensureInit
+                      && source.indexOf(QStringLiteral("root.ensureResourcesScanned()"), ensureInit) > ensureInit
+                      && selectRandom > ensureInit,
+                  QStringLiteral("initialization clears the previous image before selecting the next"), out);
+
+    // Task completion, cancellation, failure and re-entry all funnel through the
+    // same teardown: stop the timer and animation and drop both images.
+    const int stopBanner = source.indexOf(QStringLiteral("function stopBanner()"));
+    ok &= require(stopBanner >= 0
+                      && source.indexOf(QStringLiteral("slideTimer.stop()"), stopBanner) > stopBanner
+                      && source.indexOf(QStringLiteral("slideAnimation.stop()"), stopBanner) > stopBanner
+                      && source.indexOf(QStringLiteral("incomingImage.source = \"\""), stopBanner) > stopBanner
+                      && source.indexOf(QStringLiteral("incomingImage.x = root.width"), stopBanner) > stopBanner
+                      && source.indexOf(QStringLiteral("visibleImage.source = \"\""), stopBanner) > stopBanner
+                      && source.indexOf(QStringLiteral("root.currentIndex = -1"), stopBanner) > stopBanner
+                      && source.indexOf(QStringLiteral("root.switching = false"), stopBanner) > stopBanner,
+                  QStringLiteral("task end stops the timer and animation and clears both images"), out);
+
+    // An empty directory hides the region; a single image never rotates.
+    ok &= require(source.contains(QStringLiteral("&& root.resources.resourceCount >= 2")),
+                  QStringLiteral("a single-image directory never starts the rotation"), out);
+    const int updateTimer = source.indexOf(QStringLiteral("function updateTimer()"));
+    ok &= require(updateTimer >= 0
+                      && source.indexOf(QStringLiteral("root.resources.resourceCount >= 2"), updateTimer) > updateTimer,
+                  QStringLiteral("the slide timer requires at least two resources"), out);
     return ok;
 }
 
@@ -165,13 +231,28 @@ bool verifyModelRandomSelection(QTextStream& out)
     return ok;
 }
 
+// The comic region is driven from typed service state, so the job identity and
+// the chart-export flag have to stay published properties rather than being
+// inferred in QML.
+bool verifyTaskIdentityIsTyped(QTextStream& out)
+{
+    const QString service = readSource(QStringLiteral("src/app/services/JobProgressService.h"));
+    bool ok = require(!service.isEmpty(), QStringLiteral("JobProgressService.h is readable"), out);
+    ok &= require(service.contains(QStringLiteral("Q_PROPERTY(bool chartExport READ chartExport NOTIFY changed)"))
+                      && service.contains(QStringLiteral(
+                          "Q_PROPERTY(quint64 token READ token NOTIFY changed)")),
+                  QStringLiteral("the chart-export flag and the job token are typed service properties"), out);
+    return ok;
+}
+
 }  // namespace
 
 int main()
 {
     QTextStream out(stdout);
     const bool ok = verifyIconButton(out) && verifyProgressOverlay(out)
-        && verifySingleRandomRotation(out) && verifyModelRandomSelection(out);
+        && verifyGenericTaskSurface(out) && verifySingleRandomRotation(out)
+        && verifyModelRandomSelection(out) && verifyTaskIdentityIsTyped(out);
     out << (ok ? "job_progress_controls_contract_spec ok\n"
                : "job_progress_controls_contract_spec failed\n");
     return ok ? 0 : 1;
