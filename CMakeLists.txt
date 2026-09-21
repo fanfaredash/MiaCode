@@ -797,44 +797,6 @@ foreach(pet_asset IN LISTS MIACODE_PET_ASSET_FILES)
     set_source_files_properties("${pet_asset}" PROPERTIES QT_RESOURCE_ALIAS "pet/minecraft/${pet_asset_name}")
 endforeach()
 
-set(MIACODE_COMIC_FALLBACK_FILE
-    resources/comics-fallback/comic_001.jpg
-)
-set_source_files_properties(
-    "${MIACODE_COMIC_FALLBACK_FILE}"
-    PROPERTIES QT_RESOURCE_ALIAS "comics/fallback.jpg"
-)
-
-set(MIACODE_COMIC_SOURCE_DIR
-    "${CMAKE_CURRENT_SOURCE_DIR}/resources/comics"
-)
-set(MIACODE_COMIC_MANIFEST
-    "${MIACODE_COMIC_SOURCE_DIR}/manifest.json"
-)
-set(MIACODE_COMIC_EXTERNAL_FILES)
-file(GLOB MIACODE_COMIC_RESOURCE_CANDIDATES
-    CONFIGURE_DEPENDS
-    "${MIACODE_COMIC_SOURCE_DIR}/*"
-)
-foreach(comic_file IN LISTS MIACODE_COMIC_RESOURCE_CANDIDATES)
-    if(IS_DIRECTORY "${comic_file}")
-        continue()
-    endif()
-    get_filename_component(comic_name "${comic_file}" NAME)
-    string(SUBSTRING "${comic_name}" 0 1 comic_first_character)
-    string(TOLOWER "${comic_name}" comic_lower_name)
-    get_filename_component(comic_extension "${comic_name}" LAST_EXT)
-    string(TOLOWER "${comic_extension}" comic_lower_extension)
-    if(comic_first_character STREQUAL "."
-        OR comic_lower_name MATCHES "(\\.tmp|\\.part|\\.bak)$"
-        OR NOT comic_lower_extension MATCHES "^\\.(jpg|jpeg|png)$"
-        OR comic_lower_name MATCHES "^comic_001\\.jpg$"
-        OR comic_lower_name MATCHES "^fallback\\.jpg$")
-        continue()
-    endif()
-    list(APPEND MIACODE_COMIC_EXTERNAL_FILES "${comic_file}")
-endforeach()
-
 qt_add_qml_module(MiaCode
     URI MiaCode.UI
     VERSION 1.0
@@ -911,7 +873,6 @@ qt_add_qml_module(MiaCode
     RESOURCES
         ${MIACODE_UI_ICON_FILES}
         ${MIACODE_PET_ASSET_FILES}
-        ${MIACODE_COMIC_FALLBACK_FILE}
     IMPORTS
         QtQuick3D
         QtQuick3D.Helpers
@@ -934,19 +895,6 @@ qt_add_resources(MiaCode "miacode_i18n"
     FILES ${MIACODE_TRANSLATION_QM_FILES}
 )
 add_dependencies(MiaCode miacode_lrelease)
-
-add_custom_target(MiaCodeComicResourcesSync
-    COMMAND "${CMAKE_COMMAND}"
-        "-DSOURCE_DIR=${MIACODE_COMIC_SOURCE_DIR}"
-        "-DDEST_DIR=$<TARGET_FILE_DIR:MiaCode>/resources/comics"
-        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/MiaCodeComicResourcesSync.cmake"
-    DEPENDS
-        "${MIACODE_COMIC_MANIFEST}"
-        ${MIACODE_COMIC_EXTERNAL_FILES}
-    COMMENT "Synchronizing external comic resources"
-    VERBATIM
-)
-add_dependencies(MiaCode MiaCodeComicResourcesSync)
 
 add_library(soundtouch STATIC
     third_party/soundtouch/source/SoundTouch/AAFilter.cpp

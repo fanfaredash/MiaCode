@@ -34,10 +34,6 @@ case "$THIN_SINGLE_ARCH_PACKAGE" in
     exit 2
     ;;
 esac
-if [[ ! "$PACKAGE_JOBS" =~ ^[1-4]$ ]]; then
-  echo "MIACODE_PACKAGE_JOBS must be an integer from 1 to 4 (got: $PACKAGE_JOBS)" >&2
-  exit 2
-fi
 if [[ "$PACKAGE_ARCHITECTURES" != "arm64" ]]; then
   echo "MiaCode for macOS is arm64-only (got CMAKE_OSX_ARCHITECTURES=$PACKAGE_ARCHITECTURES)." >&2
   exit 2
@@ -67,85 +63,6 @@ parse_version() {
 
 package_step() {
   printf '\n==> [package] %s\n' "$*"
-}
-
-sync_comic_resources_to_app() {
-  local source_dir="$1"
-  local destination_dir="$2"
-  package_step "Synchronizing comic resources"
-  python3 - "$source_dir" "$destination_dir" <<'PY'
-import json
-import pathlib
-import shutil
-import sys
-
-source_dir = pathlib.Path(sys.argv[1])
-destination_dir = pathlib.Path(sys.argv[2])
-manifest_path = source_dir / "manifest.json"
-if not source_dir.is_dir() or not manifest_path.is_file():
-    raise SystemExit(f"Comic source directory or manifest missing: {source_dir}")
-try:
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-except Exception as exc:
-    raise SystemExit(f"Comic manifest is not valid JSON: {manifest_path} ({exc})")
-if manifest.get("version") != 1 or not isinstance(manifest.get("items"), list):
-    raise SystemExit(f"Comic manifest requires version 1 and an items array: {manifest_path}")
-
-def key(name):
-    return name.casefold()
-
-manifest_names = []
-manifest_keys = set()
-for item in manifest["items"]:
-    if not isinstance(item, dict) or not all(field in item for field in ("file", "width", "height")):
-        raise SystemExit(f"Comic manifest items require file, width, and height: {manifest_path}")
-    name = item["file"]
-    if not isinstance(name, str) or pathlib.PurePath(name).name != name or not name or ".." in name:
-        raise SystemExit(f"Unsafe comic manifest file name {name!r}: {manifest_path}")
-    lower = name.casefold()
-    if lower in {"comic_001.jpg", "fallback.jpg"} or pathlib.PurePath(name).suffix.casefold() not in {".jpg", ".jpeg", ".png"}:
-        raise SystemExit(f"Unsupported comic manifest file name {name!r}: {manifest_path}")
-    if not isinstance(item["width"], int) or isinstance(item["width"], bool) or item["width"] <= 0 or not isinstance(item["height"], int) or isinstance(item["height"], bool) or item["height"] <= 0:
-        raise SystemExit(f"Comic manifest dimensions must be positive integers for {name!r}: {manifest_path}")
-    if lower in manifest_keys:
-        raise SystemExit(f"Comic manifest contains duplicate file name {name!r}: {manifest_path}")
-    manifest_names.append(name)
-    manifest_keys.add(lower)
-
-source_images = {}
-for entry in source_dir.iterdir():
-    if entry.name == "manifest.json":
-        continue
-    lower = entry.name.casefold()
-    if entry.is_dir() or entry.name.startswith(".") or lower.endswith((".tmp", ".part", ".bak")):
-        raise SystemExit(f"Illegal comic source entry: {entry}")
-    if lower in {"comic_001.jpg", "fallback.jpg"}:
-        continue
-    if entry.suffix.casefold() not in {".jpg", ".jpeg", ".png"}:
-        raise SystemExit(f"Unsupported comic source entry: {entry}")
-    entry_key = key(entry.name)
-    if entry_key in source_images:
-        raise SystemExit(f"Comic source contains duplicate file names differing only by case: {entry.name}")
-    source_images[entry_key] = entry
-if set(source_images) != manifest_keys:
-    missing = sorted(manifest_keys - set(source_images))
-    extra = sorted(set(source_images) - manifest_keys)
-    raise SystemExit(f"Comic source image set differs from manifest; missing={missing}, extra={extra}")
-
-if destination_dir.exists():
-    shutil.rmtree(destination_dir)
-destination_dir.mkdir(parents=True)
-shutil.copy2(manifest_path, destination_dir / "manifest.json")
-for name in manifest_names:
-    shutil.copy2(source_images[key(name)], destination_dir / source_images[key(name)].name)
-destination_names = {entry.name.casefold() for entry in destination_dir.iterdir() if entry.is_file() and entry.name != "manifest.json"}
-if destination_names != manifest_keys or any(entry.is_dir() for entry in destination_dir.iterdir()):
-    raise SystemExit(f"Comic package directory has an unexpected file set: {destination_dir}")
-print(f"Comic source directory: {source_dir}")
-print(f"Comic destination directory: {destination_dir}")
-print(f"Comic manifest: {manifest_path}")
-print(f"Comic resource count: {len(manifest_names)}")
-PY
 }
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
@@ -520,21 +437,6 @@ package_step "Staging app bundle, documentation, assets, and runtime tools"
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 cp -R "$APP_PATH" "$DIST_DIR/"
-comic_build_dir="$BUILD_DIR"
-if [[ ! -d "$comic_build_dir/resources/comics" && -d "$BUILD_DIR/Release/resources/comics" ]]; then
-  comic_build_dir="$BUILD_DIR/Release"
-fi
-sync_comic_resources_to_app "$comic_build_dir/resources/comics" "$DIST_DIR/MiaCode.app/Contents/MacOS/resources/comics"
-
-required_app_paths=(
-  "$DIST_DIR/MiaCode.app/Contents/MacOS/resources/comics"
-)
-for required_app_path in "${required_app_paths[@]}"; do
-  if [[ ! -d "$required_app_path" || ! -f "$required_app_path/manifest.json" ]]; then
-    echo "Missing required macOS comic resource directory: $required_app_path" >&2
-    exit 1
-  fi
-done
 
 for release_doc in LICENSE LICENSE_SCOPE.md THIRD_PARTY_NOTICES.md; do
   if [[ ! -f "$ROOT_DIR/$release_doc" ]]; then
