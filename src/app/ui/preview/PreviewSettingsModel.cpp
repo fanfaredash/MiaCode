@@ -127,7 +127,7 @@ QVariantMap PreviewSettingsModel::labels() const
 
 QString PreviewSettingsModel::videoGroupLabel() const
 {
-    return text("dialog.render_settings.video_group");
+    return text("dialog.render_settings.visual_group");
 }
 
 QString PreviewSettingsModel::gameplayGroupLabel() const
@@ -137,7 +137,7 @@ QString PreviewSettingsModel::gameplayGroupLabel() const
 
 QString PreviewSettingsModel::skinGroupLabel() const
 {
-    return text("dialog.render_settings.video.skin");
+    return text("dialog.render_settings.skin_group");
 }
 
 QVariantList PreviewSettingsModel::scaleModeOptions() const

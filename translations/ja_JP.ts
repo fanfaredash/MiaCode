@@ -1670,8 +1670,8 @@ Failed: %2</source>
         <translation>外</translation>
     </message>
     <message id="dialog.render_settings.gameplay_group">
-        <source>Gameplay</source>
-        <translation>ゲーム</translation>
+        <source>Gameplay Settings</source>
+        <translation>ゲーム設定</translation>
     </message>
     <message id="dialog.render_settings.music.audition">
         <source>Audition</source>
@@ -1829,9 +1829,13 @@ Failed: %2</source>
         <source>Enable touch click input</source>
         <translation>touchクリック入力を有効化</translation>
     </message>
-    <message id="dialog.render_settings.video_group">
-        <source>Video</source>
-        <translation>映像</translation>
+    <message id="dialog.render_settings.skin_group">
+        <source>Skin Settings</source>
+        <translation>スキン設定</translation>
+    </message>
+    <message id="dialog.render_settings.visual_group">
+        <source>Visual Settings</source>
+        <translation>表示設定</translation>
     </message>
     <message id="dialog.restore_backup.abnormal_exit_confirm">
         <source>MiaCode did not exit normally last time.
@@ -5169,10 +5173,6 @@ Error: %1</source>
         <source>File Name</source>
         <translation>ファイル名</translation>
     </message>
-    <message id="video_export.gameplay">
-        <source>Gameplay</source>
-        <translation>ゲーム</translation>
-    </message>
     <message id="video_export.intro">
         <source>Intro</source>
         <translation>イントロ</translation>
@@ -5209,10 +5209,6 @@ Error: %1</source>
         <source>Show bottom-left timestamp</source>
         <translation>左下にタイムスタンプを表示</translation>
     </message>
-    <message id="video_export.skin">
-        <source>Skin</source>
-        <translation>スキン</translation>
-    </message>
     <message id="video_export.smooth_brightness">
         <source>Smooth brightness</source>
         <translation>明るさを滑らかに</translation>
@@ -5220,10 +5216,6 @@ Error: %1</source>
     <message id="video_export.start_export">
         <source>Start Export</source>
         <translation>出力を開始</translation>
-    </message>
-    <message id="video_export.video">
-        <source>Video</source>
-        <translation>動画</translation>
     </message>
     <message id="window.collapse_left_sidebar">
         <source>Collapse left sidebar</source>

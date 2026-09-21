@@ -199,7 +199,7 @@ ColumnLayout {
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: qsTrId("video_export.skin")
+                text: qsTrId("dialog.render_settings.video.skin")
                 color: Theme.colors.text.secondary
                 Layout.preferredWidth: 120
             }
@@ -210,7 +210,7 @@ ColumnLayout {
                 model: root.previewSettings ? root.previewSettings.skinOptions : []
                 textRole: "label"
                 currentIndex: root.previewSettings ? root.previewSettings.skinIndex : -1
-                Accessible.name: qsTrId("video_export.skin")
+                Accessible.name: qsTrId("dialog.render_settings.video.skin")
                 onActivated: if (root.previewSettings) root.previewSettings.skinIndex = currentIndex
             }
             AppButton {

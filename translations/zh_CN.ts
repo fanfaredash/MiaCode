@@ -1670,8 +1670,8 @@ Failed: %2</source>
         <translation>外</translation>
     </message>
     <message id="dialog.render_settings.gameplay_group">
-        <source>Gameplay</source>
-        <translation>游戏</translation>
+        <source>Gameplay Settings</source>
+        <translation>游戏设置</translation>
     </message>
     <message id="dialog.render_settings.music.audition">
         <source>Audition</source>
@@ -1829,9 +1829,13 @@ Failed: %2</source>
         <source>Enable touch click input</source>
         <translation>启用touch点击输入</translation>
     </message>
-    <message id="dialog.render_settings.video_group">
-        <source>Video</source>
-        <translation>视频</translation>
+    <message id="dialog.render_settings.skin_group">
+        <source>Skin Settings</source>
+        <translation>皮肤设置</translation>
+    </message>
+    <message id="dialog.render_settings.visual_group">
+        <source>Visual Settings</source>
+        <translation>画面设置</translation>
     </message>
     <message id="dialog.restore_backup.abnormal_exit_confirm">
         <source>MiaCode did not exit normally last time.
@@ -5169,10 +5173,6 @@ Error: %1</source>
         <source>File Name</source>
         <translation>文件名</translation>
     </message>
-    <message id="video_export.gameplay">
-        <source>Gameplay</source>
-        <translation>游戏</translation>
-    </message>
     <message id="video_export.intro">
         <source>Intro</source>
         <translation>片头</translation>
@@ -5209,10 +5209,6 @@ Error: %1</source>
         <source>Show bottom-left timestamp</source>
         <translation>显示左下角时间戳</translation>
     </message>
-    <message id="video_export.skin">
-        <source>Skin</source>
-        <translation>皮肤</translation>
-    </message>
     <message id="video_export.smooth_brightness">
         <source>Smooth brightness</source>
         <translation>平滑亮度</translation>
@@ -5220,10 +5216,6 @@ Error: %1</source>
     <message id="video_export.start_export">
         <source>Start Export</source>
         <translation>开始导出</translation>
-    </message>
-    <message id="video_export.video">
-        <source>Video</source>
-        <translation>视频</translation>
     </message>
     <message id="window.collapse_left_sidebar">
         <source>Collapse left sidebar</source>

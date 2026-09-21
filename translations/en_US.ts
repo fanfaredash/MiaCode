@@ -1670,8 +1670,8 @@ Failed: %2</translation>
         <translation>Outer</translation>
     </message>
     <message id="dialog.render_settings.gameplay_group">
-        <source>Gameplay</source>
-        <translation>Gameplay</translation>
+        <source>Gameplay Settings</source>
+        <translation>Gameplay Settings</translation>
     </message>
     <message id="dialog.render_settings.music.audition">
         <source>Audition</source>
@@ -1829,9 +1829,13 @@ Failed: %2</translation>
         <source>Enable touch click input</source>
         <translation>Enable touch click input</translation>
     </message>
-    <message id="dialog.render_settings.video_group">
-        <source>Video</source>
-        <translation>Video</translation>
+    <message id="dialog.render_settings.skin_group">
+        <source>Skin Settings</source>
+        <translation>Skin Settings</translation>
+    </message>
+    <message id="dialog.render_settings.visual_group">
+        <source>Visual Settings</source>
+        <translation>Visual Settings</translation>
     </message>
     <message id="dialog.restore_backup.abnormal_exit_confirm">
         <source>MiaCode did not exit normally last time.
@@ -5169,10 +5173,6 @@ Error: %1</translation>
         <source>File Name</source>
         <translation>File Name</translation>
     </message>
-    <message id="video_export.gameplay">
-        <source>Gameplay</source>
-        <translation>Gameplay</translation>
-    </message>
     <message id="video_export.intro">
         <source>Intro</source>
         <translation>Intro</translation>
@@ -5209,10 +5209,6 @@ Error: %1</translation>
         <source>Show bottom-left timestamp</source>
         <translation>Show bottom-left timestamp</translation>
     </message>
-    <message id="video_export.skin">
-        <source>Skin</source>
-        <translation>Skin</translation>
-    </message>
     <message id="video_export.smooth_brightness">
         <source>Smooth brightness</source>
         <translation>Smooth brightness</translation>
@@ -5220,10 +5216,6 @@ Error: %1</translation>
     <message id="video_export.start_export">
         <source>Start Export</source>
         <translation>Start Export</translation>
-    </message>
-    <message id="video_export.video">
-        <source>Video</source>
-        <translation>Video</translation>
     </message>
     <message id="window.collapse_left_sidebar">
         <source>Collapse left sidebar</source>

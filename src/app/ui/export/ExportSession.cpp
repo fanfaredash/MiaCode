@@ -544,7 +544,6 @@ void ExportSession::applyLivePreviewSettings()
         const QScopedValueRollback pushing(pushingSharedSettings_, true);
         engine()->applySharedTaskSettings(liveTask);
     }
-    syncAudition();
 }
 
 void ExportSession::adoptPreviewRenderSettings()
@@ -1026,7 +1025,7 @@ void ExportSession::setResolutionIndex(int index)
     emit outputChanged();
     savePreferences();
     if (pageSessionActive_) {
-        syncAudition();
+        applyLivePreviewSettings();
     }
 }
 
@@ -1103,7 +1102,7 @@ void ExportSession::setFixHudTextLayout(bool value)
 {
     task_.fixHudTextLayout = value;
     emit videoChanged();
-    syncAudition();
+    applyLivePreviewSettings();
     savePreferences();
 }
 
@@ -1111,7 +1110,6 @@ void ExportSession::setClockCountEnabled(bool value)
 {
     task_.clockCountEnabled = value;
     emit videoChanged();
-    syncAudition();
     savePreferences();
 }
 

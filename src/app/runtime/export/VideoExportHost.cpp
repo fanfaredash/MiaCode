@@ -90,6 +90,7 @@ double miacode::runtime::VideoExportHost::currentAudioClockSecond() const
 void miacode::runtime::VideoExportHost::refreshIntroState()
 {
     session_.refreshExportIntroState();
+    emit session_.applicationServices_.shellNotifications().presentationChanged();
 }
 
 int Session::resolveToolsMenuExportDifficultyId() const

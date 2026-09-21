@@ -25,9 +25,9 @@ Rectangle {
         if (root.session && root.session.activeTab === "batch")
             tabs.push({ id: "batch", label: qsTrId("qml.batch") })
         tabs.push({ id: "output", label: qsTrId("video_export.output") })
-        tabs.push({ id: "video", label: qsTrId("video_export.video") })
-        tabs.push({ id: "gameplay", label: qsTrId("video_export.gameplay") })
-        tabs.push({ id: "skin", label: qsTrId("video_export.skin") })
+        tabs.push({ id: "video", label: qsTrId("dialog.render_settings.visual_group") })
+        tabs.push({ id: "gameplay", label: qsTrId("dialog.render_settings.gameplay_group") })
+        tabs.push({ id: "skin", label: qsTrId("dialog.render_settings.skin_group") })
         tabs.push({ id: "intro", label: qsTrId("video_export.intro") })
         return tabs
     }

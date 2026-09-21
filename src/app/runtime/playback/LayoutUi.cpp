@@ -102,6 +102,7 @@ void miacode::runtime::PlaybackCoordinator::setPreviewCanvasAspectRatio(double r
     }
     state_.previewCanvasAspectRatio_ = normalized;
     refreshQuickShellPreviewCompositeSurfaceState(state_, owner_);
+    emit services_.shellNotifications().presentationChanged();
     if (persistState) {
         preferences_.savePortableState();
     }

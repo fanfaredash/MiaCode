@@ -316,15 +316,20 @@ void miacode::runtime::VideoExportHost::applySharedExportTaskSettings(const Vide
     session_.previewTapJudgeTextDistance_ = task.tapJudgeTextDistance;
     session_.previewJudgeEffectStyle_ = task.judgeEffectStyle;
 
+    if (session_.exportPreviewActive_ && task.outputWidth > 0 && task.outputHeight > 0) {
+        session_.setPreviewCanvasAspectRatio(
+            static_cast<double>(task.outputWidth) / static_cast<double>(task.outputHeight), false);
+    }
     session_.applyPreviewStageMediaRouteVisualSettings();
     if (session_.scene_ != nullptr) {
         session_.scene_->setShowTimestamp(session_.previewShowTimestamp_);
         session_.scene_->setShowObjectStatsHud(session_.previewShowObjectStatsHud_);
-        // Chart info HUD is deliberately *not* pushed to the live editor
-        // preview here — the persisted value drives the export dialog's
-        // initial checkbox state and the next export render, but the
-        // editor's normal preview never shows it (debug HUD owns the
-        // top-left corner outside the export dialog window).
+        session_.scene_->setFixHudTextLayout(task.fixHudTextLayout);
+        // Chart info stays exclusive to the export audition; editor preview
+        // state is left untouched.
+        if (session_.exportPreviewActive_) {
+            session_.scene_->setShowChartInfoHud(task.showChartInfoHud);
+        }
         session_.scene_->setCenterDisplayMode(session_.previewCenterDisplayMode_);
         session_.scene_->setBackgroundBrightnessOuter(session_.previewBackgroundBrightnessOuter_);
         session_.scene_->setBackgroundBrightnessInner(session_.previewBackgroundBrightnessInner_);
@@ -336,9 +341,11 @@ void miacode::runtime::VideoExportHost::applySharedExportTaskSettings(const Vide
         session_.scene_->setSlideEarlierSecondAndTextOnTop(session_.previewSlideEarlierSecondAndTextOnTop_);
         session_.scene_->setTapJudgeTextDistance(session_.previewTapJudgeTextDistance_);
         session_.scene_->setJudgeEffectStyle(session_.previewJudgeEffectStyle_);
+        session_.scene_->update();
     }
 
     session_.savePortableState();
+    emit session_.applicationServices_.shellNotifications().presentationChanged();
     // These are the values Preview Settings shows; it is open to them only if told.
     emit session_.applicationServices_.shellNotifications().previewRenderSettingsChanged();
 }

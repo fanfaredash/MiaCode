@@ -342,17 +342,11 @@ bool PageHost::openCoverExport(int difficultyId)
     if (document_ == nullptr || !document_->hasDocument() || router() == nullptr) {
         return false;
     }
-    rememberResumeDifficulty();
     const int selectedDifficultyId = difficultyId > 0 ? difficultyId
         : activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr
-            ? exportSessionObject()->selectedDifficultyId() : resumeDifficultyId_;
-    return requestPageSwitch([this, selectedDifficultyId]() {
-        if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
-            exportSessionObject()->leave();
-        }
-        emit coverWindowRequested(selectedDifficultyId);
-        return true;
-    });
+            ? exportSessionObject()->selectedDifficultyId() : router()->activeDifficultyId();
+    emit coverWindowRequested(selectedDifficultyId);
+    return true;
 }
 
 void PageHost::packAsZip()
