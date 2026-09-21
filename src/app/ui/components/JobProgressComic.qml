@@ -19,8 +19,10 @@ Item {
     property var navigationHistory: []
     property int navigationCursor: -1
     property bool chartExportInitialized: false
-    visible: root.active && root.chartExportActive
+    visible: root.active && root.chartExportActive && root.hasResources
 
+    readonly property bool hasResources: root.resources !== null
+        && root.resources.resourceCount > 0
     readonly property bool hasVisibleImage: visibleImage.status === Image.Ready
     readonly property bool canGoBack: root.navigationCursor > 0
     readonly property bool canSwitch: root.chartExportActive && root.active
@@ -51,7 +53,7 @@ Item {
     }
 
     function currentResourceIndex() {
-        if (!root.resources || root.resources.usingFallback)
+        if (!root.resources)
             return -1
 
         return root.modelIndexForUrl(root.resources.currentImageUrl)
@@ -135,7 +137,7 @@ Item {
     }
 
     function modelIndexForUrl(url) {
-        if (!root.resources || root.resources.usingFallback)
+        if (!root.resources)
             return -1
         for (let index = 0; index < root.resources.resourceCount; ++index) {
             if (modelUrlAt(index).toString() === url.toString())
@@ -228,8 +230,6 @@ Item {
             root.updateTimer()
             return
         }
-        if (root.resources)
-            root.resources.useFallback()
         incomingImage.source = ""
         root.pendingIndex = -1
         root.pendingDirection = 0
@@ -247,13 +247,7 @@ Item {
             root.pendingDirection = 0
             root.switching = false
         }
-        const fallbackUrl = root.resources.currentImageUrl
-        if (visibleImage.source.toString() === fallbackUrl.toString()) {
-            root.updateTimer()
-            return
-        }
-        root.resources.useFallback()
-        visibleImage.source = fallbackUrl
+        visibleImage.source = ""
         root.currentIndex = -1
         root.updateTimer()
     }

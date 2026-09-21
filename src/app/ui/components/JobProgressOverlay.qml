@@ -29,6 +29,10 @@ Item {
     readonly property real comicFrameWidth: 340
     readonly property real comicFrameHeight: root.comicFrameWidth
         / root.comicFrameAspectRatio
+    // An empty comic directory hides the whole comic region instead of leaving
+    // an empty frame behind.
+    readonly property bool hasComicResources: root.comicResources !== null
+        && root.comicResources.resourceCount > 0
     readonly property int progressBodySpacing: 10
     readonly property color comicButtonGlyphColor:
         Theme.activeTheme.dark
@@ -103,7 +107,8 @@ Item {
             RowLayout {
                 objectName: "jobProgressComicControls"
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredHeight: root.chartExportActive ? root.comicFrameHeight : 0
+                Layout.preferredHeight: root.chartExportActive && root.hasComicResources
+                    ? root.comicFrameHeight : 0
                 Layout.bottomMargin: root.chartExportActive
                     ? root.progressBodySpacing * 2 : 0
                 spacing: Theme.panelPadding
