@@ -131,7 +131,6 @@ Item {
                     resources: root.comicResources
                     active: root.jobActive
                     chartExportActive: root.chartExportActive
-                    taskToken: root.progress ? root.progress.token : 0
                 }
 
                 IconButton {

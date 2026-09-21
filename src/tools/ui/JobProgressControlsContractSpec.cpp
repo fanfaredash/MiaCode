@@ -83,11 +83,6 @@ bool verifyProgressOverlay(QTextStream& out)
                       && source.contains(QStringLiteral("glyphStateColors: root.comicButtonGlyphStateColors"))
                       && source.contains(QStringLiteral("stateColors: root.comicButtonStateColors")),
                   QStringLiteral("comic button colors are computed locally over the shared state-color hook"), out);
-
-    // The comic component is handed the job identity, not just the task type, so
-    // it can re-initialize for every job rather than for every type change.
-    ok &= require(source.contains(QStringLiteral("taskToken: root.progress ? root.progress.token : 0")),
-                  QStringLiteral("the overlay hands the comic component the job token"), out);
     return ok;
 }
 
@@ -158,29 +153,22 @@ bool verifySingleRandomRotation(QTextStream& out)
                       "visible: root.active && root.chartExportActive && root.hasResources")),
                   QStringLiteral("the comic area is gated on the chart-export state"), out);
 
-    // Each job initializes the carousel exactly once, keyed on the job token.
-    // A chart export replacing another never changes the task type, so a
-    // chartExportActive edge alone would leave the previous job's image up.
-    ok &= require(source.contains(QStringLiteral("property real taskToken: 0"))
-                      && source.contains(QStringLiteral("property real initializedTaskToken: 0"))
-                      && source.contains(QStringLiteral("function ensureChartExportInitialized()"))
-                      && source.contains(QStringLiteral("if (root.initializedTaskToken === root.taskToken)"))
-                      && source.contains(QStringLiteral("root.initializedTaskToken = root.taskToken"))
-                      && source.contains(QStringLiteral(
-                          "onTaskTokenChanged: ensureChartExportInitialized()")),
-                  QStringLiteral("each job re-initializes once, keyed on the job token"), out);
+    // A new chart-export task initializes the carousel once, and an inactive
+    // region clears whatever the previous task left behind.
+    ok &= require(source.contains(QStringLiteral("property bool chartExportInitialized: false"))
+                      && source.contains(QStringLiteral("root.chartExportInitialized = true"))
+                      && source.contains(QStringLiteral("root.chartExportInitialized = false")),
+                  QStringLiteral("the carousel re-initializes for each chart-export task"), out);
+    const int initialize = source.indexOf(QStringLiteral("function initializeChartExport()"));
+    ok &= require(initialize >= 0
+                      && source.indexOf(QStringLiteral("resourceCount === 0"), initialize) > initialize
+                      && source.indexOf(QStringLiteral("root.ensureResourcesScanned()"), initialize) > initialize
+                      && source.indexOf(QStringLiteral("root.resources.selectRandomResource()"), initialize) > initialize
+                      && source.indexOf(QStringLiteral("root.resources.selectResource(0)"), initialize) > initialize,
+                  QStringLiteral("initialization scans on demand and then picks the first image"), out);
 
-    // Initialization clears the previous job's state before selecting again.
-    const int ensureInit = source.indexOf(QStringLiteral("function ensureChartExportInitialized()"));
-    const int selectRandom = source.indexOf(QStringLiteral("root.resources.selectRandomResource()"), ensureInit);
-    ok &= require(ensureInit >= 0
-                      && source.indexOf(QStringLiteral("stopBanner()"), ensureInit) > ensureInit
-                      && source.indexOf(QStringLiteral("root.ensureResourcesScanned()"), ensureInit) > ensureInit
-                      && selectRandom > ensureInit,
-                  QStringLiteral("initialization clears the previous image before selecting the next"), out);
-
-    // Task completion, cancellation, failure and re-entry all funnel through the
-    // same teardown: stop the timer and animation and drop both images.
+    // Task completion, cancellation, and failure all funnel through the same
+    // teardown: stop the timer and animation and drop both images.
     const int stopBanner = source.indexOf(QStringLiteral("function stopBanner()"));
     ok &= require(stopBanner >= 0
                       && source.indexOf(QStringLiteral("slideTimer.stop()"), stopBanner) > stopBanner
@@ -191,6 +179,17 @@ bool verifySingleRandomRotation(QTextStream& out)
                       && source.indexOf(QStringLiteral("root.currentIndex = -1"), stopBanner) > stopBanner
                       && source.indexOf(QStringLiteral("root.switching = false"), stopBanner) > stopBanner,
                   QStringLiteral("task end stops the timer and animation and clears both images"), out);
+
+    // Both exit edges reach that teardown: the job going inactive, and the task
+    // type leaving chart export.
+    const int activeHandler = source.indexOf(QStringLiteral("onActiveChanged:"));
+    const int chartHandler = source.indexOf(QStringLiteral("onChartExportActiveChanged:"));
+    const int stopInActiveHandler = source.indexOf(QStringLiteral("stopBanner()"), activeHandler);
+    const int stopInChartHandler = source.indexOf(QStringLiteral("stopBanner()"), chartHandler);
+    ok &= require(activeHandler >= 0 && chartHandler > activeHandler
+                      && stopInActiveHandler > activeHandler && stopInActiveHandler < chartHandler
+                      && stopInChartHandler > chartHandler,
+                  QStringLiteral("both task-end edges reach the carousel teardown"), out);
 
     // An empty directory hides the region; a single image never rotates.
     ok &= require(source.contains(QStringLiteral("&& root.resources.resourceCount >= 2")),
@@ -231,17 +230,14 @@ bool verifyModelRandomSelection(QTextStream& out)
     return ok;
 }
 
-// The comic region is driven from typed service state, so the job identity and
-// the chart-export flag have to stay published properties rather than being
-// inferred in QML.
-bool verifyTaskIdentityIsTyped(QTextStream& out)
+// The comic region is switched from typed service state, so the chart-export
+// flag has to stay a published property rather than being inferred in QML.
+bool verifyTaskTypeIsTyped(QTextStream& out)
 {
     const QString service = readSource(QStringLiteral("src/app/services/JobProgressService.h"));
     bool ok = require(!service.isEmpty(), QStringLiteral("JobProgressService.h is readable"), out);
-    ok &= require(service.contains(QStringLiteral("Q_PROPERTY(bool chartExport READ chartExport NOTIFY changed)"))
-                      && service.contains(QStringLiteral(
-                          "Q_PROPERTY(quint64 token READ token NOTIFY changed)")),
-                  QStringLiteral("the chart-export flag and the job token are typed service properties"), out);
+    ok &= require(service.contains(QStringLiteral("Q_PROPERTY(bool chartExport READ chartExport NOTIFY changed)")),
+                  QStringLiteral("the chart-export flag is a typed service property"), out);
     return ok;
 }
 
@@ -252,7 +248,7 @@ int main()
     QTextStream out(stdout);
     const bool ok = verifyIconButton(out) && verifyProgressOverlay(out)
         && verifyGenericTaskSurface(out) && verifySingleRandomRotation(out)
-        && verifyModelRandomSelection(out) && verifyTaskIdentityIsTyped(out);
+        && verifyModelRandomSelection(out) && verifyTaskTypeIsTyped(out);
     out << (ok ? "job_progress_controls_contract_spec ok\n"
                : "job_progress_controls_contract_spec failed\n");
     return ok ? 0 : 1;
