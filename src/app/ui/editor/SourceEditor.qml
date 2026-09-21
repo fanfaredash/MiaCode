@@ -191,6 +191,8 @@ Rectangle {
             root.beginProgrammaticSelection()
             sourceArea.syncingFromController = true
             sourceArea.text = controllerText
+            if (editorTextStyle)
+                editorTextStyle.applyImmediately()
             sourceArea.syncingFromController = false
             root.endProgrammaticSelection()
             sourceArea.historyText = controllerText
@@ -1109,13 +1111,17 @@ Rectangle {
                 historyText = text
                 root.editorController.setDocumentContextForQml(
                     root.documentSession.currentDifficultyId, root.documentSession.documentRevision)
+                editorTextStyle.applyImmediately()
                 root.updateCursorPosition()
                 root.bumpFollowLayout()
             }
 
             EditorTextStyle {
+                id: editorTextStyle
                 textDocument: sourceArea.textDocument
-                blockSpacing: Theme.codeBlockSpacing
+                // Read the editor preference directly so initial document
+                // styling does not depend on Theme singleton binding timing.
+                blockSpacing: root.preferences ? root.preferences.editorBlockSpacing : 0
             }
 
             SimaiSyntaxHighlighter {

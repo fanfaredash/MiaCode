@@ -49,6 +49,15 @@ void EditorTextStyle::setBlockSpacing(int pixels)
     emit blockSpacingChanged();
 }
 
+void EditorTextStyle::applyImmediately()
+{
+    // A queued range pass may have been scheduled by the replacement itself.
+    // The full-document pass below supersedes it, so let the queued callback
+    // become a no-op instead of applying a stale range later.
+    rangePending_ = false;
+    applyToDocument();
+}
+
 void EditorTextStyle::onContentsChange(int position, int charsRemoved, int charsAdded)
 {
     Q_UNUSED(charsRemoved);

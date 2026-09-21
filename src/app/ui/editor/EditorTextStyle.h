@@ -34,6 +34,11 @@ public:
     int blockSpacing() const;
     void setBlockSpacing(int pixels);
 
+    // Apply the current spacing after a wholesale text replacement has
+    // returned to QML. This is safe outside contentsChange and avoids showing
+    // the document's default line height for the first rendered frame.
+    Q_INVOKABLE void applyImmediately();
+
 signals:
     void textDocumentChanged();
     void blockSpacingChanged();
