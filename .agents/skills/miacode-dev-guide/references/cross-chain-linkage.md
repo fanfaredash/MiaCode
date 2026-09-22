@@ -269,6 +269,16 @@ commands through the bounded queue; only probe/spec code may wait on the non-GUI
 - Shared preview-time clock getter: `MainWindow::currentPreviewAuthoritativeAudioClockSecond`
   (UI follow, export-dialog current second, weak-video late-start must read this — do not branch on
   `PreviewStageMediaHost::currentPlaybackSecond()`, which is video-local observability only).
+- **Realtime PV steady-sync loop:** each preview tick still supplies that audio-authoritative chart
+  second to `PreviewStageMediaHost::syncPlayback`. On the QtAVPlayer path,
+  `core/video/PreviewVideoSyncPolicy` compares it with the last frame actually pushed to the video
+  sink (`lastFramePtsSeconds_ - timelineOffsetSeconds_`). A two-frame/80 ms floor tolerance must be
+  exceeded continuously for 300 ms before one seek reanchors PV to the audio clock; a 1500 ms
+  policy cooldown plus a 1000 ms post-seek observation suppression prevents seek storms. Reset the
+  policy on source/transaction/start/pause/seek/rate/offset changes, and keep prepared-start,
+  paused-seek, stale-EOM recovery and negative-offset waiting outside steady correction. Export is
+  frame-driven and must never consume this realtime policy. Spec: `preview_video_sync_policy_spec`;
+  QtAV wiring contract: `qtavplayer_platform_spec`.
 - **Background video never owns the main preview transport lifetime.** A PV/BG `EndOfMedia` only
   marks `PreviewStageMediaHost` video playback inactive; it deliberately leaves the last decoded
   frame retained in the video sinks so the background freezes on that frame. It must not pause the

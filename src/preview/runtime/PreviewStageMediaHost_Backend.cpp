@@ -563,6 +563,9 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
     MC_OP("PreviewStageMediaHost::setPlaybackRate");
     const double oldRate = playbackRate_;
     playbackRate_ = qMax(0.05, rate);
+    if (!qFuzzyCompare(oldRate, playbackRate_)) {
+        resetVideoSyncCorrection();
+    }
 #ifdef MIACODE_USE_QTAVPLAYER
     Q_UNUSED(oldRate);
     // The whole reason for the migration: QAVPlayer::setSpeed applies the rate

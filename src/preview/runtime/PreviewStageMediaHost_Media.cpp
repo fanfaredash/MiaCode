@@ -256,6 +256,7 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath,
 
 void PreviewStageMediaHost::clearMedia()
 {
+    resetVideoSyncCorrection();
     clearPvMemorySource();
 #ifdef MIACODE_USE_QTAVPLAYER
     if (videoFrameConnection_) {
@@ -264,6 +265,7 @@ void PreviewStageMediaHost::clearMedia()
     }
     lastVideoFrame_ = QVideoFrame();
     lastFramePtsSeconds_ = -1.0;
+    lastFrameDurationSeconds_ = 0.0;
     videoBackendLoaded_ = false;
     // Push an empty frame so the QML VideoOutput's sink RELEASES the last
     // decoded frame. A retained QtAVPlayer QVideoFrame transitively holds a
@@ -442,6 +444,7 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
 void PreviewStageMediaHost::loadVideoMedia(const QString& path)
 {
     MC_OP("PreviewStageMediaHost::loadVideoMedia");
+    resetVideoSyncCorrection();
 #ifdef MIACODE_USE_QTAVPLAYER
     initializeBackendObjects();
     if (player_ == nullptr) {
@@ -456,6 +459,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     videoBackendLoaded_ = false;
     lastVideoFrame_ = QVideoFrame();
     lastFramePtsSeconds_ = -1.0;
+    lastFrameDurationSeconds_ = 0.0;
     pausedSeekCompletionPending_ = false;
     pausedSeekTargetMs_ = -1;
     pausedSeekTargetSecond_ = 0.0;

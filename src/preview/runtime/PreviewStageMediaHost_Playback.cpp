@@ -52,8 +52,17 @@
 
 using namespace miacode::preview::psmh_detail;
 
+void PreviewStageMediaHost::resetVideoSyncCorrection()
+{
+    videoSyncPolicy_.reset();
+    videoSyncClock_.start();
+    videoSyncSuppressedUntilMs_ = 0;
+    lastVideoSyncSampleLogMs_ = -1;
+}
+
 void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transactionId)
 {
+    resetVideoSyncCorrection();
     // A new playback transaction supersedes any in-flight stale-EndOfMedia recovery:
     // its resume would otherwise fire on this transaction's seek acknowledgement.
     staleEndOfMediaResumePending_ = false;
@@ -410,6 +419,7 @@ bool PreviewStageMediaHost::hasPreparedPlaybackStart(quint64 transactionId) cons
 
 void PreviewStageMediaHost::setTimelineOffsetSeconds(double seconds)
 {
+    resetVideoSyncCorrection();
     timelineOffsetSeconds_ = qIsFinite(seconds) ? seconds : 0.0;
     updateClockDelta();
     emit diagnosticsChanged();
@@ -418,6 +428,7 @@ void PreviewStageMediaHost::setTimelineOffsetSeconds(double seconds)
 
 void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 {
+    resetVideoSyncCorrection();
     const double clampedSecond = qMax(0.0, seconds);
     observedPlayheadSecond_ = clampedSecond;
     updateClockDelta();
@@ -460,6 +471,7 @@ void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 
 void PreviewStageMediaHost::startPlayback(double seconds)
 {
+    resetVideoSyncCorrection();
     MC_OP("PreviewStageMediaHost::startPlayback");
     recordPvMemoryBoundary(PvMemoryBoundary::Play);
     // This start owns the transport from here; a stale-EndOfMedia recovery seek still
@@ -648,6 +660,7 @@ void PreviewStageMediaHost::startPlayback(double seconds)
 
 void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
 {
+    resetVideoSyncCorrection();
     // Same reason as preparePlaybackStart: this seek's acknowledgement must not be
     // mistaken for a recovery landing and resume playback while the preview is paused.
     staleEndOfMediaResumePending_ = false;
@@ -783,6 +796,72 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
             player_->play();
             transitioned = true;
         }
+        if (!videoSyncClock_.isValid()) {
+            videoSyncClock_.start();
+        }
+        const qint64 nowMs = videoSyncClock_.elapsed();
+        miacode::preview::video_sync::Observation syncObservation;
+        syncObservation.eligible = videoPlaybackActive_
+            && wasPlaying
+            && !pausedSeekCompletionPending_
+            && !preparedPlaybackPending_
+            && !staleEndOfMediaResumePending_
+            && lastFramePtsSeconds_ >= 0.0
+            && nowMs >= videoSyncSuppressedUntilMs_;
+        syncObservation.authoritativeSecond = lastTimelineSecond_;
+        syncObservation.videoSecond = lastFramePtsSeconds_ - timelineOffsetSeconds_;
+        syncObservation.frameDurationSeconds = lastFrameDurationSeconds_;
+        syncObservation.monotonicMs = nowMs;
+        const miacode::preview::video_sync::Decision syncDecision =
+            videoSyncPolicy_.observe(syncObservation);
+        const bool shouldLogSample = syncObservation.eligible
+            && (lastVideoSyncSampleLogMs_ < 0 || nowMs - lastVideoSyncSampleLogMs_ >= 1000);
+        if (shouldLogSample) {
+            lastVideoSyncSampleLogMs_ = nowMs;
+            appendPreviewStageMediaLog(
+                QStringLiteral("steady_sync_sample"),
+                QString("txn=%1 target_chart_ms=%2 frame_pts_ms=%3 video_chart_ms=%4 player_ms=%5 "
+                        "delta_ms=%6 tolerance_ms=%7 sustained_ms=%8 rate=%9 decode=%10")
+                    .arg(playbackTransactionId_)
+                    .arg(qRound64(lastTimelineSecond_ * 1000.0))
+                    .arg(qRound64(lastFramePtsSeconds_ * 1000.0))
+                    .arg(qRound64(syncObservation.videoSecond * 1000.0))
+                    .arg(player_->position())
+                    .arg(qRound64(syncDecision.deltaSeconds * 1000.0))
+                    .arg(qRound64(syncDecision.toleranceSeconds * 1000.0))
+                    .arg(syncDecision.sustainedMs)
+                    .arg(playbackRate_, 0, 'f', 3)
+                    .arg(videoDecodePreferSoftware_ ? QStringLiteral("software")
+                                                    : QStringLiteral("hardware")));
+        }
+        if (syncDecision.action == miacode::preview::video_sync::Action::Reanchor) {
+            const qint64 targetMs = qMax<qint64>(
+                0, qRound64((lastTimelineSecond_ + timelineOffsetSeconds_) * 1000.0));
+            lastSeekMs_ = targetMs;
+            player_->seek(targetMs);
+            player_->play();
+            videoSyncSuppressedUntilMs_ = nowMs + 1000;
+            if (videoFrameElapsed_.isValid()) {
+                videoFrameElapsed_.restart();
+            }
+            appendPreviewStageMediaLog(
+                QStringLiteral("steady_sync_reanchor"),
+                QString("txn=%1 target_media_ms=%2 target_chart_ms=%3 frame_pts_ms=%4 video_chart_ms=%5 "
+                        "player_ms=%6 delta_ms=%7 tolerance_ms=%8 sustained_ms=%9 rate=%10 decode=%11")
+                    .arg(playbackTransactionId_)
+                    .arg(targetMs)
+                    .arg(qRound64(lastTimelineSecond_ * 1000.0))
+                    .arg(qRound64(lastFramePtsSeconds_ * 1000.0))
+                    .arg(qRound64(syncObservation.videoSecond * 1000.0))
+                    .arg(player_->position())
+                    .arg(qRound64(syncDecision.deltaSeconds * 1000.0))
+                    .arg(qRound64(syncDecision.toleranceSeconds * 1000.0))
+                    .arg(syncDecision.sustainedMs)
+                    .arg(playbackRate_, 0, 'f', 3)
+                    .arg(videoDecodePreferSoftware_ ? QStringLiteral("software")
+                                                    : QStringLiteral("hardware")));
+            transitioned = true;
+        }
         updateClockDelta();
         const bool stallStateChanged = updateVideoFrameStallState(true);
         // Steady-state syncPlayback runs every preview tick (~60/s); only emit
@@ -895,6 +974,7 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
 
 void PreviewStageMediaHost::pausePlayback()
 {
+    resetVideoSyncCorrection();
     observedPlayheadSecond_ = currentPlaybackSecond();
     recordPvMemoryBoundary(PvMemoryBoundary::Pause);
 #ifndef HAVE_QT_MULTIMEDIA

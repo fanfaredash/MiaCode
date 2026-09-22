@@ -95,6 +95,9 @@ only these repeat families:
   → **runtime** log. So: video decode / PV playback / decode-toggle ⇒ grep `miacode_audio_debug.log`;
   hwframe / seek / summary ⇒ grep `miacode_runtime_debug.log`. (Grepping the runtime log for decode
   activity finds only the `runtime/app_shutdown/...stage_media_host` teardown lines — looks like "nothing logged.")
+  Steady PV synchronization adds a rate-limited `steady_sync_sample` line (audio target, raw frame
+  PTS, chart-aligned video second, player position, delta/tolerance/rate/decode mode) and one
+  `steady_sync_reanchor` line per actual correction in this same Audio channel.
 
 ## 2. The env-flag situation (audit 2026-05-29)
 

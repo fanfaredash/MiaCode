@@ -632,6 +632,9 @@ void PreviewStageMediaHost::handleDecodedVideoFrame(const QVideoFrame& frame,
     if (ptsSeconds >= 0.0) {
         lastFramePtsSeconds_ = ptsSeconds;
     }
+    if (qIsFinite(durationSeconds) && durationSeconds > 0.0) {
+        lastFrameDurationSeconds_ = durationSeconds;
+    }
     if (videoSink_ != nullptr) {
         videoSink_->setVideoFrame(frame);
     }

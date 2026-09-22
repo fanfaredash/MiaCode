@@ -420,6 +420,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/runtime/PreviewStageMediaHost_Playback.cpp
     src/preview/runtime/PreviewStageMediaHost_Diagnostics.cpp
     src/preview/runtime/PreviewStageMediaHost_Timeout.cpp
+    src/core/video/PreviewVideoSyncPolicy.h
+    src/core/video/PreviewVideoSyncPolicy.cpp
     src/preview/runtime/PvMemoryDiagnostics.h
     src/preview/runtime/PvMemoryDiagnostics.cpp
     src/preview/runtime/PreviewSharedD3D11Device.h
@@ -1541,6 +1543,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/video/PreviewEndOfMediaPolicy.h
         LIBS Qt6::Core
         INCLUDES src src/common src/core/video
+    )
+
+    miacode_add_dev_tool(preview_video_sync_policy_spec TEST
+        SOURCES
+            src/tools/preview/PreviewVideoSyncPolicySpec.cpp
+            src/core/video/PreviewVideoSyncPolicy.h
+            src/core/video/PreviewVideoSyncPolicy.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/core/video
     )
 
     miacode_add_dev_tool(preview_firework_warmup_policy_spec TEST

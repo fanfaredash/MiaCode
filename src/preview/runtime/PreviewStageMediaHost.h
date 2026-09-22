@@ -3,6 +3,7 @@
 #include "common/LogEmissionPolicy.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "core/video/PreviewRenderSettings.h"
+#include "core/video/PreviewVideoSyncPolicy.h"
 #include "preview/runtime/PvMemoryDiagnostics.h"
 
 #include <QElapsedTimer>
@@ -183,6 +184,7 @@ private:
                                      qint64 initialFrameCount,
                                      qint64 ageMs);
     void updateClockDelta();
+    void resetVideoSyncCorrection();
     void noteVideoFrameArrived(const QVideoFrame& frame, quint64 sourceGeneration);
     // The inner-circle VideoOutput is only rendered in InnerCircleFitOuterFill
     // (background scale mode 3); in every other mode it is bound but invisible,
@@ -296,6 +298,7 @@ private:
     bool videoBackendLoaded_ = false;
     bool softwareDecodeFallbackTried_ = false;
     double lastFramePtsSeconds_ = -1.0;
+    double lastFrameDurationSeconds_ = 0.0;
     // Latest decoded frame, replayed into the QML sink when a VideoOutput
     // attaches after decoding has already produced frames (e.g. paused bg) —
     // the push model has no continuous source to re-pull from like
@@ -354,6 +357,10 @@ private:
     bool videoPlaybackPendingStart_ = false;
     double observedPlayheadSecond_ = 0.0;
     double clockDeltaSeconds_ = 0.0;
+    miacode::preview::video_sync::Policy videoSyncPolicy_;
+    QElapsedTimer videoSyncClock_;
+    qint64 videoSyncSuppressedUntilMs_ = 0;
+    qint64 lastVideoSyncSampleLogMs_ = -1;
     QElapsedTimer videoFrameElapsed_;
     QElapsedTimer videoPlaybackActiveElapsed_;
     QVector<double> videoFrameIntervalsMs_;

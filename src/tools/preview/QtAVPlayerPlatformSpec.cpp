@@ -157,6 +157,18 @@ int main()
                       QStringLiteral("lastSeekMs_ = targetMs;\n    player_->setPosition(targetMs);"),
                   }),
                   QStringLiteral("prepared playback commit skips only a confirmed QtAV landing and always seeks the fallback backend"), err);
+    ok &= require(containsAll(playback, {
+                      QStringLiteral("videoSyncPolicy_.observe(syncObservation)"),
+                      QStringLiteral("lastFramePtsSeconds_ - timelineOffsetSeconds_"),
+                      QStringLiteral("!pausedSeekCompletionPending_"),
+                      QStringLiteral("!preparedPlaybackPending_"),
+                      QStringLiteral("!staleEndOfMediaResumePending_"),
+                      QStringLiteral("syncDecision.action == miacode::preview::video_sync::Action::Reanchor"),
+                      QStringLiteral("steady_sync_sample"),
+                      QStringLiteral("steady_sync_reanchor"),
+                      QStringLiteral("videoSyncSuppressedUntilMs_ = nowMs + 1000"),
+                  }),
+                  QStringLiteral("QtAV steady playback uses displayed-frame PTS with bounded reanchor suppression"), err);
 
     if (ok) {
         out << "QtAVPlayer platform spec passed." << Qt::endl;
