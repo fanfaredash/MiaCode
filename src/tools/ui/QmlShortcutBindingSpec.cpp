@@ -144,7 +144,7 @@ int main(int argc, char** argv)
     QString mirrorResult;
     for (const miacode::ui::ChartTransformSpec& spec : miacode::ui::chartTransformSpecs()) {
         if (spec.id == QStringLiteral("transform.mirror_lr") && spec.apply) {
-            mirrorResult = spec.apply(sample, QString(), &mirrored);
+            mirrorResult = spec.apply(sample, {}, &mirrored);
         }
     }
     expect(mirrored > 0 && mirrorResult != sample,
@@ -175,6 +175,28 @@ int main(int argc, char** argv)
     }
     expect(clashes.isEmpty(),
            QStringLiteral("no menu standard key collides with a rebindable command"),
+           out, &failed);
+
+    // ⌘⇧= on a US or 拼音 layout reaches Qt as both Ctrl+Shift+= (the key plus
+    // Shift) and Ctrl++ (the character Shift made), and two bindings matched by
+    // one press are reported as ambiguous and fire nothing. Ctrl++ alone is
+    // reached by that press, by an unshifted + key (German and similar
+    // layouts) and by the keypad +, so it is the half-step default and
+    // Ctrl+Shift+= must not come back as anyone's.
+    const auto& registry = miacode::ui::ShortcutRegistry::instance();
+    QStringList shiftedEqualsDefaults;
+    for (const auto& definition : registry.editableShortcuts()) {
+        if (registry.defaultShortcutText(definition.id) == QStringLiteral("Ctrl+Shift+=")) {
+            shiftedEqualsDefaults.append(definition.id);
+        }
+    }
+    if (!shiftedEqualsDefaults.isEmpty()) {
+        out << "  Ctrl+Shift+= defaults: " << shiftedEqualsDefaults.join(QStringLiteral(", ")) << '\n';
+    }
+    expect(registry.defaultShortcutText(QStringLiteral("transform.subdivision_half_up"))
+                   == QStringLiteral("Ctrl++")
+               && shiftedEqualsDefaults.isEmpty(),
+           QStringLiteral("subdivision +1/2 defaults to Ctrl++ and no default also claims its Ctrl+Shift+= twin"),
            out, &failed);
 
     if (failed != 0) {
