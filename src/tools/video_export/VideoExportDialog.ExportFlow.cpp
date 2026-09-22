@@ -49,6 +49,7 @@
 #include <QPaintEvent>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QPlainTextEdit>
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -57,6 +58,7 @@
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QTabWidget>
+#include <QTextEdit>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -95,6 +97,40 @@ VideoExportShortcutAction matchVideoExportShortcut(const QKeyEvent* event)
         return VideoExportShortcutAction::TogglePlayPause;
     }
     return VideoExportShortcutAction::None;
+}
+
+bool editableTextInputOwnsSpace(const VideoExportDialog* dialog)
+{
+    if (dialog == nullptr) {
+        return false;
+    }
+    QWidget* focus = QApplication::focusWidget();
+    if (focus == nullptr || !(focus == dialog || dialog->isAncestorOf(focus))) {
+        return false;
+    }
+    for (QWidget* widget = focus; widget != nullptr; widget = widget->parentWidget()) {
+        if (const auto* edit = qobject_cast<const QLineEdit*>(widget)) {
+            return !edit->isReadOnly();
+        }
+        if (const auto* edit = qobject_cast<const QTextEdit*>(widget)) {
+            return !edit->isReadOnly();
+        }
+        if (const auto* edit = qobject_cast<const QPlainTextEdit*>(widget)) {
+            return !edit->isReadOnly();
+        }
+        if (const auto* spin = qobject_cast<const QAbstractSpinBox*>(widget)) {
+            return !spin->isReadOnly();
+        }
+        if (const auto* combo = qobject_cast<const QComboBox*>(widget)) {
+            return combo->isEditable()
+                && combo->lineEdit() != nullptr
+                && !combo->lineEdit()->isReadOnly();
+        }
+        if (widget == dialog) {
+            break;
+        }
+    }
+    return false;
 }
 
 QString resolveOutputPathForExport(const QString& outputPath, const QString& baseDirectory)
@@ -1221,22 +1257,40 @@ bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)
         }
     }
     if (event != nullptr && UiDialogs::dialogOwnsPreviewShortcutScope(this)) {
+        auto* keyEvent = event->type() == QEvent::ShortcutOverride
+                || event->type() == QEvent::KeyPress
+                || event->type() == QEvent::KeyRelease
+            ? static_cast<QKeyEvent*>(event)
+            : nullptr;
+        const VideoExportShortcutAction shortcutAction = matchVideoExportShortcut(keyEvent);
+        const bool textInputOwnsSpace = shortcutAction == VideoExportShortcutAction::TogglePlayPause
+            && keyEvent != nullptr
+            && keyEvent->modifiers() == Qt::NoModifier
+            && keyEvent->key() == Qt::Key_Space
+            && editableTextInputOwnsSpace(this);
         if (event->type() == QEvent::ShortcutOverride) {
-            auto* keyEvent = static_cast<QKeyEvent*>(event);
-            if (matchVideoExportShortcut(keyEvent) != VideoExportShortcutAction::None) {
+            if (textInputOwnsSpace) {
+                // Claim the override so QuickShell's application-wide Space
+                // shortcut cannot run, then let the focused editor receive
+                // the actual key press/release and insert the character.
+                event->accept();
+                return false;
+            }
+            if (shortcutAction != VideoExportShortcutAction::None) {
                 event->accept();
                 return true;
             }
         }
         if (event->type() == QEvent::KeyPress) {
-            auto* keyEvent = static_cast<QKeyEvent*>(event);
-            const VideoExportShortcutAction action = matchVideoExportShortcut(keyEvent);
-            if (action != VideoExportShortcutAction::None) {
+            if (textInputOwnsSpace) {
+                return false;
+            }
+            if (shortcutAction != VideoExportShortcutAction::None) {
                 if (keyEvent->isAutoRepeat()) {
                     event->accept();
                     return true;
                 }
-                switch (action) {
+                switch (shortcutAction) {
                 case VideoExportShortcutAction::TogglePlayPause:
                     handlePreviewPlayPauseShortcut();
                     break;
@@ -1251,8 +1305,10 @@ bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)
             }
         }
         if (event->type() == QEvent::KeyRelease) {
-            auto* keyEvent = static_cast<QKeyEvent*>(event);
-            if (matchVideoExportShortcut(keyEvent) != VideoExportShortcutAction::None) {
+            if (textInputOwnsSpace) {
+                return false;
+            }
+            if (shortcutAction != VideoExportShortcutAction::None) {
                 event->accept();
                 return true;
             }

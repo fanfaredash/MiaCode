@@ -566,6 +566,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `#EmbeddedExportFooterRule` hairline; the 片头 tab's live `IntroPreviewWidget` is DELETED in
   embedded mode (tallest content, sacrificed so every tab fits without scrolling at default
   window sizes); tabs restyled by `UiTheme::embeddedExportTabStyleSheet` (flat underline).
+  Its application-level shortcut filter gives editable text controls ownership of unmodified
+  Space: `ShortcutOverride` is accepted to block QuickShell's application-wide play shortcut,
+  while the following key press/release are left to the editor. Outside editable text, Space and
+  the explicit `Ctrl+Shift+C/X` preview shortcuts retain their existing behavior.
   **D6 OVERTURNED 2026-06-12:** no UI entrance opens the modal form anymore — the Tools-menu
   「导出谱面」 action now jumps to this page (`MainWindow::onExportPreviewVideo` wrapper deleted;
   `ExportSection::onExportPreviewVideo` kept in code as the unreachable modal twin). Prefs
