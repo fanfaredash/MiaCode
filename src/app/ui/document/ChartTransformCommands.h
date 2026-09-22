@@ -15,16 +15,18 @@ namespace miacode::ui {
 // registry directly — a typo used to yield a silently inert shortcut.
 //
 // `apply` transforms the selected text. The four subdivision operations also
-// need the text that follows the selection: a duration written before the
-// selection ends can only be adjusted correctly if the tail it applies to is
-// visible. An empty `apply` marks the one operation that must see the whole
-// text and the range instead (一键清空), because whether an element is complete
-// depends on the line it sits in. The same whole-text path is used by reset
-// tap notes, which preserves directives and timing skeletons while replacing
-// each complete selected element.
+// need the text around the selection: the {N} governing its first beats may be
+// written before it, and a duration written before the selection ends can only
+// be adjusted correctly if the tail it applies to is visible. An empty `apply`
+// marks the one operation that must see the whole text and the range instead
+// (一键清空), because whether an element is complete depends on the line it
+// sits in. The same whole-text path is used by reset tap notes, which preserves
+// directives and timing skeletons while replacing each complete selected
+// element.
 struct ChartTransformSpec {
     QString id;
-    std::function<QString(const QString& selection, const QString& suffix, int* changed)> apply;
+    std::function<QString(
+        const QString& selection, const chart_transform::SelectionContext& context, int* changed)> apply;
     // Catalog id for the menu row, so the shortcut editor, the menubar and the
     // editor's context menu all name an operation the same way.
     QString labelKey;
@@ -38,18 +40,18 @@ inline QVector<ChartTransformSpec> chartTransformSpecs()
     namespace transform = miacode::chart_transform;
     using transform::ChartTransformOp;
     const auto plain = [](ChartTransformOp op) {
-        return [op](const QString& selection, const QString&, int* changed) {
+        return [op](const QString& selection, const transform::SelectionContext&, int* changed) {
             return transform::transformChartSelectionText(selection, op, changed);
         };
     };
     const auto selectionOnly = [](QString (*fn)(const QString&, int*)) {
-        return [fn](const QString& selection, const QString&, int* changed) {
+        return [fn](const QString& selection, const transform::SelectionContext&, int* changed) {
             return fn(selection, changed);
         };
     };
-    const auto withSuffix = [](QString (*fn)(const QString&, const QString&, int*)) {
-        return [fn](const QString& selection, const QString& suffix, int* changed) {
-            return fn(selection, suffix, changed);
+    const auto withContext = [](QString (*fn)(const QString&, const transform::SelectionContext&, int*)) {
+        return [fn](const QString& selection, const transform::SelectionContext& context, int* changed) {
+            return fn(selection, context, changed);
         };
     };
     return {
@@ -69,16 +71,16 @@ inline QVector<ChartTransformSpec> chartTransformSpecs()
          plain(ChartTransformOp::Rotate45Clockwise),
          QStringLiteral("action.transform.rotate_cw_45"), 0},
         {QStringLiteral("transform.subdivision_up"),
-         withSuffix(&transform::raiseSubdivisionForSelection),
+         withContext(&transform::raiseSubdivisionForSelection),
          QStringLiteral("document.subdivision_plus_1"), 1},
         {QStringLiteral("transform.subdivision_down"),
-         withSuffix(&transform::lowerSubdivisionForSelection),
+         withContext(&transform::lowerSubdivisionForSelection),
          QStringLiteral("document.subdivision_minus_1"), 1},
         {QStringLiteral("transform.subdivision_half_up"),
-         withSuffix(&transform::raiseSubdivisionHalfStepForSelection),
+         withContext(&transform::raiseSubdivisionHalfStepForSelection),
          QStringLiteral("document.subdivision_plus_half"), 1},
         {QStringLiteral("transform.subdivision_half_down"),
-         withSuffix(&transform::lowerSubdivisionHalfStepForSelection),
+         withContext(&transform::lowerSubdivisionHalfStepForSelection),
          QStringLiteral("document.subdivision_minus_half"), 1},
         {QStringLiteral("transform.clear_complete_elements"),
          {},
@@ -96,7 +98,7 @@ inline QVector<ChartTransformSpec> chartTransformSpecs()
          selectionOnly(&transform::toggleFireworkForSelection),
          QStringLiteral("action.transform.toggle_firework"), 3},
         {QStringLiteral("transform.random_rotate"),
-         [](const QString& selection, const QString&, int* changed) {
+         [](const QString& selection, const transform::SelectionContext&, int* changed) {
              return transform::randomRotateForSelection(selection, changed);
          },
          QStringLiteral("action.transform.random_rotate"), 3},

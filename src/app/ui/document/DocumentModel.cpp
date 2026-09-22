@@ -1903,7 +1903,7 @@ QVariantMap DocumentModel::transformChartSelection(
     int changed = 0;
     QString replacement;
     if (spec->apply) {
-        replacement = spec->apply(selected, text.mid(end), &changed);
+        replacement = spec->apply(selected, {text.left(begin), text.mid(end)}, &changed);
     } else {
         const QString transformedFull =
             opId == QStringLiteral("transform.reset_tap_notes")
