@@ -474,7 +474,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     ShortcutRegistry::instance().applyShortcuts(
         owner_.transformRaiseSubdivisionHalfStepAction_,
         QStringLiteral("transform.subdivision_half_up"),
-        {QKeySequence(QStringLiteral("Ctrl+Shift+=")), QKeySequence(QStringLiteral("Ctrl++"))});
+        {QKeySequence(QStringLiteral("Ctrl++"))});
     connect(owner_.transformRaiseSubdivisionHalfStepAction_, &QAction::triggered, &owner_, &MainWindow::onRaiseSubdivisionHalfStepSelection);
     transformMenu->addAction(owner_.transformRaiseSubdivisionHalfStepAction_);
 
@@ -484,7 +484,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     ShortcutRegistry::instance().applyShortcuts(
         owner_.transformLowerSubdivisionHalfStepAction_,
         QStringLiteral("transform.subdivision_half_down"),
-        {QKeySequence(QStringLiteral("Ctrl+Shift+-")), QKeySequence(QStringLiteral("Ctrl+_"))});
+        {QKeySequence(QStringLiteral("Ctrl+Shift+-"))});
     connect(owner_.transformLowerSubdivisionHalfStepAction_, &QAction::triggered, &owner_, &MainWindow::onLowerSubdivisionHalfStepSelection);
     transformMenu->addAction(owner_.transformLowerSubdivisionHalfStepAction_);
     transformMenu->addSeparator();

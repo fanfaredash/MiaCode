@@ -390,10 +390,14 @@ bool matchesShortcutId(const QKeyEvent* event, const QString& id, const QList<QK
         if (!sequence.isEmpty() && pressed == sequence) {
             return true;
         }
+        // A raw key event spells one keystroke several ways: ⌘⇧= arrives as
+        // Ctrl+Shift++ (Ctrl+Shift+= when synthesized), an unshifted + or the
+        // keypad + as Ctrl++. Either binding spelling accepts all of them.
         const QString portable = sequence.toString(QKeySequence::PortableText);
-        if (portable == QStringLiteral("Ctrl+Shift+=")
+        if ((portable == QStringLiteral("Ctrl+Shift+=") || portable == QStringLiteral("Ctrl++"))
             && (pressed == QKeySequence(QStringLiteral("Ctrl++"))
-                || pressed == QKeySequence(QStringLiteral("Ctrl+Shift++")))) {
+                || pressed == QKeySequence(QStringLiteral("Ctrl+Shift++"))
+                || pressed == QKeySequence(QStringLiteral("Ctrl+Shift+=")))) {
             return true;
         }
         if (portable == QStringLiteral("Ctrl+Shift+-")
@@ -456,7 +460,7 @@ bool PlainCodeEditor::event(QEvent* event)
             || matchesShortcutId(
                 keyEvent,
                 QStringLiteral("transform.subdivision_half_up"),
-                {QKeySequence(QStringLiteral("Ctrl+Shift+=")), QKeySequence(QStringLiteral("Ctrl++"))})
+                {QKeySequence(QStringLiteral("Ctrl++"))})
             || matchesShortcutId(
                 keyEvent,
                 QStringLiteral("transform.subdivision_half_down"),
@@ -805,7 +809,7 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     if (matchesShortcutId(
             event,
             QStringLiteral("transform.subdivision_half_up"),
-            {QKeySequence(QStringLiteral("Ctrl+Shift+=")), QKeySequence(QStringLiteral("Ctrl++"))})) {
+            {QKeySequence(QStringLiteral("Ctrl++"))})) {
         emit raiseSubdivisionHalfStepShortcutRequested();
         event->accept();
         return;
@@ -813,7 +817,7 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     if (matchesShortcutId(
             event,
             QStringLiteral("transform.subdivision_half_down"),
-            {QKeySequence(QStringLiteral("Ctrl+Shift+-")), QKeySequence(QStringLiteral("Ctrl+_"))})) {
+            {QKeySequence(QStringLiteral("Ctrl+Shift+-"))})) {
         emit lowerSubdivisionHalfStepShortcutRequested();
         event->accept();
         return;

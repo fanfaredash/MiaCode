@@ -113,31 +113,6 @@ QJsonValue sequenceJsonValue(const QStringList& shortcuts)
     return array;
 }
 
-QList<QKeySequence> runtimeSequencesForAction(const QList<QKeySequence>& sequences)
-{
-    QList<QKeySequence> expanded;
-    const auto appendUnique = [&expanded](const QKeySequence& sequence) {
-        if (!sequence.isEmpty() && !expanded.contains(sequence)) {
-            expanded.append(sequence);
-        }
-    };
-    for (const QKeySequence& sequence : sequences) {
-        appendUnique(sequence);
-        const QString portable = sequence.toString(QKeySequence::PortableText);
-        if (portable == QStringLiteral("Ctrl+Shift+=")) {
-            appendUnique(QKeySequence(QStringLiteral("Ctrl++")));
-        } else if (portable == QStringLiteral("Ctrl++")) {
-            appendUnique(QKeySequence(QStringLiteral("Ctrl+Shift+=")));
-        } else if (portable == QStringLiteral("Ctrl+Shift+-")) {
-            appendUnique(QKeySequence(QStringLiteral("Ctrl+_")));
-            appendUnique(QKeySequence(QStringLiteral("Ctrl+Shift+_")));
-        } else if (portable == QStringLiteral("Ctrl+_") || portable == QStringLiteral("Ctrl+Shift+_")) {
-            appendUnique(QKeySequence(QStringLiteral("Ctrl+Shift+-")));
-        }
-    }
-    return expanded;
-}
-
 QStringList shortcutTextsFromKeySequences(const QList<QKeySequence>& sequences)
 {
     QStringList texts;
@@ -264,7 +239,7 @@ void ShortcutRegistry::applyShortcut(QAction* action, const QString& id, const Q
         return;
     }
     const QKeySequence matched = sequence(id, fallback);
-    action->setShortcuts(runtimeSequencesForAction(matched.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{matched}));
+    action->setShortcuts(matched.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{matched});
 }
 
 void ShortcutRegistry::applyShortcuts(
@@ -275,7 +250,10 @@ void ShortcutRegistry::applyShortcuts(
     if (action == nullptr) {
         return;
     }
-    action->setShortcuts(runtimeSequencesForAction(sequences(id, fallback)));
+    // Bind exactly what was configured. ⌘⇧= reaches Qt as both Ctrl+Shift+=
+    // and Ctrl++, so an action also holding the other spelling is matched
+    // twice by one press, reported as ambiguous, and never triggers.
+    action->setShortcuts(sequences(id, fallback));
 }
 
 void ShortcutRegistry::applyShortcut(QShortcut* shortcut, const QString& id, const QKeySequence& fallback) const

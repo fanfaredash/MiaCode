@@ -4,7 +4,9 @@
 #include "editor/TouchPadAuthoringEdit.h"
 #include "common/AdoptedSurfaceDragAutoScroll.h"
 #include "common/AdoptedWidgetCoordinates.h"
+#include "app/ui/ShortcutRegistry.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QCursor>
 #include <QFocusEvent>
@@ -608,6 +610,35 @@ int main(int argc, char** argv)
         QStringLiteral("Ctrl+Shift+_ key press is forwarded as Ctrl+Shift+- by PlainCodeEditor"),
         out,
         &failed);
+    // ⌘⇧= arrives as Key_Plus with Shift held on US and 拼音 layouts, while an
+    // unshifted + key and the keypad + arrive as Ctrl++. All of them are the
+    // half-step raise, whichever of the two spellings it is bound under.
+    QKeyEvent raiseHalfPlusKey(QEvent::KeyPress, Qt::Key_Plus, Qt::ControlModifier | Qt::ShiftModifier, QStringLiteral("+"));
+    QApplication::sendEvent(&editor, &raiseHalfPlusKey);
+    QKeyEvent raiseHalfKeypadPlusKey(QEvent::KeyPress, Qt::Key_Plus, Qt::ControlModifier | Qt::KeypadModifier, QStringLiteral("+"));
+    QApplication::sendEvent(&editor, &raiseHalfKeypadPlusKey);
+    expect(
+        raiseHalfShortcutCount == 3 && raiseHalfPlusKey.isAccepted() && raiseHalfKeypadPlusKey.isAccepted(),
+        QStringLiteral("Ctrl+Shift++ and keypad Ctrl++ key presses are forwarded as +1/2 by PlainCodeEditor"),
+        out,
+        &failed);
+    // One press of ⌘⇧= reaches Qt as both Ctrl+Shift+= and Ctrl++, so a QAction
+    // holding both spellings is matched twice; Qt reports that as ambiguous and
+    // triggers nothing. The registry must bind the one spelling it was given.
+    {
+        QAction halfUpAction;
+        ShortcutRegistry::instance().applyShortcuts(
+            &halfUpAction, QStringLiteral("spec.subdivision_half_up"), {QKeySequence(QStringLiteral("Ctrl++"))});
+        QAction halfDownAction;
+        ShortcutRegistry::instance().applyShortcuts(
+            &halfDownAction, QStringLiteral("spec.subdivision_half_down"), {QKeySequence(QStringLiteral("Ctrl+Shift+-"))});
+        expect(
+            halfUpAction.shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Ctrl++"))}
+                && halfDownAction.shortcuts() == QList<QKeySequence>{QKeySequence(QStringLiteral("Ctrl+Shift+-"))},
+            QStringLiteral("a QAction bound through the registry never holds both spellings of one keystroke"),
+            out,
+            &failed);
+    }
     {
         PlainCodeEditor clickEditor;
         clickEditor.resize(480, 240);

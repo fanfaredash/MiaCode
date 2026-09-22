@@ -73,7 +73,7 @@
       "label_key": "document.subdivision_plus_half",
       "label_zh": "分音提升半档",
       "label_en": "Subdivision +1/2",
-      "default": ["Ctrl+Shift+=", "Ctrl++"],
+      "default": "Ctrl++",
       "context": "application",
       "owner": "MainWindow.BootstrapAndMenus"
     },

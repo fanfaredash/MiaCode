@@ -860,11 +860,11 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
     applyConfiguredShortcutList(
         owner_.transformRaiseSubdivisionHalfStepAction_,
         QStringLiteral("transform.subdivision_half_up"),
-        {QKeySequence(QStringLiteral("Ctrl+Shift+=")), QKeySequence(QStringLiteral("Ctrl++"))});
+        {QKeySequence(QStringLiteral("Ctrl++"))});
     applyConfiguredShortcutList(
         owner_.transformLowerSubdivisionHalfStepAction_,
         QStringLiteral("transform.subdivision_half_down"),
-        {QKeySequence(QStringLiteral("Ctrl+Shift+-")), QKeySequence(QStringLiteral("Ctrl+_"))});
+        {QKeySequence(QStringLiteral("Ctrl+Shift+-"))});
     applyConfiguredShortcut(
         owner_.transformToggleBreakAction_,
         QStringLiteral("transform.toggle_break"),
