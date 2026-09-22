@@ -14,7 +14,7 @@ public:
     bool quickShellRootWindowFrameGeometryAvailable() const;
     QRect quickShellRootWindowFrameGeometry() const;
     void setQuickShellRootWindow(QWindow* window);
-    void cancelChartAudioDrop();
+    void cancelChartDrop();
     bool confirmShellClose();
     void toggleShellPreviewPlayback();
     void stopShellPreview();
@@ -141,7 +141,7 @@ private:
     void restoreFocusedTextEditState();
     void restoreFocusedTextEditStateAttempt(QPointer<QTextEdit> target, int savedAnchor, int savedPosition, int attempt);
     void clearFocusedTextEditState();
-    bool handleChartAudioDropEvent(QObject* watched, QEvent* event);
+    bool handleChartDropEvent(QObject* watched, QEvent* event);
     void scheduleChartDropOverlayHide();
     void cancelChartDropOverlayHide();
     void setChartDropOverlayVisible(bool visible);

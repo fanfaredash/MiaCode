@@ -59,6 +59,15 @@ ChartDropOverlay::ChartDropOverlay()
     setWindowFlag(Qt::WindowStaysOnTopHint, false);
 }
 
+void ChartDropOverlay::setMode(Mode mode)
+{
+    if (mode_ == mode) {
+        return;
+    }
+    mode_ = mode;
+    update();
+}
+
 void ChartDropOverlay::showForWindow(QWindow* target)
 {
     if (target == nullptr || !target->isVisible() || target->visibility() == QWindow::Minimized) {
@@ -128,13 +137,23 @@ void ChartDropOverlay::paintEvent(QPaintEvent*)
     font.setPointSizeF(qBound(11.0, card.width() / 34.0, 15.0));
     font.setWeight(QFont::DemiBold);
     painter.setFont(font);
+    const QString titleKey = mode_ == Mode::OpenChart
+        ? QStringLiteral("drop_chart.open_chart")
+        : (mode_ == Mode::InvalidSelection
+               ? QStringLiteral("drop_chart.invalid_selection")
+               : QStringLiteral("drop_chart.create_chart_file"));
+    const QString hintKey = mode_ == Mode::OpenChart
+        ? QStringLiteral("drop_chart.open_hint")
+        : (mode_ == Mode::InvalidSelection
+               ? QStringLiteral("drop_chart.invalid_selection_hint")
+               : QStringLiteral("drop_chart.drop_hint"));
     painter.drawText(card.adjusted(18, iconSize + 38, -18, -54), Qt::AlignCenter,
-        UiText::text(QStringLiteral("drop_chart.create_chart_file")));
+        UiText::text(titleKey));
     font.setPointSizeF(qBound(9.0, card.width() / 48.0, 11.0));
     font.setWeight(QFont::Normal);
     font.setLetterSpacing(QFont::PercentageSpacing, 102.0);
     painter.setFont(font);
     painter.setPen(secondaryText);
     painter.drawText(card.adjusted(18, card.height() - 50, -18, -20), Qt::AlignCenter,
-        UiText::text(QStringLiteral("drop_chart.drop_hint")));
+        UiText::text(hintKey));
 }

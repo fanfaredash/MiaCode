@@ -308,6 +308,17 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
             }
         }
     );
+    QObject::connect(
+        backend_.get(),
+        &MainWindow::chartDropOverlayModeChanged,
+        this,
+        [this](int mode) {
+            if (chartDropOverlay_ == nullptr) {
+                return;
+            }
+            chartDropOverlay_->setMode(static_cast<ChartDropOverlay::Mode>(mode));
+        }
+    );
     styleBridge_ = std::make_unique<QuickShellStyleBridge>(backend_.get(), surfaceHost_.get(), this);
     appendQuickShellRuntimeLog(QStringLiteral("style_bridge_ready"));
     if (surfaceHost_ != nullptr && styleBridge_ != nullptr) {
@@ -654,7 +665,7 @@ void QuickShellBootstrap::syncChartDropOverlay()
     // target. Do not keep the overlay alive after the native drag input ends.
     if (!dragInputStillActive() || nativeDragCancelKeyPressed()) {
         if (backend_ != nullptr) {
-            backend_->cancelChartAudioDrop();
+            backend_->cancelChartDrop();
         } else {
             chartDropOverlay_->hideOverlay();
         }
@@ -662,7 +673,7 @@ void QuickShellBootstrap::syncChartDropOverlay()
     }
     if (!cursorIsOverQuickShellRoot()) {
         if (backend_ != nullptr) {
-            backend_->cancelChartAudioDrop();
+            backend_->cancelChartDrop();
         } else {
             chartDropOverlay_->hideOverlay();
         }
@@ -689,7 +700,7 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
     if (chartDropOverlay_ != nullptr && watched == chartDropOverlay_.get()
         && (event->type() == QEvent::DragLeave || event->type() == QEvent::Drop)
         && backend_ != nullptr) {
-        backend_->cancelChartAudioDrop();
+        backend_->cancelChartDrop();
     }
 
     if (watched == rootWindow_
@@ -699,7 +710,7 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
             || event->type() == QEvent::WindowStateChange)
         && chartDropOverlay_ != nullptr) {
         if (backend_ != nullptr) {
-            backend_->cancelChartAudioDrop();
+            backend_->cancelChartDrop();
         } else {
             chartDropOverlay_->hideOverlay();
         }

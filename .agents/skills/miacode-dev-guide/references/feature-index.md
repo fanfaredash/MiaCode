@@ -157,6 +157,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `loadDocument`) plus `MainWindow.DocumentUi.cpp` (`rebuildFieldSidebar`,
   `populateMetadataPage`, `populateDifficultyPage`). On Windows, `onOpenFile` uses
   `promptForSimaiFile` with the visible QuickShell root HWND as the native picker owner.
+- Runtime Explorer drop-open shares the existing application-wide/native-surface drop route in
+  `sections/window/MainWindow.WindowInteraction.cpp`. `app/ui/ChartDropPolicy` classifies exactly
+  one root `maidata.txt` (direct file or containing folder) versus the existing audio-to-new-chart
+  action; mixed/multiple chart actions are rejected. A chart drop runs
+  `maybeSaveBeforeContinue()` before the normal `openFileAtPath()` path.
 - Crash recovery + abnormal-exit autosave prompt: `src/common/CrashRecovery.{h,cpp}`
   (crash-handler snapshot → `<chart>.crash_recovery`; **per-instance session marker**
   `<AppConfigLocation>/sessions/session-<pid>.marker` — records `pid` + process `created`

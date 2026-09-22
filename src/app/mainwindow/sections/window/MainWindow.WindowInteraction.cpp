@@ -6,6 +6,8 @@
 #include "DialogLocalization.h"
 #include "ShortcutRegistry.h"
 #include "UiText.h"
+#include "app/ui/ChartDropOverlay.h"
+#include "app/ui/ChartDropPolicy.h"
 #include "common/DebugLog.h"
 #include "common/ChartAssetPaths.h"
 #include "common/OperationLog.h"
@@ -34,22 +36,17 @@ constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
 constexpr int kBottomTabsResizeHotzonePx = 8;
 
-QStringList supportedAudioPathsFromDrop(const QMimeData* mimeData)
+QStringList localPathsFromDrop(const QMimeData* mimeData)
 {
     QStringList paths;
     if (mimeData == nullptr || !mimeData->hasUrls()) {
         return paths;
     }
-    const QStringList extensions = miacode::chart_assets::supportedTrackFileExtensions();
     for (const QUrl& url : mimeData->urls()) {
         if (!url.isLocalFile()) {
             continue;
         }
-        const QFileInfo info(url.toLocalFile());
-        if (!info.isFile() || !extensions.contains(info.suffix().toLower())) {
-            continue;
-        }
-        const QString path = info.absoluteFilePath();
+        const QString path = QDir::cleanPath(url.toLocalFile());
         if (!paths.contains(path, Qt::CaseInsensitive)) {
             paths.append(path);
         }
@@ -602,13 +599,13 @@ void MainWindow::WindowSection::setQuickShellRootWindow(QWindow* window)
     UiDialogs::setApplicationDialogTransientParent(window);
 }
 
-void MainWindow::WindowSection::cancelChartAudioDrop()
+void MainWindow::WindowSection::cancelChartDrop()
 {
     cancelChartDropOverlayHide();
     setChartDropOverlayVisible(false);
 }
 
-bool MainWindow::WindowSection::handleChartAudioDropEvent(QObject* watched, QEvent* event)
+bool MainWindow::WindowSection::handleChartDropEvent(QObject* watched, QEvent* event)
 {
     if (event == nullptr) {
         return false;
@@ -636,8 +633,10 @@ bool MainWindow::WindowSection::handleChartAudioDropEvent(QObject* watched, QEve
         return false;
     }
 
-    const QStringList audioPaths = supportedAudioPathsFromDrop(dropEvent->mimeData());
-    if (audioPaths.isEmpty()) {
+    const miacode::chart_drop::Classification drop = miacode::chart_drop::classifyLocalPaths(
+        localPathsFromDrop(dropEvent->mimeData()),
+        miacode::chart_assets::supportedTrackFileExtensions());
+    if (drop.action == miacode::chart_drop::Action::None) {
         scheduleChartDropOverlayHide();
         return false;
     }
@@ -648,6 +647,12 @@ bool MainWindow::WindowSection::handleChartAudioDropEvent(QObject* watched, QEve
     }
 
     cancelChartDropOverlayHide();
+    const ChartDropOverlay::Mode overlayMode = drop.action == miacode::chart_drop::Action::OpenChart
+        ? ChartDropOverlay::Mode::OpenChart
+        : (drop.action == miacode::chart_drop::Action::Ambiguous
+               ? ChartDropOverlay::Mode::InvalidSelection
+               : ChartDropOverlay::Mode::CreateFromAudio);
+    emit owner_.chartDropOverlayModeChanged(static_cast<int>(overlayMode));
     if (eventType == QEvent::DragEnter) {
         static_cast<QDragEnterEvent*>(event)->acceptProposedAction();
     } else if (eventType == QEvent::DragMove) {
@@ -658,13 +663,29 @@ bool MainWindow::WindowSection::handleChartAudioDropEvent(QObject* watched, QEve
     if (eventType == QEvent::Drop) {
         static_cast<QDropEvent*>(event)->acceptProposedAction();
         setChartDropOverlayVisible(false);
-        const QStringList droppedPaths = audioPaths;
+        const miacode::chart_drop::Classification dropped = drop;
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("ui/chart_drop"),
-            QStringLiteral("drop_received file_count=%1").arg(droppedPaths.size()));
-        QTimer::singleShot(0, &owner_, [this, droppedPaths]() {
-            owner_.handleAudioDrop(droppedPaths);
+            QStringLiteral("drop_received action=%1 audio_count=%2")
+                .arg(static_cast<int>(dropped.action))
+                .arg(dropped.audioPaths.size()));
+        QTimer::singleShot(0, &owner_, [this, dropped]() {
+            if (dropped.action == miacode::chart_drop::Action::OpenChart) {
+                if (owner_.maybeSaveBeforeContinue()) {
+                    owner_.openFileAtPath(dropped.chartPath, true, true);
+                }
+                return;
+            }
+            if (dropped.action == miacode::chart_drop::Action::CreateChartsFromAudio) {
+                owner_.handleAudioDrop(dropped.audioPaths);
+                return;
+            }
+            UiDialogs::showMessageBox(
+                QMessageBox::Warning,
+                &owner_,
+                UiText::text(QStringLiteral("drop_chart.invalid_selection")),
+                UiText::text(QStringLiteral("drop_chart.invalid_selection_message")));
         });
     }
     return true;
@@ -717,7 +738,7 @@ void MainWindow::WindowSection::setChartDropOverlayVisible(bool visible)
 
 bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
 {
-    if (handleChartAudioDropEvent(watched, event)) {
+    if (handleChartDropEvent(watched, event)) {
         return true;
     }
     auto* watchedWidget = qobject_cast<QWidget*>(watched);

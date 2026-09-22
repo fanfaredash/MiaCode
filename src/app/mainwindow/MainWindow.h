@@ -149,6 +149,7 @@ public:
 
 signals:
     void chartDropOverlayVisibleChanged(bool visible);
+    void chartDropOverlayModeChanged(int mode);
 public:
     struct CliVideoExportRequest {
         QString chartPathOrDirectory;
@@ -193,7 +194,7 @@ public:
     bool openStartupTarget(const QString& path);
     bool openOnlinePreviewAtPath(const QString& path);
     void setQuickShellRootWindow(QWindow* window);
-    void cancelChartAudioDrop();
+    void cancelChartDrop();
     void handleAudioDrop(const QStringList& audioPaths);
     // Shows the first-run welcome / initial-config dialog (preview side +
     // theme). Called from QuickShellBootstrap after the UI is ready.

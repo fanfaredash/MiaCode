@@ -34,9 +34,9 @@ void MainWindow::setQuickShellRootWindow(QWindow* window)
     windowSection_->setQuickShellRootWindow(window);
 }
 
-void MainWindow::cancelChartAudioDrop()
+void MainWindow::cancelChartDrop()
 {
-    windowSection_->cancelChartAudioDrop();
+    windowSection_->cancelChartDrop();
 }
 
 bool MainWindow::confirmShellClose()

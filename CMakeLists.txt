@@ -209,6 +209,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/UiText.cpp
     src/app/ui/ChartDropOverlay.h
     src/app/ui/ChartDropOverlay.cpp
+    src/app/ui/ChartDropPolicy.h
+    src/app/ui/ChartDropPolicy.cpp
     src/app/ui/AppBackgroundSettings.h
     src/app/ui/AppBackgroundSettings.cpp
     src/app/ui/AppBackgroundPainter.h
@@ -2053,6 +2055,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/common/ChartAssetPaths.h
         LIBS Qt6::Core Qt6::Gui miniz
         INCLUDES src src/common src/tools
+    )
+
+    miacode_add_dev_tool(chart_drop_policy_spec TEST
+        SOURCES
+            src/tools/ui/ChartDropPolicySpec.cpp
+            src/app/ui/ChartDropPolicy.h
+            src/app/ui/ChartDropPolicy.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/app/ui
     )
 
     miacode_add_dev_tool(media_prepend_policy_spec TEST
