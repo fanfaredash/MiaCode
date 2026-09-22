@@ -700,8 +700,8 @@ void MainWindow::DocumentSection::onRaiseSubdivisionSelection()
     }
     applySelectionBatchTransform(
         UiText::text(QStringLiteral("document.subdivision_plus_1")),
-        [](const QString& text, const QString& suffixContext, int* changedCount) {
-            return miacode::chart_transform::raiseSubdivisionForSelection(text, suffixContext, changedCount);
+        [](const QString& text, const miacode::chart_transform::SelectionContext& context, int* changedCount) {
+            return miacode::chart_transform::raiseSubdivisionForSelection(text, context, changedCount);
         });
 }
 
@@ -715,8 +715,8 @@ void MainWindow::DocumentSection::onLowerSubdivisionSelection()
     }
     applySelectionBatchTransform(
         UiText::text(QStringLiteral("document.subdivision_minus_1")),
-        [](const QString& text, const QString& suffixContext, int* changedCount) {
-            return miacode::chart_transform::lowerSubdivisionForSelection(text, suffixContext, changedCount);
+        [](const QString& text, const miacode::chart_transform::SelectionContext& context, int* changedCount) {
+            return miacode::chart_transform::lowerSubdivisionForSelection(text, context, changedCount);
         });
 }
 
@@ -730,8 +730,8 @@ void MainWindow::DocumentSection::onRaiseSubdivisionHalfStepSelection()
     }
     applySelectionBatchTransform(
         UiText::text(QStringLiteral("document.subdivision_plus_half")),
-        [](const QString& text, const QString& suffixContext, int* changedCount) {
-            return miacode::chart_transform::raiseSubdivisionHalfStepForSelection(text, suffixContext, changedCount);
+        [](const QString& text, const miacode::chart_transform::SelectionContext& context, int* changedCount) {
+            return miacode::chart_transform::raiseSubdivisionHalfStepForSelection(text, context, changedCount);
         });
 }
 
@@ -745,8 +745,8 @@ void MainWindow::DocumentSection::onLowerSubdivisionHalfStepSelection()
     }
     applySelectionBatchTransform(
         UiText::text(QStringLiteral("document.subdivision_minus_half")),
-        [](const QString& text, const QString& suffixContext, int* changedCount) {
-            return miacode::chart_transform::lowerSubdivisionHalfStepForSelection(text, suffixContext, changedCount);
+        [](const QString& text, const miacode::chart_transform::SelectionContext& context, int* changedCount) {
+            return miacode::chart_transform::lowerSubdivisionHalfStepForSelection(text, context, changedCount);
         });
 }
 

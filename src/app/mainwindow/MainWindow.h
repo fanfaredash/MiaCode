@@ -35,6 +35,7 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "extensions/ExtensionManager.h"
 #include "app/ui/AppBackgroundSettings.h"
+#include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 
 class QAction;
@@ -361,7 +362,8 @@ public:
     };
 private:
     using BatchTransform = std::function<QString(const QString&, int*)>;
-    using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
+    using SelectionContextBatchTransform = std::function<QString(
+        const QString&, const miacode::chart_transform::SelectionContext&, int*)>;
     enum class ChartTransformOp {
         MirrorLeftRight,
         MirrorUpDown,

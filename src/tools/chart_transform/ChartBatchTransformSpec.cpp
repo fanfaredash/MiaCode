@@ -736,6 +736,46 @@ bool runFolderMatchSpec(const QString& inputPath, QTextStream& out, QTextStream&
     return allPassed;
 }
 
+// A subdivision step re-grids a passage; it must never re-time it. Reading each
+// note's second back out of the parser turns a missing or wrong {N} into moved
+// notes, not into a string that merely looks plausible.
+QString noteSecondsText(const QString& chart)
+{
+    const SimaiNativeParseResult result = SimaiNativeParser::parseForTimeline(chart);
+    QStringList seconds;
+    for (const TimelineNoteMarker& marker : result.noteMarkers) {
+        seconds.append(QString::number(marker.second, 'f', 6));
+    }
+    return (result.ok ? QString() : QStringLiteral("[parse failed] ")) + seconds.join(QLatin1Char(' '));
+}
+
+using SubdivisionInContext = QString (*)(
+    const QString&, const miacode::chart_transform::SelectionContext&, int*);
+
+// Runs a subdivision step on `selection` sitting between `before` and `after`,
+// the way the editor calls it, and checks the replacement text as well as the
+// note times of the whole chart around it.
+void expectSubdivisionInContext(
+    SubdivisionInContext transform,
+    const QString& before,
+    const QString& selection,
+    const QString& after,
+    const QString& expected,
+    const QString& message,
+    int* failed,
+    QTextStream& err)
+{
+    int changed = 0;
+    const QString actual = transform(selection, {before, after}, &changed);
+    expectEqual(actual, expected, message, failed, err);
+    expectEqual(
+        noteSecondsText(before + actual + after),
+        noteSecondsText(before + selection + after),
+        message + QStringLiteral(" (note times)"),
+        failed,
+        err);
+}
+
 void runInlineSpecs(QTextStream& err, int* failed)
 {
     {
@@ -1494,7 +1534,7 @@ void runInlineSpecs(QTextStream& err, int* failed)
         int changed = 0;
         const QString output = miacode::chart_transform::raiseSubdivisionForSelection(
             QStringLiteral("{16},,"),
-            QStringLiteral(",,"),
+            {.after = QStringLiteral(",,")},
             &changed);
         expectEqual(
             output,
@@ -1510,7 +1550,7 @@ void runInlineSpecs(QTextStream& err, int* failed)
         int changed = 0;
         const QString output = miacode::chart_transform::raiseSubdivisionForSelection(
             QStringLiteral("{16},,"),
-            QStringLiteral("{32},,"),
+            {.after = QStringLiteral("{32},,")},
             &changed);
         expectEqual(
             output,
@@ -1526,7 +1566,7 @@ void runInlineSpecs(QTextStream& err, int* failed)
         int changed = 0;
         const QString output = miacode::chart_transform::raiseSubdivisionForSelection(
             QStringLiteral("{16},,"),
-            QStringLiteral("E"),
+            {.after = QStringLiteral("E")},
             &changed);
         expectEqual(
             output,
@@ -1542,7 +1582,7 @@ void runInlineSpecs(QTextStream& err, int* failed)
         int changed = 0;
         const QString output = miacode::chart_transform::lowerSubdivisionForSelection(
             QStringLiteral("{32},,,,"),
-            QStringLiteral(",,"),
+            {.after = QStringLiteral(",,")},
             &changed);
         expectEqual(
             output,
@@ -1558,7 +1598,7 @@ void runInlineSpecs(QTextStream& err, int* failed)
         int changed = 0;
         const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(
             QStringLiteral("{15},,"),
-            QStringLiteral(",,"),
+            {.after = QStringLiteral(",,")},
             &changed);
         expectEqual(
             output,
@@ -1574,7 +1614,7 @@ void runInlineSpecs(QTextStream& err, int* failed)
         int changed = 0;
         const QString output = miacode::chart_transform::lowerSubdivisionHalfStepForSelection(
             QStringLiteral("{16},,"),
-            QStringLiteral(",,"),
+            {.after = QStringLiteral(",,")},
             &changed);
         expectEqual(
             output,
@@ -1584,6 +1624,90 @@ void runInlineSpecs(QTextStream& err, int* failed)
             err
         );
         expectTrue(changed == 0, QStringLiteral("subdivision -1/2 impossible reduction reports no changes"), failed, err);
+    }
+
+    // A selection that starts mid-passage carries no {N} of its own. The one in
+    // force comes from the text before it, and the step has to write the new
+    // one into the selection: rewriting the commas alone re-times the passage
+    // instead of re-gridding it.
+    {
+        namespace transform = miacode::chart_transform;
+        expectSubdivisionInContext(
+            &transform::raiseSubdivisionForSelection,
+            QStringLiteral("(120){4}1,2,"), QStringLiteral("3,4,"), QStringLiteral("5,6,"),
+            QStringLiteral("{8}3,,4,,{4}"),
+            QStringLiteral("subdivision +1 writes the governing subdivision into a selection that has none"),
+            failed, err);
+        expectSubdivisionInContext(
+            &transform::lowerSubdivisionForSelection,
+            QStringLiteral("(120){8}1,,2,,"), QStringLiteral("3,,4,,"), QStringLiteral("5,,6,,"),
+            QStringLiteral("{4}3,4,{8}"),
+            QStringLiteral("subdivision -1 writes the governing subdivision into a selection that has none"),
+            failed, err);
+        expectSubdivisionInContext(
+            &transform::raiseSubdivisionHalfStepForSelection,
+            QStringLiteral("(120){8}1,,2,,"), QStringLiteral("3,,4,,"), QStringLiteral("5,,6,,"),
+            QStringLiteral("{12}3,,,4,,,{8}"),
+            QStringLiteral("subdivision +1/2 writes the governing subdivision into a selection that has none"),
+            failed, err);
+        expectSubdivisionInContext(
+            &transform::lowerSubdivisionHalfStepForSelection,
+            QStringLiteral("(120){12}1,,,2,,,"), QStringLiteral("3,,,4,,,"), QStringLiteral("5,,,6,,,"),
+            QStringLiteral("{8}3,,4,,{12}"),
+            QStringLiteral("subdivision -1/2 writes the governing subdivision into a selection that has none"),
+            failed, err);
+        expectSubdivisionInContext(
+            &transform::raiseSubdivisionForSelection,
+            QStringLiteral("(120)1,2,"), QStringLiteral("3,4,"), QStringLiteral("5,6,"),
+            QStringLiteral("{8}3,,4,,{4}"),
+            QStringLiteral("subdivision +1 falls back to the parser's default {4} when nothing before the selection sets one"),
+            failed, err);
+        expectSubdivisionInContext(
+            &transform::raiseSubdivisionForSelection,
+            QStringLiteral("(120){4}1,|| {16}\n"), QStringLiteral("2,3,"), QStringLiteral("4,"),
+            QStringLiteral("{8}2,,3,,{4}"),
+            QStringLiteral("subdivision +1 ignores a {N} inside a comment before the selection"),
+            failed, err);
+        // A signature cannot split a note, so a selection that starts inside
+        // one gets it in front of that slot's comma instead.
+        expectSubdivisionInContext(
+            &transform::raiseSubdivisionForSelection,
+            QStringLiteral("(120){4}1,2h"), QStringLiteral("[4:1],3,"), QStringLiteral("4,"),
+            QStringLiteral("[4:1]{8},,3,,{4}"),
+            QStringLiteral("subdivision +1 places the governing subdivision after a note the selection starts inside"),
+            failed, err);
+        // A leading run that cannot step down losslessly keeps its grid and
+        // gains no signature; the chunk after it still steps down.
+        expectSubdivisionInContext(
+            &transform::lowerSubdivisionForSelection,
+            QStringLiteral("(120){4}"), QStringLiteral("1,2,{8}3,,4,,"), QStringLiteral("5,"),
+            QStringLiteral("1,2,{4}3,4,{8}"),
+            QStringLiteral("subdivision -1 borrows no signature for a leading run it cannot reduce"),
+            failed, err);
+    }
+
+    // A comment line inside a ±1/2 selection used to end the rewrite: the lines
+    // after it kept their old comma counts under the new signature.
+    {
+        namespace transform = miacode::chart_transform;
+        expectSubdivisionInContext(
+            &transform::raiseSubdivisionHalfStepForSelection,
+            QStringLiteral("(120)"), QStringLiteral("{4}1,,2,,|| c\n3,,4,,"), QString(),
+            QStringLiteral("{6}1,,,2,,,|| c\n3,,,4,,,"),
+            QStringLiteral("subdivision +1/2 keeps rewriting past a comment line"),
+            failed, err);
+        expectSubdivisionInContext(
+            &transform::raiseSubdivisionHalfStepForSelection,
+            QStringLiteral("(120)"), QStringLiteral("{4}1,2,|| c\n3,4,"), QString(),
+            QStringLiteral("{12}1,,,2,,,|| c\n3,,,4,,,"),
+            QStringLiteral("subdivision +1/2 triple fallback keeps rewriting past a comment line"),
+            failed, err);
+        expectSubdivisionInContext(
+            &transform::lowerSubdivisionHalfStepForSelection,
+            QStringLiteral("(120)"), QStringLiteral("{6}1,,,2,,,|| c\n3,,,4,,,"), QString(),
+            QStringLiteral("{4}1,,2,,|| c\n3,,4,,"),
+            QStringLiteral("subdivision -1/2 keeps rewriting past a comment line"),
+            failed, err);
     }
 
     {

@@ -813,9 +813,17 @@ QString raiseSubdivisionHalfStepChunk(const QString& chunk, bool tripleFallback,
             continue;
         }
         flushCommas(!remainingChunkHasChartContent(chunk, i));
+        // A comment ends its line, not the chunk: the lines after it still
+        // sit under the signature this chunk is rewriting.
         if (ch == QChar('|') && i + 1 < chunk.size() && chunk.at(i + 1) == QChar('|')) {
-            output.append(chunk.mid(i));
-            break;
+            const int lineEnd = chunk.indexOf(QChar('\n'), i + 2);
+            if (lineEnd < 0) {
+                output.append(chunk.mid(i));
+                break;
+            }
+            output.append(chunk.mid(i, lineEnd - i + 1));
+            i = lineEnd;
+            continue;
         }
         if (ch == QChar('(')) {
             const int close = chunk.indexOf(')', i + 1);
@@ -1009,9 +1017,17 @@ QString lowerSubdivisionHalfStepChunk(const QString& chunk, int* changed)
             continue;
         }
         flushCommas(!remainingChunkHasChartContent(chunk, i));
+        // A comment ends its line, not the chunk: the lines after it still
+        // sit under the signature this chunk is rewriting.
         if (ch == QChar('|') && i + 1 < chunk.size() && chunk.at(i + 1) == QChar('|')) {
-            output.append(chunk.mid(i));
-            break;
+            const int lineEnd = chunk.indexOf(QChar('\n'), i + 2);
+            if (lineEnd < 0) {
+                output.append(chunk.mid(i));
+                break;
+            }
+            output.append(chunk.mid(i, lineEnd - i + 1));
+            i = lineEnd;
+            continue;
         }
         if (ch == QChar('(')) {
             const int close = chunk.indexOf(')', i + 1);
@@ -1162,23 +1178,149 @@ bool suffixIsTerminalOnly(const QString& suffix)
     return trimmed.isEmpty() || trimmed.compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0;
 }
 
+// `governingDenominator` is the {N} borrowed from before the selection, or 0
+// when the selection brought its own; it is what a selection without any {N}
+// of its own has to hand back to the text after it.
 QString appendRestoreSubdivisionIfNeeded(
     const QString& originalSelection,
     const QString& transformedSelection,
     const QString& suffixContext,
-    int changed)
+    int changed,
+    int governingDenominator)
 {
     if (changed <= 0 || transformedSelection == originalSelection) {
         return transformedSelection;
     }
     int originalDenominator = 0;
     if (!lastSubdivisionDenominator(originalSelection, &originalDenominator)) {
-        return transformedSelection;
+        if (governingDenominator <= 0) {
+            return transformedSelection;
+        }
+        originalDenominator = governingDenominator;
     }
     if (suffixIsTerminalOnly(suffixContext) || suffixStartsWithSubdivision(suffixContext)) {
         return transformedSelection;
     }
     return transformedSelection + QStringLiteral("{%1}").arg(originalDenominator);
+}
+
+// SimaiNativeParser starts every chart on {4}; a chart that never writes one is
+// timed on it.
+constexpr int kDefaultSubdivision = 4;
+
+int governingSubdivisionDenominator(const QString& lead)
+{
+    int denominator = 0;
+    return lastSubdivisionDenominator(lead, &denominator) ? denominator : kDefaultSubdivision;
+}
+
+// Where the {N} in force at the selection's start must be written so the step
+// rewrites the selection's leading commas under it, or -1 when no comma comes
+// before the selection's own first {N}. That is the core's start when the
+// selection opens between slots, and otherwise the first comma: a signature
+// cannot split the note the selection starts inside. A selection that opens
+// inside a comment starts on the line after it, since a {N} written into the
+// comment would be text.
+int borrowedSubdivisionIndex(const QString& lead, const QString& core)
+{
+    const int leadLineStart = lead.lastIndexOf(QChar('\n')) + 1;
+    const int leadComment = commentStartIndexInLine(lead.mid(leadLineStart));
+    int scanStart = 0;
+    QString leadCode = lead;
+    if (leadComment >= 0) {
+        const int commentEnd = core.indexOf(QChar('\n'));
+        if (commentEnd < 0) {
+            return -1;
+        }
+        scanStart = commentEnd + 1;
+        leadCode = lead.left(leadLineStart + leadComment);
+    }
+
+    int firstComma = -1;
+    for (int i = scanStart; i < core.size() && firstComma < 0; ++i) {
+        const QChar ch = core.at(i);
+        if (ch == QChar(',')) {
+            firstComma = i;
+            continue;
+        }
+        if (ch == QChar('|') && i + 1 < core.size() && core.at(i + 1) == QChar('|')) {
+            const int lineEnd = core.indexOf(QChar('\n'), i + 2);
+            if (lineEnd < 0) {
+                return -1;
+            }
+            i = lineEnd;
+            continue;
+        }
+        if (ch == QChar('(') || ch == QChar('[')) {
+            const int close = core.indexOf(ch == QChar('(') ? QChar(')') : QChar(']'), i + 1);
+            if (close < 0) {
+                return -1;
+            }
+            i = close;
+            continue;
+        }
+        if (ch == QChar('{')) {
+            const int close = core.indexOf(QChar('}'), i + 1);
+            int denominator = 0;
+            if (close < 0 || isSubdivisionSignature(core.mid(i, close - i + 1), &denominator)) {
+                return -1;
+            }
+            i = close;
+            continue;
+        }
+        if (ch == QChar('<') && core.mid(i, 4) == QStringLiteral("<HS*")) {
+            const int close = core.indexOf(QChar('>'), i + 4);
+            if (close < 0) {
+                return -1;
+            }
+            i = close;
+        }
+    }
+    if (firstComma < 0) {
+        return -1;
+    }
+    const QChar previous = leadCode.isEmpty() ? QChar(' ') : leadCode.back();
+    const bool betweenSlots = previous.isSpace() || previous == QChar(',')
+        || previous == QChar(')') || previous == QChar('}');
+    return betweenSlots ? scanStart : firstComma;
+}
+
+// A subdivision step over a selection inside a chart. When the selection's
+// leading commas are governed by a {N} written before it, that {N} is borrowed
+// into the core so the step re-grids those commas instead of re-timing them,
+// and handed back to the text after the selection like one of its own.
+QString rewriteSubdivisionSelection(
+    const QString& input,
+    const SelectionContext& context,
+    QString (*rewriteCore)(const QString&, int*),
+    int* changedCount)
+{
+    const SelectionEdgeSplit split = splitSelectionEdges(input);
+    const QString lead = context.before + split.prefix;
+    const int borrowAt = borrowedSubdivisionIndex(lead, split.core);
+    const int governing = borrowAt >= 0 ? governingSubdivisionDenominator(lead) : 0;
+    const QString borrowed = borrowAt >= 0 ? QStringLiteral("{%1}").arg(governing) : QString();
+
+    QString core = split.core;
+    if (!borrowed.isEmpty()) {
+        core.insert(borrowAt, borrowed);
+    }
+    int changed = 0;
+    core = rewriteCore(core, &changed);
+    // Every rewrite changes the number in a signature it steps, so a borrowed
+    // {N} still in place means its run could not be stepped losslessly. That
+    // run keeps its grid, and the signature was never needed.
+    const bool borrowedKept = !borrowed.isEmpty() && core.mid(borrowAt, borrowed.size()) != borrowed;
+    if (!borrowed.isEmpty() && !borrowedKept) {
+        core.remove(borrowAt, borrowed.size());
+    }
+
+    if (changedCount != nullptr) {
+        *changedCount = changed;
+    }
+    const QString output = split.prefix + core + split.suffix;
+    return appendRestoreSubdivisionIfNeeded(
+        input, output, context.after, changed, borrowedKept ? governing : 0);
 }
 
 QString raiseSubdivisionHalfStepCore(const QString& input, int* changedCount)
@@ -1287,44 +1429,28 @@ QString lowerSubdivisionHalfStepForSelection(const QString& input, int* changedC
     return output;
 }
 
-QString raiseSubdivisionForSelection(const QString& input, const QString& suffixContext, int* changedCount)
+QString raiseSubdivisionForSelection(const QString& input, const SelectionContext& context, int* changedCount)
 {
-    int changed = 0;
-    const QString output = raiseSubdivisionForSelection(input, &changed);
-    if (changedCount != nullptr) {
-        *changedCount = changed;
-    }
-    return appendRestoreSubdivisionIfNeeded(input, output, suffixContext, changed);
+    MC_OP("miacode::chart_transform::raiseSubdivisionForSelection");
+    return rewriteSubdivisionSelection(input, context, &raiseSubdivisionCore, changedCount);
 }
 
-QString lowerSubdivisionForSelection(const QString& input, const QString& suffixContext, int* changedCount)
+QString lowerSubdivisionForSelection(const QString& input, const SelectionContext& context, int* changedCount)
 {
-    int changed = 0;
-    const QString output = lowerSubdivisionForSelection(input, &changed);
-    if (changedCount != nullptr) {
-        *changedCount = changed;
-    }
-    return appendRestoreSubdivisionIfNeeded(input, output, suffixContext, changed);
+    MC_OP("miacode::chart_transform::lowerSubdivisionForSelection");
+    return rewriteSubdivisionSelection(input, context, &lowerSubdivisionCore, changedCount);
 }
 
-QString raiseSubdivisionHalfStepForSelection(const QString& input, const QString& suffixContext, int* changedCount)
+QString raiseSubdivisionHalfStepForSelection(const QString& input, const SelectionContext& context, int* changedCount)
 {
-    int changed = 0;
-    const QString output = raiseSubdivisionHalfStepForSelection(input, &changed);
-    if (changedCount != nullptr) {
-        *changedCount = changed;
-    }
-    return appendRestoreSubdivisionIfNeeded(input, output, suffixContext, changed);
+    MC_OP("miacode::chart_transform::raiseSubdivisionHalfStepForSelection");
+    return rewriteSubdivisionSelection(input, context, &raiseSubdivisionHalfStepCore, changedCount);
 }
 
-QString lowerSubdivisionHalfStepForSelection(const QString& input, const QString& suffixContext, int* changedCount)
+QString lowerSubdivisionHalfStepForSelection(const QString& input, const SelectionContext& context, int* changedCount)
 {
-    int changed = 0;
-    const QString output = lowerSubdivisionHalfStepForSelection(input, &changed);
-    if (changedCount != nullptr) {
-        *changedCount = changed;
-    }
-    return appendRestoreSubdivisionIfNeeded(input, output, suffixContext, changed);
+    MC_OP("miacode::chart_transform::lowerSubdivisionHalfStepForSelection");
+    return rewriteSubdivisionSelection(input, context, &lowerSubdivisionHalfStepCore, changedCount);
 }
 
 }  // namespace miacode::chart_transform

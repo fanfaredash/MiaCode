@@ -403,7 +403,7 @@ bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& op
     }
     return applySelectionBatchTransform(
         opName,
-        [transform](const QString& selected, const QString&, int* changedCount) {
+        [transform](const QString& selected, const miacode::chart_transform::SelectionContext&, int* changedCount) {
             return transform(selected, changedCount);
         });
 }
@@ -432,9 +432,9 @@ bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& op
     }
 
     const QString selected = original.mid(begin, finish - begin);
-    const QString suffixContext = original.mid(finish);
     int changed = 0;
-    const QString transformed = transform(selected, suffixContext, &changed);
+    const QString transformed = transform(
+        selected, {original.left(begin), original.mid(finish)}, &changed);
     if (transformed == selected) {
         owner_.statusBar()->showMessage(QString("%1: no note index changed.").arg(opName));
         return false;
