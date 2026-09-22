@@ -21,6 +21,7 @@ This document is the current user-facing index for MiaCode debug mode, log files
   - `Start_MiaCode_SoftwareVideoDecode.bat`
   - `Start_MiaCode_QtPluginDiag.bat`
   - `Start_MiaCode_IdleFreezeRepro.ps1` — launches the real `app\MiaCode.exe` in a timestamped evidence directory with an explicit `GpuBound` / `GpuOff` profile; see [Windows 空闲冻结复现与取证指南](WINDOWS_IDLE_FREEZE_REPRO_ZH.md)
+  - `first_play_probe/Run_FirstPlayProbe.bat` — tests whether the first Play is dead until restart. It checks whether `BASS_CONFIG_DEV_DEFAULT` can still be set after `BASS_Init(0)`, then runs guided repro rounds with `--debug` on a copy of a chart that has no waveform cache, and zips the verdicts and logs; see [its README](../../scripts/debug/first_play_probe/README_ZH.md)
 
 Inside debug mode, runtime, audio, export, startup-timing, preview-profile, and PV-memory outputs are enabled unless they are individually disabled.
 Outside debug mode, the export log still keeps a concise stage/failure summary so users can report export issues without reproducing under `--debug`.
