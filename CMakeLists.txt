@@ -37,6 +37,11 @@ if (MSVC)
     set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
         "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
     )
+    # MSBuild hands each project's sources to one cl.exe; without /MP that
+    # process compiles them serially. Ninja already parallelizes per file.
+    if (CMAKE_GENERATOR MATCHES "Visual Studio")
+        add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/MP>)
+    endif()
 endif()
 
 set(CMAKE_AUTOMOC ON)
