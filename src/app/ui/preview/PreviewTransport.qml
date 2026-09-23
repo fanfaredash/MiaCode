@@ -134,8 +134,16 @@ Item {
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl("icons/stop.svg")
-            tooltip: qsTrId("dialog.video_export.preview.stop")
-            onClicked: root.previewSession.stop()
+            active: root.rangePreviewState.armed
+            stateColors: root.rangePreviewState.armed
+                ? Theme.colors.dangerState : Theme.colors.buttonState
+            tooltip: root.rangePreviewState.armed
+                ? qsTrId("preview.range_exit")
+                : qsTrId("dialog.video_export.preview.stop")
+            onClicked: {
+                root.rangePreviewState.armed = false
+                root.previewSession.stop()
+            }
         }
         IconButton {
             id: playButton
@@ -143,6 +151,8 @@ Item {
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl(root.previewSession.playing ? "icons/pause.svg" : "icons/play.svg")
             active: root.rangePreviewState.armed
+            stateColors: root.rangePreviewState.armed
+                ? Theme.colors.accentState : Theme.colors.buttonState
             tooltip: root.rangePreviewState.armed
                 ? (root.previewSession.playing
                    ? qsTrId("preview.range_pause") : qsTrId("preview.range_play"))

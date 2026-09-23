@@ -4077,6 +4077,10 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Play export range</source>
         <translation>播放导出区间</translation>
     </message>
+    <message id="preview.range_exit">
+        <source>Exit current mode</source>
+        <translation>退出当前模式</translation>
+    </message>
     <message id="qml.1">
         <source>%1%</source>
         <translation>%1%</translation>
