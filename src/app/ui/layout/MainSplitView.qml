@@ -24,6 +24,7 @@ Item {
     required property var editorController
     required property var editorSync
     required property var latency
+    property var rangePreviewState: rangePreviewStateObject
     property bool compact: false
     property real sidebarDragWidth: 0
     property bool sidebarResizing: false
@@ -54,6 +55,68 @@ Item {
         Math.max(1, workspaceSplit.width - (preview.visible ? Theme.splitDividerThickness : 0))
     signal openRequested()
     signal settingsRequested()
+
+    function isRangePreviewPageActive(session) {
+        return root.pages.activePageId === "export"
+            && !!session
+            && session.activeTab === "export"
+            && session.settingsTab === "output"
+    }
+
+    function syncRangePreviewState() {
+        const session = root.pages.exportSession
+        if (!root.isRangePreviewPageActive(session)) {
+            root.rangePreviewState.armed = false
+            return
+        }
+
+        root.rangePreviewState.startSeconds = session.exportStartSeconds
+        root.rangePreviewState.endSeconds = session.exportEndSeconds
+        root.rangePreviewState.armed = !session.fullRangeExport
+            || session.exportEndSeconds < session.contentDurationSeconds
+    }
+
+    QtObject {
+        id: rangePreviewStateObject
+        property bool armed: false
+        property real startSeconds: 0
+        property real endSeconds: 0
+    }
+
+    Component.onCompleted: root.syncRangePreviewState()
+
+    Connections {
+        target: root.pages
+        function onActivePageIdChanged() { root.syncRangePreviewState() }
+    }
+
+    Connections {
+        target: root.pages.exportSession
+        function onActiveTabChanged() { root.syncRangePreviewState() }
+        function onSettingsTabChanged() { root.syncRangePreviewState() }
+        function onRangeChanged() { root.syncRangePreviewState() }
+        // A selection export is an explicit range-playback entry, even when
+        // the applied range happens to cover the full chart.
+        function onSelectionRangeApplied() {
+            const session = root.pages.exportSession
+            if (!root.isRangePreviewPageActive(session))
+                return
+
+            root.rangePreviewState.startSeconds = session.exportStartSeconds
+            root.rangePreviewState.endSeconds = session.exportEndSeconds
+            root.rangePreviewState.armed = true
+        }
+    }
+
+    Connections {
+        target: root.previewSession
+        function onPositionChanged() {
+            if (root.rangePreviewState.armed
+                    && root.previewSession.playing
+                    && root.previewSession.positionSeconds >= root.rangePreviewState.endSeconds)
+                root.previewSession.playing = false
+        }
+    }
 
     function persistBottomPanelHeightRatio() {
         if (!root.bottomPanelEffectivelyVisible || centerSplit.height <= 0
@@ -268,6 +331,7 @@ Item {
                         pages: root.pages
                         previewSession: root.previewSession
                         previewSettings: root.previewSettings
+                        rangePreviewState: root.rangePreviewState
                     }
 
                     LatencyPage {
@@ -309,6 +373,7 @@ Item {
                 surfaceActive: !fullscreenPreview.visible
                 previewSession: root.previewSession
                 preferences: root.preferences
+                rangePreviewState: root.rangePreviewState
                 exportPageActive: root.exportVideoActive
                 SplitView.preferredWidth: root.previewEditorAvailableWidth
                                           * root.preferences.previewWidthRatio
@@ -441,6 +506,7 @@ Item {
             anchors.bottom: parent.bottom
             previewSession: root.previewSession
             preferences: root.preferences
+            rangePreviewState: root.rangePreviewState
             showCanvasMenuButton: false
         }
     }

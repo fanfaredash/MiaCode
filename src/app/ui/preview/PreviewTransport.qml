@@ -8,6 +8,7 @@ Item {
 
     required property var previewSession
     required property var preferences
+    required property var rangePreviewState
     property bool dataAvailable: true
     // True while the export page is up. The canvas menu hides there:
     // entering preview fullscreen on that page crashes the Intel iGPU D3D11
@@ -133,16 +134,42 @@ Item {
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl("icons/stop.svg")
-            tooltip: qsTrId("dialog.video_export.preview.stop")
-            onClicked: root.previewSession.stop()
+            active: root.rangePreviewState.armed
+            stateColors: root.rangePreviewState.armed
+                ? Theme.colors.dangerState : Theme.colors.buttonState
+            tooltip: root.rangePreviewState.armed
+                ? qsTrId("preview.range_exit")
+                : qsTrId("dialog.video_export.preview.stop")
+            onClicked: {
+                root.rangePreviewState.armed = false
+                root.previewSession.stop()
+            }
         }
         IconButton {
             id: playButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl(root.previewSession.playing ? "icons/pause.svg" : "icons/play.svg")
-            tooltip: root.previewSession.playing ? qsTrId("preview.pause") : qsTrId("preview.play")
-            onClicked: root.previewSession.playing = !root.previewSession.playing
+            active: root.rangePreviewState.armed
+            stateColors: root.rangePreviewState.armed
+                ? Theme.colors.accentState : Theme.colors.buttonState
+            tooltip: root.rangePreviewState.armed
+                ? (root.previewSession.playing
+                   ? qsTrId("preview.range_pause") : qsTrId("preview.range_play"))
+                : (root.previewSession.playing ? qsTrId("preview.pause") : qsTrId("preview.play"))
+            onClicked: {
+                if (root.previewSession.playing) {
+                    root.previewSession.playing = false
+                    return
+                }
+                if (root.rangePreviewState.armed) {
+                    root.previewSession.playing = false
+                    root.previewSession.positionSeconds = root.rangePreviewState.startSeconds
+                    root.previewSession.playing = true
+                    return
+                }
+                root.previewSession.playing = true
+            }
         }
 
         Text {

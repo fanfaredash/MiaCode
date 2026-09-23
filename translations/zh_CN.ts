@@ -4065,9 +4065,21 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Pause</source>
         <translation>暂停</translation>
     </message>
+    <message id="preview.range_pause">
+        <source>Pause range playback</source>
+        <translation>暂停区间播放</translation>
+    </message>
     <message id="preview.play">
         <source>Play</source>
         <translation>播放</translation>
+    </message>
+    <message id="preview.range_play">
+        <source>Play export range</source>
+        <translation>播放导出区间</translation>
+    </message>
+    <message id="preview.range_exit">
+        <source>Exit current mode</source>
+        <translation>退出当前模式</translation>
     </message>
     <message id="qml.1">
         <source>%1%</source>

@@ -235,6 +235,7 @@ signals:
     void introChanged();
     void introSoundOptionsChanged();
     void rangeChanged();
+    void selectionRangeApplied();
     void batchChanged();
 
 private:

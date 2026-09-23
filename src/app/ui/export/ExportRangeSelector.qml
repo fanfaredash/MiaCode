@@ -15,6 +15,7 @@ Item {
     property real dragPressSecond: 0
     property real dragPreviewSecond: 0
     property real hoverSecond: 0
+    signal rangeInteractionRequested(real startSecond, real endSecond)
 
     readonly property real totalSeconds: Math.max(0, Number(exportSession.contentDurationSeconds) || 0)
     readonly property real minimumRangeSeconds: Math.max(0,
@@ -97,6 +98,8 @@ Item {
         if (draggingTarget.length === 0)
             return
         previewSession.endScrub(dragPreviewSecond)
+        rangeInteractionRequested(exportSession.exportStartSeconds,
+                                  exportSession.exportEndSeconds)
         draggingTarget = ""
     }
 
