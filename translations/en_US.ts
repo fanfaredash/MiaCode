@@ -4065,21 +4065,13 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Pause</source>
         <translation>Pause</translation>
     </message>
-    <message id="preview.range_pause">
-        <source>Pause range playback</source>
-        <translation>Pause range playback</translation>
-    </message>
     <message id="preview.play">
         <source>Play</source>
         <translation>Play</translation>
     </message>
-    <message id="preview.range_play">
-        <source>Play export range</source>
-        <translation>Play export range</translation>
-    </message>
-    <message id="preview.range_exit">
-        <source>Exit current mode</source>
-        <translation>Exit current mode</translation>
+    <message id="preview.range_mode">
+        <source>Range playback mode</source>
+        <translation>Range playback mode</translation>
     </message>
     <message id="qml.1">
         <source>%1%</source>

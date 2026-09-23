@@ -257,8 +257,9 @@ void miacode::runtime::PlaybackCoordinator::applyWaveformData(
         const double resolvedEndSecond =
             miacode::content_duration::totalContentDurationSeconds(
                 chartDurationSeconds, state_.previewTrackDurationSeconds_);
-        state_.qtPreviewPlaybackEndSecond_ =
-            qMax(state_.qtPreviewPlaybackEndSecond_, resolvedEndSecond);
+        const double extendedEndSecond = qMax(state_.qtPreviewPlaybackEndSecond_, resolvedEndSecond);
+        state_.qtPreviewPlaybackEndSecond_ = rangePlaybackEndSeconds_ > 0.0
+            ? qMin(extendedEndSecond, rangePlaybackEndSeconds_) : extendedEndSecond;
     }
     const QString summary = waveformData
         ? miacode::waveform::waveformDataDebugSummary(*waveformData)

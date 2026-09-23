@@ -10,6 +10,8 @@ void PlaybackCoordinator::setDocumentRevision(quint64 revision)
 
 void PlaybackCoordinator::invalidateSession()
 {
+    rangePlaybackStartSeconds_ = 0.0;
+    rangePlaybackEndSeconds_ = 0.0;
     identity_.invalidate();
 }
 

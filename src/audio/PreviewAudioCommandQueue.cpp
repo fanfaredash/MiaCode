@@ -137,6 +137,11 @@ EnqueueResult PreviewAudioCommandQueue::enqueue(PreviewAudioCommand command)
         if (qsizetype(ordered_.size()) >= kOrderedCapacity) {
             return rejected(CommandError::QueueFull);
         }
+        if (command.kind == CommandKind::ResetRetained) {
+            // A stale tick after the cursor reset would replay sounds from the new entry.
+            resetStalePlayback(syncBackgroundTrack_, command.identity.generation);
+            resetStalePlayback(drainEvents_, command.identity.generation);
+        }
         ordered_.push_back(makeEntry(std::move(command)));
         return accepted();
     case CommandClass::Audition:

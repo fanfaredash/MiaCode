@@ -86,6 +86,7 @@ public:
     Q_INVOKABLE void setMuriTapOnSlideThresholdMs(int thresholdMs);
     Q_INVOKABLE void stop();
     Q_INVOKABLE void togglePlayback();
+    Q_INVOKABLE void setPlaybackRangeEnabled(bool enabled, double startSecond, double endSecond);
     // Step the rate one stop (-1 slower / +1 faster) along the menu's ladder.
     Q_INVOKABLE void adjustRate(int direction);
     // Debug hook the preview surface calls on pointer interaction.

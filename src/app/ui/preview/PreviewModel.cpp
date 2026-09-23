@@ -386,6 +386,11 @@ void PreviewModel::stop() { playbackControl()->stop(); }
 
 void PreviewModel::togglePlayback() { playbackControl()->togglePlayback(); }
 
+void PreviewModel::setPlaybackRangeEnabled(bool enabled, double startSecond, double endSecond)
+{
+    playbackControl()->setPlaybackRangeEnabled(enabled, startSecond, endSecond);
+}
+
 void PreviewModel::adjustRate(int direction)
 {
     playbackControl()->nudgePlaybackRate(direction);

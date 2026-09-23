@@ -15,15 +15,22 @@
 
 using namespace miacode::runtime::shared;
 
-double miacode::runtime::PlaybackCoordinator::previewDurationSeconds() const
+double miacode::runtime::PlaybackCoordinator::previewContentDurationSeconds() const
 {
-    // Unified content-duration policy = max(chartEnd + tail, music).
     double chartEndSeconds = 0.0;
     if (state_.timelineQuickStateBridge_ != nullptr) {
         chartEndSeconds = qMax(chartEndSeconds, state_.timelineQuickStateBridge_->durationSeconds());
     }
-    double duration = miacode::content_duration::totalContentDurationSeconds(
+    return miacode::content_duration::totalContentDurationSeconds(
         chartEndSeconds, state_.previewTrackDurationSeconds_);
+}
+
+double miacode::runtime::PlaybackCoordinator::previewDurationSeconds() const
+{
+    double duration = previewContentDurationSeconds();
+    if (rangePlaybackEndSeconds_ > 0.0) {
+        duration = qMax(duration, rangePlaybackEndSeconds_);
+    }
     if (state_.playing_ && state_.qtPreviewPlaybackEndSecond_ > 0.0) {
         duration = qMax(duration, state_.qtPreviewPlaybackEndSecond_);
     }
@@ -35,14 +42,7 @@ double miacode::runtime::PlaybackCoordinator::previewPlaybackEndSeconds() const
     if (state_.playing_ && state_.qtPreviewPlaybackEndSecond_ > 0.0) {
         return qMax(0.0, state_.qtPreviewPlaybackEndSecond_);
     }
-    // Same unified content-duration policy as previewDurationSeconds(), so
-    // playback auto-stops exactly where the slider/total duration ends.
-    double chartEndSeconds = 0.0;
-    if (state_.timelineQuickStateBridge_ != nullptr) {
-        chartEndSeconds = qMax(chartEndSeconds, state_.timelineQuickStateBridge_->durationSeconds());
-    }
-    return miacode::content_duration::totalContentDurationSeconds(
-        chartEndSeconds, state_.previewTrackDurationSeconds_);
+    return previewContentDurationSeconds();
 }
 
 void miacode::runtime::PlaybackCoordinator::publishPreviewPlayhead()

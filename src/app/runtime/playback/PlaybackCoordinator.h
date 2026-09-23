@@ -136,6 +136,7 @@ public:
     // parked by a touch-authoring seek back to the token that click wrote to.
     double touchPadAuthoringAnchoredSecond(double previewSecond) const;
     void setTouchPadAuthoringAnchor(double seekSecond, double tokenSecond);
+    double previewContentDurationSeconds() const;
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
     void publishPreviewPlayhead();
@@ -262,6 +263,7 @@ public:
     double durationSeconds() const;
     double lowerBoundSeconds() const;
     void togglePlayback() override;
+    void setPlaybackRangeEnabled(bool enabled, double startSecond, double endSecond) override;
     void stop() override;
     void seek(double second) override;
     void beginScrub() override;
@@ -422,6 +424,8 @@ private:
     miacode::PlaybackDocumentPort& documents_;
     miacode::PlaybackPreviewPort& preview_;
     PlaybackIdentityGate identity_;
+    double rangePlaybackStartSeconds_ = 0.0;
+    double rangePlaybackEndSeconds_ = 0.0;
 
     bool beginPlaybackCommand();
 };

@@ -4065,21 +4065,13 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Pause</source>
         <translation>一時停止</translation>
     </message>
-    <message id="preview.range_pause">
-        <source>Pause range playback</source>
-        <translation>区間再生を一時停止</translation>
-    </message>
     <message id="preview.play">
         <source>Play</source>
         <translation>再生</translation>
     </message>
-    <message id="preview.range_play">
-        <source>Play export range</source>
-        <translation>出力区間を再生</translation>
-    </message>
-    <message id="preview.range_exit">
-        <source>Exit current mode</source>
-        <translation>現在のモードを終了</translation>
+    <message id="preview.range_mode">
+        <source>Range playback mode</source>
+        <translation>区間再生モード</translation>
     </message>
     <message id="qml.1">
         <source>%1%</source>

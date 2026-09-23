@@ -49,6 +49,32 @@ Item {
                       : 0
         return Math.min(0, bound)
     }
+    readonly property real selectedRangeStartSeconds: root.rangePreviewState.available
+        ? root.rangePreviewState.session.exportStartSeconds : 0
+    readonly property real selectedRangeEndSeconds: root.rangePreviewState.available
+        ? root.rangePreviewState.session.exportEndSeconds : 0
+    readonly property real progressEndSeconds: root.dataAvailable
+        ? (root.rangePreviewState.available
+           ? root.rangePreviewState.session.contentDurationSeconds
+           : root.previewSession.durationSeconds)
+        : 0
+    function boundedScrubSecond(second) {
+        if (!root.rangePreviewState.active || !root.rangePreviewState.available)
+            return second
+        const start = root.selectedRangeStartSeconds <= 0.000001
+            ? root.lowerBoundSeconds : root.selectedRangeStartSeconds
+        return Math.max(start, Math.min(root.selectedRangeEndSeconds, second))
+    }
+    function moveRangeScrub(pointerX) {
+        const travel = Math.max(1, progress.availableWidth - progress.handle.width)
+        const fraction = Math.max(0, Math.min(1,
+            (pointerX - progress.leftPadding - progress.handle.width / 2) / travel))
+        const second = root.boundedScrubSecond(
+            progress.from + fraction * (progress.to - progress.from))
+        progress.value = second
+        root.activeScrubSecond = second
+        root.previewSession.updateScrub(second)
+    }
     property bool scrubActive: false
     property real activeScrubSecond: root.previewSession.positionSeconds
     readonly property real displayedSeconds: root.dataAvailable
@@ -58,9 +84,11 @@ Item {
     // Shorten "pos / dur" only when the control row would actually collide —
     // independent of NoteStatistics column switching.
     readonly property int _visibleButtonCount: 3
+        + (rangeModeButton.visible ? 1 : 0)
         + (canvasMenuButton.visible ? 1 : 0)
         + (fullscreenButton.visible ? 1 : 0)
     readonly property real _fixedChromeWidth: stopButton.implicitWidth + playButton.implicitWidth
+        + (rangeModeButton.visible ? rangeModeButton.implicitWidth : 0)
         + rateButton.implicitWidth
         + (canvasMenuButton.visible ? canvasMenuButton.implicitWidth : 0)
         + (fullscreenButton.visible ? fullscreenButton.implicitWidth : 0)
@@ -77,7 +105,7 @@ Item {
         font.family: Theme.uiFont
         font.pixelSize: Theme.secondaryFontSize
         text: root.formatTime(root.displayedSeconds)
-              + " / " + root.formatTime(root.dataAvailable ? root.previewSession.durationSeconds : 0)
+              + " / " + root.formatTime(root.progressEndSeconds)
     }
 
     AppSlider {
@@ -90,7 +118,12 @@ Item {
         anchors.topMargin: root.progressTopInset
         height: 24
         from: root.lowerBoundSeconds
-        to: root.dataAvailable ? root.previewSession.durationSeconds : 0
+        to: root.progressEndSeconds
+        rangeMarkersVisible: root.dataAvailable && root.rangePreviewState.available
+        rangeStartValue: root.selectedRangeStartSeconds <= 0.000001
+            ? progress.from : root.selectedRangeStartSeconds
+        rangeEndValue: root.selectedRangeEndSeconds
+        rangeHighlightVisible: rangeMarkersVisible && root.rangePreviewState.active
         live: true
         onPressedChanged: {
             if (pressed) {
@@ -116,7 +149,30 @@ Item {
         property: "value"
         // 范围重建时按当前进度定位，涵盖位置数值保持不变的页面切换。
         value: Math.max(progress.from, Math.min(progress.to, root.previewSession.positionSeconds))
-        when: !progress.pressed
+        when: !progress.pressed && !root.scrubActive
+    }
+
+    MouseArea {
+        anchors.fill: progress
+        visible: progress.rangeHighlightVisible
+        onPressed: function(mouse) {
+            root.scrubActive = true
+            root.previewSession.beginScrub()
+            root.moveRangeScrub(mouse.x)
+        }
+        onPositionChanged: function(mouse) {
+            if (pressed)
+                root.moveRangeScrub(mouse.x)
+        }
+        onReleased: function(mouse) {
+            root.moveRangeScrub(mouse.x)
+            root.previewSession.endScrub(root.activeScrubSecond)
+            root.scrubActive = false
+        }
+        onCanceled: {
+            root.previewSession.endScrub(root.activeScrubSecond)
+            root.scrubActive = false
+        }
     }
 
     RowLayout {
@@ -134,44 +190,17 @@ Item {
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl("icons/stop.svg")
-            active: root.rangePreviewState.armed
-            stateColors: root.rangePreviewState.armed
-                ? Theme.colors.dangerState : Theme.colors.buttonState
-            tooltip: root.rangePreviewState.armed
-                ? qsTrId("preview.range_exit")
-                : qsTrId("dialog.video_export.preview.stop")
-            onClicked: {
-                root.rangePreviewState.armed = false
-                root.previewSession.stop()
-            }
+            tooltip: qsTrId("dialog.video_export.preview.stop")
+            onClicked: root.previewSession.stop()
         }
         IconButton {
             id: playButton
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
             iconSource: Qt.resolvedUrl(root.previewSession.playing ? "icons/pause.svg" : "icons/play.svg")
-            active: root.rangePreviewState.armed
-            stateColors: root.rangePreviewState.armed
-                ? Theme.colors.accentState : Theme.colors.buttonState
-            tooltip: root.rangePreviewState.armed
-                ? (root.previewSession.playing
-                   ? qsTrId("preview.range_pause") : qsTrId("preview.range_play"))
-                : (root.previewSession.playing ? qsTrId("preview.pause") : qsTrId("preview.play"))
-            onClicked: {
-                if (root.previewSession.playing) {
-                    root.previewSession.playing = false
-                    return
-                }
-                if (root.rangePreviewState.armed) {
-                    root.previewSession.playing = false
-                    root.previewSession.positionSeconds = root.rangePreviewState.startSeconds
-                    root.previewSession.playing = true
-                    return
-                }
-                root.previewSession.playing = true
-            }
+            tooltip: root.previewSession.playing ? qsTrId("preview.pause") : qsTrId("preview.play")
+            onClicked: root.previewSession.playing = !root.previewSession.playing
         }
-
         Text {
             Layout.fillWidth: true
             Layout.minimumWidth: 40
@@ -180,13 +209,27 @@ Item {
             text: {
                 const pos = root.formatTime(root.displayedSeconds)
                 if (root.timeFitsFull)
-                    return pos + " / " + root.formatTime(
-                        root.dataAvailable ? root.previewSession.durationSeconds : 0)
+                    return pos + " / " + root.formatTime(root.progressEndSeconds)
                 return pos
             }
             color: Theme.colors.text.secondary
             font.family: Theme.uiFont
             font.pixelSize: Theme.secondaryFontSize
+        }
+
+        IconButton {
+            id: rangeModeButton
+            objectName: "exportRangeModeButton"
+            visible: root.rangePreviewState.available
+            enabled: root.dataAvailable && root.rangePreviewState.available
+                     && root.rangePreviewState.session.exportEndSeconds
+                        > root.rangePreviewState.session.exportStartSeconds
+            Layout.preferredWidth: implicitWidth
+            Layout.preferredHeight: implicitHeight
+            iconSource: Qt.resolvedUrl("icons/circle-play.svg")
+            active: root.rangePreviewState.active
+            tooltip: qsTrId("preview.range_mode")
+            onClicked: root.rangePreviewState.active = !root.rangePreviewState.active
         }
 
         AppDropDownButton {

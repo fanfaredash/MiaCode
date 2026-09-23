@@ -343,8 +343,12 @@ void ExportSession::enter(int previousActiveDifficultyId)
         if (!pageSessionActive_ || generation != pagePrepareGeneration_) {
             return;
         }
+        const bool selectionRangePending = hasPendingSelectionRangeExport_;
         seedFromDifficulty(selectedDifficultyId_);
         syncAudition();
+        if (selectionRangePending) {
+            emit selectionRangeApplied();
+        }
     });
     // Re-scan once per real page entry so imports made by another QML surface
     // are visible, while repeated property reads during this entry share the
@@ -942,11 +946,18 @@ void ExportSession::setExportRangeSeconds(double start, double end)
     const double minimumDuration = minimumExportRangeSeconds();
     const double boundedStart = qBound(0.0, start, qMax(0.0, chartDurationSeconds_ - minimumDuration));
     const double boundedEnd = qBound(boundedStart + minimumDuration, end, chartDurationSeconds_);
+    if (boundedStart == task_.exportStartSeconds && boundedEnd == exportEndSeconds()) {
+        return;
+    }
+    const bool previousFullRangeExport = task_.fullRangeExport;
     task_.exportStartSeconds = boundedStart;
     task_.contentDurationSeconds = qMax(0.0, boundedEnd - boundedStart);
     task_.fullRangeExport = miacode::video_export::isFullRangeVideoExport(task_.exportStartSeconds);
     emit rangeChanged();
     emit introChanged();
+    if (task_.intro.enabled && previousFullRangeExport != task_.fullRangeExport && engine() != nullptr) {
+        engine()->refreshIntroState();
+    }
 }
 
 void ExportSession::requestSelectionRangeExport(double startSecond, double endSecond)
@@ -966,7 +977,6 @@ void ExportSession::applyPendingSelectionRangeExport()
     }
     hasPendingSelectionRangeExport_ = false;
     setExportRangeSeconds(pendingRangeStartSeconds_, pendingRangeEndSeconds_);
-    emit selectionRangeApplied();
 }
 
 void ExportSession::clearPendingSelectionRangeExport()

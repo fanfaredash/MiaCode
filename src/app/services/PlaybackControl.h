@@ -58,6 +58,7 @@ public:
     ~PlaybackControl() override = default;
 
     virtual void togglePlayback() = 0;
+    virtual void setPlaybackRangeEnabled(bool enabled, double startSecond, double endSecond) = 0;
     virtual void stop() = 0;
     virtual void seek(double second) = 0;
     virtual void beginScrub() = 0;

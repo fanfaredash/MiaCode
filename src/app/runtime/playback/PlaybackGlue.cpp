@@ -120,6 +120,7 @@ void miacode::runtime::PlaybackCoordinator::onStopPreview()
     state_.previewPendingPlayInteractionSource_.clear();
     seekPreviewDiscreteToSecond(returnSecond, true);
     playbackState_.previewTransportState_ = miacode::PlaybackTransportState::Stopped;
+    publishPreviewPlayhead();
     appendPreviewInteractionLog(
         QStringLiteral("stop_complete"),
         QString("op=%1 source=stop_action final_second=%2")
@@ -180,6 +181,18 @@ void miacode::runtime::PlaybackCoordinator::onTogglePreviewPause()
 
     if (!hasPreviewableChart()) {
         return;
+    }
+    if (rangePlaybackEndSeconds_ > 0.0) {
+        const bool outsideRange = state_.pauseSecond_ + 1e-6 < rangePlaybackStartSeconds_
+            || state_.pauseSecond_ + 1e-6 >= rangePlaybackEndSeconds_;
+        if (rangePlaybackStartSeconds_ <= 1e-6 && exportIntroEnabled()
+            && (outsideRange || state_.pauseSecond_ <= 1e-6)) {
+            startExportIntroAdvance(exportIntroLowerBoundSeconds());
+            return;
+        }
+        if (outsideRange) {
+            seekPreviewToSecond(rangePlaybackStartSeconds_, true);
+        }
     }
     state_.previewPendingPlayInteractionId_ = opId;
     state_.previewPendingPlayInteractionSource_ = QStringLiteral("toggle_action");

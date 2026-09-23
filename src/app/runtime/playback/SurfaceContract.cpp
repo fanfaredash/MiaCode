@@ -69,6 +69,34 @@ void miacode::runtime::PlaybackCoordinator::togglePlayback()
     onTogglePreviewPause();
 }
 
+void miacode::runtime::PlaybackCoordinator::setPlaybackRangeEnabled(
+    bool enabled, double startSecond, double endSecond)
+{
+    if (!beginPlaybackCommand()) {
+        return;
+    }
+    if (enabled && (!qIsFinite(startSecond) || !qIsFinite(endSecond)
+                    || endSecond <= startSecond)) {
+        return;
+    }
+    rangePlaybackStartSeconds_ = enabled ? qMax(0.0, startSecond) : 0.0;
+    rangePlaybackEndSeconds_ = enabled ? endSecond : 0.0;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(
+            enabled ? endSecond : previewContentDurationSeconds());
+    }
+    if (state_.playing_) {
+        state_.qtPreviewPlaybackEndSecond_ = enabled ? endSecond : previewContentDurationSeconds();
+        if (enabled) {
+            const double currentSecond = authoritativeAudioClockSecond();
+            if (currentSecond + 1e-6 < rangePlaybackStartSeconds_
+                || currentSecond + 1e-6 >= rangePlaybackEndSeconds_) {
+                seekPreviewToSecond(rangePlaybackStartSeconds_, true);
+            }
+        }
+    }
+}
+
 void miacode::runtime::PlaybackCoordinator::stop()
 {
     if (!beginPlaybackCommand()) {
@@ -80,6 +108,9 @@ void miacode::runtime::PlaybackCoordinator::stop()
 void miacode::runtime::PlaybackCoordinator::seek(double second)
 {
     if (!beginPlaybackCommand()) {
+        return;
+    }
+    if (handleExportIntroSliderSeek(second)) {
         return;
     }
     seekPreviewToSecond(second, true);

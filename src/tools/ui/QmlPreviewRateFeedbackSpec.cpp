@@ -106,6 +106,7 @@ public:
         return true;
     }
     void togglePlayback() override {}
+    void setPlaybackRangeEnabled(bool, double, double) override {}
     void stop() override {}
     void seek(double) override {}
     void beginScrub() override {}

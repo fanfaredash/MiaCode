@@ -39,6 +39,7 @@ using namespace miacode::runtime::playback_detail;
 
 void miacode::runtime::PlaybackCoordinator::applyQtPreviewPosition(double second, bool centerView)
 {
+    const bool playingAtEntry = state_.playing_;
     const bool quickTimelineBridgeReady =
         !state_.uiFocusBridgeMode_ || state_.timelineReady_;
     const double timelineCadenceSeconds =
@@ -72,6 +73,9 @@ void miacode::runtime::PlaybackCoordinator::applyQtPreviewPosition(double second
     }
     // Publishes to the v1 slider and the v2 transport both.
     publishPreviewPlayhead();
+    if (playingAtEntry && !state_.playing_) {
+        return;
+    }
     if (!state_.playing_ && !suppressPausedSecondaryUi) {
         updatePreviewObjectStats(second);
     }
@@ -271,6 +275,9 @@ void miacode::runtime::PlaybackCoordinator::onQtPreviewTickAtSecond(double secon
         && second + kTimelineZeroSecondTolerance >= playbackEndSecond) {
         second = playbackEndSecond;
         applyQtPreviewPosition(second, true);
+        if (!state_.playing_) {
+            return;
+        }
         if (state_.previewSfxRuntime_ != nullptr) {
             // Non-BASS fallback needs a terminal flush. The live BASS backend
             // ignores this call because its master-mixer sync owns the final
@@ -340,6 +347,9 @@ void miacode::runtime::PlaybackCoordinator::onQtPreviewTickAtSecond(double secon
     }
     const qint64 beforeApplyNs = diagEnabled ? tickProfileTimer.nsecsElapsed() : 0;
     applyQtPreviewPosition(second, true);
+    if (!state_.playing_) {
+        return;
+    }
     if (diagEnabled) {
         applyPositionElapsedNs = tickProfileTimer.nsecsElapsed() - beforeApplyNs;
     }

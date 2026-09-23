@@ -523,7 +523,9 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
     };
 
     state_.qtPreviewPlaybackReturnSecond_ = requestedSecond;
-    state_.qtPreviewPlaybackEndSecond_ = qMax(0.0, previewPlaybackEndSeconds());
+    const double playbackEndSecond = qMax(0.0, previewPlaybackEndSeconds());
+    state_.qtPreviewPlaybackEndSecond_ = rangePlaybackEndSeconds_ > 0.0
+        ? rangePlaybackEndSeconds_ : playbackEndSecond;
     applyPreviewStageMediaRoutePlaybackRate(state_, state_.previewPlaybackRate_, "playback_start_prepare");
     state_.pausedSeekMediaPending_ = false;
     state_.pausedSeekMediaSubmittedGeneration_ = 0;
@@ -665,7 +667,15 @@ bool miacode::runtime::PlaybackCoordinator::startQtPreviewPlayback(double second
 void miacode::runtime::PlaybackCoordinator::finishQtPreviewPlaybackAndReturnToEntry()
 {
     stopQtPreviewPlayback(true);
+    if (rangePlaybackEndSeconds_ > 0.0) {
+        if (rangePlaybackStartSeconds_ <= kTimelineZeroSecondTolerance && exportIntroEnabled()) {
+            enterExportIntroRegion(exportIntroLowerBoundSeconds());
+        } else {
+            seekPreviewToSecond(rangePlaybackStartSeconds_, true);
+        }
+    }
     playbackState_.previewTransportState_ = miacode::PlaybackTransportState::Stopped;
+    publishPreviewPlayhead();
 }
 
 void miacode::runtime::PlaybackCoordinator::stopQtPreviewPlayback(bool keepPosition)
