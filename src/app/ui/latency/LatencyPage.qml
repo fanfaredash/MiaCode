@@ -3,7 +3,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.UI
 
-// 延迟校准 keeps a synthesized test chart active only while this page is visible.
 Rectangle {
     id: root
 
@@ -12,13 +11,6 @@ Rectangle {
 
     color: Theme.surfaceColor(Theme.colors.background.panel)
     clip: true
-
-    onVisibleChanged: {
-        if (visible)
-            root.latency.enter()
-        else
-            root.latency.leave()
-    }
 
     // The form rows share one label column, the way the export and cover
     // pages do, so every control's left edge lines up down the page.
@@ -40,21 +32,11 @@ Rectangle {
         elide: Text.ElideRight
     }
 
-    PanelHeader {
-        id: heading
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        title: qsTrId("qml.latency_calibration")
-        sidebarTitle: true
-        showMore: false
-    }
-
     Flickable {
         id: pageFlick
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.top: heading.bottom
+        anchors.top: parent.top
         anchors.bottom: parent.bottom
         contentWidth: width
         contentHeight: form.y + form.implicitHeight + 12

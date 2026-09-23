@@ -12,6 +12,8 @@ Item {
     required property var editorController
     required property var editorSync
     required property var preferences
+    required property var latency
+    required property var pages
 
     readonly property bool sourceVisible: viewState.difficultyEditorActive
     readonly property bool canUndo: sourceVisible && sourceEditor.canUndo
@@ -184,6 +186,7 @@ Item {
         y: tabs.height
         height: (root.sourceVisible ? sourceEditor.y : root.height) - y
         color: Theme.surfaceColor(Theme.colors.background.panel)
+        visible: root.documentSession.hasDocument
     }
 
     EditorTabBar {
@@ -191,9 +194,21 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
+        visible: root.documentSession.hasDocument
         viewState: root.viewState
         documentSession: root.documentSession
         commands: root.commands
+        pages: root.pages
+    }
+
+    LatencyPage {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: tabs.bottom
+        anchors.bottom: parent.bottom
+        visible: root.viewState.latencyEditorActive && root.pages.activePageId === "latency"
+        latency: root.latency
+        pages: root.pages
     }
 
     component DifficultyHeaderField: Item {

@@ -50,6 +50,13 @@ Rectangle {
                 }
             }
 
+            NavRow {
+                width: parent.width
+                text: qsTrId("qml.latency_calibration")
+                selected: root.viewState.latencyEditorActive
+                onClicked: root.pages.openLatencyPage()
+            }
+
             DifficultyList {
                 width: parent.width
                 viewState: root.viewState

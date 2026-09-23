@@ -131,6 +131,21 @@ bool miacode::runtime::DocumentSessionHost::switchToLatencyField()
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "latency";
     setChartBottomTabsMode(true);
+    session_.syncPreviewStageMediaRouteChartPath(
+        state_.currentFilePath_,
+        state_.lastTrackPath_,
+        restorePreviewSecond,
+        session_.applicationServices_.workspace().document().videoPath);
+    if (state_.scene_ != nullptr) {
+#ifdef HAVE_QT_MULTIMEDIA
+        state_.scene_->setStageMediaAvailable(
+            miacode::chart_assets::hasBackgroundMedia(state_.currentFilePath_));
+#else
+        state_.scene_->setStageMediaAvailable(
+            miacode::chart_assets::hasBackgroundMedia(state_.currentFilePath_, false));
+#endif
+    }
+    session_.refreshWaveformCache();
     session_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
     updateDirtyState();

@@ -47,7 +47,7 @@ Item {
     // User preference AND backend chart-bottom-tabs mode (export/metadata
     // call setChartBottomTabsMode(false); latency/difficulty turn it back on).
     readonly property bool bottomPanelEffectivelyVisible:
-        root.viewState.difficultyEditorActive
+        (root.viewState.difficultyEditorActive || root.viewState.latencyEditorActive)
         && root.viewState.bottomPanelVisible && root.timelineSession.panelVisible
     readonly property bool exportVideoActive:
         root.pages.activePageId === "export"
@@ -295,6 +295,8 @@ Item {
                         documentSession: root.documentSession
                         commands: root.commands
                         preferences: root.preferences
+                        latency: root.latency
+                        pages: root.pages
                         onOpenRequested: root.openRequested()
                     }
 
@@ -307,13 +309,6 @@ Item {
                         previewSettings: root.previewSettings
                     }
 
-                    LatencyPage {
-                        id: latencyPage
-                        anchors.fill: parent
-                        visible: root.pages.activePageId === "latency"
-                        latency: root.latency
-                        pages: root.pages
-                    }
                 }
 
                 BottomPanel {
@@ -348,6 +343,8 @@ Item {
                 preferences: root.preferences
                 rangePreviewState: root.rangePreviewState
                 exportPageActive: root.exportVideoActive
+                latencyActive: root.viewState.latencyEditorActive
+                               && root.pages.activePageId === "latency"
                 SplitView.preferredWidth: root.previewEditorAvailableWidth
                                           * root.preferences.previewWidthRatio
                 SplitView.minimumWidth: Math.max(preview.minimumWidth,

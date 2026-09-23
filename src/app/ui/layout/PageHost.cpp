@@ -44,6 +44,13 @@ PageHost::PageHost(miacode::ShellNotifications& notifications,
     connect(&notifications, &miacode::ShellNotifications::selectionRangeExportPageRequested, this, [this]() {
         openVideoExportPage();
     });
+    connect(&document, &DocumentModel::documentReplaced, this, [this]() {
+        if (activePageId_ != QLatin1String("latency")) {
+            return;
+        }
+        activePageId_.clear();
+        emit activePageIdChanged();
+    });
     // requestPageSwitch() is asynchronous: openVideoExportPage() returns true
     // once the switch is queued, and a refusal arrives here instead. Drop the
     // staged range then, so it cannot be applied by a later unrelated entry.
@@ -95,6 +102,10 @@ void PageHost::rememberResumeDifficulty()
     if (resumeEditorKeyExplicit_) {
         return;
     }
+    if (activePageId_ == QLatin1String("latency")) {
+        rememberEditorReturnTarget(QStringLiteral("latency"));
+        return;
+    }
     miacode::EditorPageRouter* const pages = router();
     if (pages == nullptr) {
         return;
@@ -118,6 +129,15 @@ bool PageHost::resumeChartOrMetadata()
     miacode::EditorPageRouter* const pages = router();
     if (pages == nullptr) {
         return false;
+    }
+    if (resumeEditorKeyExplicit_ && resumeEditorKey_ == QLatin1String("latency")) {
+        if (!pages->enterLatencyPage()) {
+            return false;
+        }
+        resumeEditorKey_.clear();
+        resumeEditorKeyExplicit_ = false;
+        resumeDifficultyId_ = 0;
+        return true;
     }
     if (resumeEditorKeyExplicit_ && resumeEditorKey_.isEmpty()) {
         resumeEditorKey_.clear();
@@ -216,10 +236,14 @@ bool PageHost::openExportPage()
 bool PageHost::openLatencyPage()
 {
     miacode::EditorPageRouter* const pages = router();
-    if (document_ == nullptr || !document_->hasDocument() || pages == nullptr) {
+    if (document_ == nullptr || !document_->hasDocument() || pages == nullptr
+        || navigationPending_) {
         return false;
     }
-    rememberResumeDifficulty();
+    if (activePageId_ == QLatin1String("latency")) {
+        emit latencyPageActivated();
+        return true;
+    }
     return requestPageSwitch([this]() {
         const bool leavingExportPage = activePageId_ == QLatin1String("export");
         if (router() == nullptr || !router()->enterLatencyPage()) {
@@ -228,12 +252,13 @@ bool PageHost::openLatencyPage()
         if (leavingExportPage && exportSessionObject() != nullptr) {
             exportSessionObject()->leave();
         }
-        // The page is QML now; only the active id has to change so MainSplitView
-        // shows it.
+        // The editor tab owns the visible page; the active id tracks its
+        // synthesized preview source.
         if (activePageId_ != QLatin1String("latency")) {
             activePageId_ = QStringLiteral("latency");
             emit activePageIdChanged();
         }
+        emit latencyPageActivated();
         return true;
     });
 }
@@ -250,11 +275,16 @@ bool PageHost::finishLeaveOverlay()
     if (activePageId_ == QLatin1String("export") && exportSessionObject() != nullptr) {
         exportSessionObject()->leave();
     }
+    const bool returnToLatency = resumeEditorKeyExplicit_
+        && resumeEditorKey_ == QLatin1String("latency");
     if (!resumeChartOrMetadata()) {
         return false;
     }
-    activePageId_.clear();
+    activePageId_ = returnToLatency ? QStringLiteral("latency") : QString();
     emit activePageIdChanged();
+    if (returnToLatency) {
+        emit latencyPageActivated();
+    }
     emit overlayPageLeft();
     return true;
 }
@@ -277,10 +307,27 @@ bool PageHost::ensureDifficultyPageActive(int difficultyId)
         || pages == nullptr || difficultyId <= 0) {
         return false;
     }
-    if (pages->hasActiveDifficulty() && pages->activeDifficultyId() == difficultyId) {
-        return true;
+    if (!pages->hasActiveDifficulty() || pages->activeDifficultyId() != difficultyId) {
+        if (!pages->enterDifficultyPage(difficultyId)) {
+            return false;
+        }
     }
-    return pages->enterDifficultyPage(difficultyId);
+    if (activePageId_ == QLatin1String("latency")) {
+        activePageId_.clear();
+        emit activePageIdChanged();
+    }
+    return true;
+}
+
+bool PageHost::activateMetadataPage()
+{
+    if (activePageId_ != QLatin1String("latency") || router() == nullptr
+        || !router()->enterMetadataPage()) {
+        return false;
+    }
+    activePageId_.clear();
+    emit activePageIdChanged();
+    return true;
 }
 
 bool PageHost::clearEditorPresentation()
@@ -289,22 +336,19 @@ bool PageHost::clearEditorPresentation()
     if (pages == nullptr || overlayActive() || navigationPending_) {
         return false;
     }
-    return pages->clearEditorPresentation();
+    if (!pages->clearEditorPresentation()) {
+        return false;
+    }
+    if (activePageId_ == QLatin1String("latency")) {
+        activePageId_.clear();
+        emit activePageIdChanged();
+    }
+    return true;
 }
 
 void PageHost::openMediaProcessingTools()
 {
-    if (document_ == nullptr || !document_->hasDocument() || navigationPending_) {
-        return;
-    }
-    if (overlayActive()) {
-        requestPageSwitch([this]() {
-            if (!finishLeaveOverlay()) {
-                return false;
-            }
-            emit mediaToolsRequested();
-            return true;
-        });
+    if (document_ == nullptr || !document_->hasDocument()) {
         return;
     }
     emit mediaToolsRequested();

@@ -457,12 +457,12 @@ Item {
                 enabled: root.commandsEnabled && root.toolCommandsEnabled
                 onTriggered: root.commands.metadataRequested()
             }
-            AppMenuSeparator {}
             AppMenuAction {
                 text: qsTrId("qml.latency_calibration")
                 enabled: root.commandsEnabled && root.toolCommandsEnabled
                 onTriggered: root.commands.latencyCalibrationRequested()
             }
+            AppMenuSeparator {}
             AppMenuAction {
                 text: qsTrId("media_tools.audio_video_processing")
                 enabled: root.commandsEnabled && root.documentAvailable

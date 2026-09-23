@@ -10,6 +10,7 @@ Rectangle {
     required property var preferences
     required property var rangePreviewState
     property bool documentAvailable: true
+    property bool latencyActive: false
     // See PreviewTransport: the canvas menu hides on the export page.
     property bool exportPageActive: false
     // MainSplitView keeps the transport chrome mounted for layout stability, but
@@ -145,7 +146,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         statistics: root.previewSession.statistics
-        dataAvailable: root.previewSession.statisticsAvailable
+        dataAvailable: !root.latencyActive && root.previewSession.statisticsAvailable
         enabled: root.documentAvailable
     }
 }

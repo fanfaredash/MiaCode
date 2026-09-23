@@ -56,11 +56,6 @@ Rectangle {
         hugContent: true
 
         AppMenuAction {
-            text: qsTrId("qml.latency_calibration")
-            enabled: root.toolsAvailable
-            onTriggered: root.toolRequested("latency")
-        }
-        AppMenuAction {
             text: qsTrId("media_tools.audio_video_processing")
             enabled: root.toolsAvailable
             onTriggered: root.toolRequested("media")

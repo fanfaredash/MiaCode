@@ -204,6 +204,7 @@ Rectangle {
                     ? 0 : nextButton.y + nextButton.height + controls.gap
                 width: actionArea.buttonWidth
                 text: qsTrId("metadata.replace")
+                emphasized: true
                 onClicked: root.replaceOne()
             }
             AppButton {

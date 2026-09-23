@@ -64,11 +64,7 @@ Item {
         onToolRequested: function(toolId) {
             if (!root.documentSession.hasDocument)
                 return
-            if (toolId === "latency") {
-                root.pages.rememberEditorReturnTarget(root.viewState.activeEditorKey)
-                root.pages.openLatencyPage()
-            }
-            else if (toolId === "media")
+            if (toolId === "media")
                 root.pages.openMediaProcessingTools()
             else if (toolId === "normalize")
                 root.pages.openNormalizeWholeChart()

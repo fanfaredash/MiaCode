@@ -8,12 +8,14 @@ QtObject {
     signal editorClosed(string key)
 
     readonly property string metadataEditorKey: "metadata"
+    readonly property string latencyEditorKey: "latency"
     property var openEditorTabs: []
     property var editorHistory: []
     property string activeEditorKey: ""
     property bool editorPresentationClearedByUser: false
     readonly property bool hasActiveEditor: activeEditorKey.length > 0
     readonly property bool metadataEditorActive: activeEditorKey === metadataEditorKey
+    readonly property bool latencyEditorActive: activeEditorKey === latencyEditorKey
     readonly property bool difficultyEditorActive: activeEditorKey.startsWith("difficulty:")
     readonly property int activeDifficultyId: difficultyEditorActive
         ? Number(activeEditorKey.substring("difficulty:".length))
@@ -90,6 +92,10 @@ QtObject {
 
     function openMetadataEditor() {
         openEditor(metadataEditorKey)
+    }
+
+    function openLatencyEditor() {
+        openEditor(latencyEditorKey)
     }
 
     function openDifficultyEditor(id) {
@@ -181,7 +187,8 @@ QtObject {
             ? activeKey
             : (difficultyKeys.length > 0 ? difficultyKeys[0] : "")
 
-        let tabs = openEditorTabs.filter(key => key === metadataEditorKey || validKeys[key])
+        let tabs = openEditorTabs.filter(key => key === metadataEditorKey
+            || key === latencyEditorKey || validKeys[key])
         if (!editorPresentationClearedByUser) {
             if (tabs.length === 0 && preferredKey.length > 0)
                 tabs = [preferredKey]

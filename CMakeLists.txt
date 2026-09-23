@@ -775,6 +775,7 @@ set(MIACODE_UI_ICON_FILES
     src/app/ui/resources/icons/close.svg
     src/app/ui/resources/icons/more.svg
     src/app/ui/resources/icons/metadata.svg
+    src/app/ui/resources/icons/metronome.svg
     src/app/ui/resources/icons/app-icon.svg
     src/app/ui/resources/icons/app-titlebar.png
     src/app/ui/resources/icons/app-titlebar@2x.png

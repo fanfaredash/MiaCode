@@ -31,7 +31,7 @@ public:
                                QObject* parent = nullptr);
 
     QString activePageId() const { return activePageId_; }
-    bool overlayActive() const { return !activePageId_.isEmpty(); }
+    bool overlayActive() const { return !activePageId_.isEmpty() && activePageId_ != QLatin1String("latency"); }
     bool navigationPending() const { return navigationPending_; }
     QObject* exportSession() const;
 
@@ -40,6 +40,7 @@ public:
     Q_INVOKABLE bool openLatencyPage();
     Q_INVOKABLE bool leaveOverlayPage();
     Q_INVOKABLE bool ensureDifficultyPageActive(int difficultyId);
+    Q_INVOKABLE bool activateMetadataPage();
     Q_INVOKABLE bool clearEditorPresentation();
     Q_INVOKABLE void rememberEditorReturnTarget(const QString& editorKey);
     Q_INVOKABLE void openMediaProcessingTools();
@@ -53,6 +54,7 @@ public:
 signals:
     void normalizeWholeChartRequested();
     void mediaToolsRequested();
+    void latencyPageActivated();
     void preferencesRequested();
     void activePageIdChanged();
     void navigationPendingChanged();

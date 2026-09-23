@@ -19,7 +19,7 @@ Rectangle {
         recentDocuments = documentSession ? documentSession.recentDocuments() : []
     }
 
-    color: Theme.surfaceColor(Theme.colors.background.surface)
+    color: Theme.surfaceColor(Theme.colors.background.panel)
 
     onVisibleChanged: {
         if (visible)

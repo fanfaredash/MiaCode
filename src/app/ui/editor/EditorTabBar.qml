@@ -10,6 +10,7 @@ Rectangle {
     required property var viewState
     required property var documentSession
     required property var commands
+    required property var pages
 
     readonly property int minimumTabWidth: 100
     readonly property int preferredTabWidth: 160
@@ -34,7 +35,7 @@ Rectangle {
     // Closing a dirty editor asks about that editor's staged content.
     function requestCloseTab(key) {
         const difficultyId = root.difficultyIdForKey(key)
-        if (key === root.viewState.metadataEditorKey) {
+        if (key === root.viewState.metadataEditorKey || key === root.viewState.latencyEditorKey) {
             root.viewState.closeEditor(key)
             return
         }
@@ -50,12 +51,14 @@ Rectangle {
     function titleForKey(key) {
         if (key === viewState.metadataEditorKey)
             return qsTrId("dialog.unsaved_field_changes.field.metadata")
+        if (key === viewState.latencyEditorKey)
+            return qsTrId("qml.latency_calibration")
         const difficulty = difficultyData(difficultyIdForKey(key))
         return difficulty ? difficulty.label : qsTrId("dialog.batch_export.difficulty")
     }
 
     function tooltipForKey(key) {
-        if (key === viewState.metadataEditorKey)
+        if (key === viewState.metadataEditorKey || key === viewState.latencyEditorKey)
             return ""
         const difficulty = difficultyData(difficultyIdForKey(key))
         if (!difficulty)
@@ -70,6 +73,13 @@ Rectangle {
     }
 
     function activateTab(key) {
+        if (key === viewState.latencyEditorKey) {
+            root.pages.openLatencyPage()
+            return
+        }
+        if (key === viewState.metadataEditorKey && root.pages.activePageId === "latency"
+                && !root.pages.activateMetadataPage())
+            return
         viewState.activateEditor(key)
     }
 
@@ -144,7 +154,8 @@ Rectangle {
                     secondaryText: ""
                     iconSource: modelData === root.viewState.metadataEditorKey
                         ? Qt.resolvedUrl("icons/metadata.svg")
-                        : ""
+                        : modelData === root.viewState.latencyEditorKey
+                            ? Qt.resolvedUrl("icons/metronome.svg") : ""
                     difficultyId: root.difficultyIdForKey(modelData)
                     tooltip: root.tooltipForKey(modelData)
                     active: root.viewState.activeEditorKey === modelData

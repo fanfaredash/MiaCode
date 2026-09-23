@@ -44,6 +44,7 @@ Item {
     readonly property real minimumHeight: titleBar.height + platformMenuLoader.height
         + mainToolBar.height + statusBar.height + splitView.minimumHeight
     readonly property bool compact: width < minimumWidth + splitView.expandedSidebarWidth
+    property bool latencySceneActive: false
 
     ViewState { id: state }
 
@@ -77,10 +78,8 @@ Item {
                 state.openMetadataEditor()
         }
         onLatencyCalibrationRequested: {
-            if (!root.documentSession.hasDocument)
-                return
-            root.pages.rememberEditorReturnTarget(state.activeEditorKey)
-            root.pages.openLatencyPage()
+            if (root.documentSession.hasDocument)
+                root.pages.openLatencyPage()
         }
         onMediaToolsRequested: {
             if (root.documentSession.hasDocument)
@@ -139,10 +138,20 @@ Item {
         if (root.pages.activePageId === "export"
                 || root.pages.activePageId === "cover")
             state.activeSidebarView = "export"
-        else if (root.pages.activePageId === "latency")
-            state.activeSidebarView = "tools"
         else if (root.pages.activePageId === "")
             state.activeSidebarView = "chart"
+    }
+
+    function syncLatencyScene() {
+        const active = root.documentSession.hasDocument
+            && root.pages.activePageId === "latency" && state.latencyEditorActive
+        if (active === root.latencySceneActive)
+            return
+        root.latencySceneActive = active
+        if (active)
+            root.latency.enter()
+        else
+            root.latency.leave()
     }
 
     function undo() {
@@ -268,9 +277,9 @@ Item {
             sidebarActive: root.compact
                            ? state.compactPanel === "sidebar"
                            : state.sidebarVisible
-            bottomActive: state.difficultyEditorActive
+            bottomActive: (state.difficultyEditorActive || state.latencyEditorActive)
                           && state.bottomPanelVisible && root.timelineSession.panelVisible
-            bottomPanelEnabled: state.difficultyEditorActive
+            bottomPanelEnabled: state.difficultyEditorActive || state.latencyEditorActive
             saveEnabled: root.editorActive
             canUndo: splitView.canUndo
             canRedo: splitView.canRedo
@@ -447,6 +456,7 @@ Item {
             // replacement never leaves the editor with no tab at all.
             state.syncDifficultyEditors(root.documentSession.difficulties,
                                         root.documentSession.currentDifficultyId)
+            root.syncLatencyScene()
         }
 
         function onDifficultiesChanged() {
@@ -470,6 +480,14 @@ Item {
 
     Connections {
         target: state
+
+        function onActiveEditorKeyChanged() {
+            if (state.latencyEditorActive && root.pages.activePageId !== "latency")
+                root.pages.openLatencyPage()
+            else if (state.metadataEditorActive && root.pages.activePageId === "latency")
+                root.pages.activateMetadataPage()
+            root.syncLatencyScene()
+        }
 
         function onDifficultyEditorActivationRequested(difficultyId) {
             if (root.pages.overlayActive) {
@@ -496,8 +514,13 @@ Item {
     Connections {
         target: root.pages
 
+        function onLatencyPageActivated() {
+            state.openLatencyEditor()
+        }
+
         function onActivePageIdChanged() {
             root.syncSidebarViewToPage()
+            root.syncLatencyScene()
         }
 
         function onOverlayPageLeft() {
