@@ -46,7 +46,7 @@
 | [阶段 0a：移除 v1 QuickShell 外壳与其入口 — 实施计划](specs/ui/plans/2026-08-25-v2-stage0a-remove-v1-shell.md) | — |
 | [Timeline Qt Quick + GPU 一致性检查清单](tests/TIMELINE_QTQUICK_GPU_PARITY_CHECKLIST.md) | — |
 
-## working（52）
+## working（53）
 
 | 文档 | Canonical ID |
 | --- | --- |
@@ -102,3 +102,4 @@
 | [封面导出谱面帧 v1 复刻设计](superpowers/specs/2026-08-31-cover-export-v1-chart-frame-design.md) | — |
 | [阶段 4：MediaTools 非 Widget 所有权迁移设计](superpowers/specs/2026-09-01-stage4-media-tools-ownership-design.md) | — |
 | [MiaCode 规格与指引技能治理重整设计](superpowers/specs/2026-09-05-spec-and-guide-governance-design.md) | — |
+| [单视频“豆包AI生成”水印脚本设计](superpowers/specs/2026-09-09-video-watermark-design.md) | — |
