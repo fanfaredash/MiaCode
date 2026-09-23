@@ -736,6 +736,8 @@ target_sources(MiaCode PRIVATE
     src/audio/PreviewAudioWorkerFactory.cpp
     src/audio/PreviewAudioWorker.h
     src/audio/PreviewAudioWorker.cpp
+    src/audio/PreviewBassDefaultDevice.h
+    src/audio/PreviewBassDefaultDevice.cpp
     src/audio/PreviewBassDeviceLease.h
     src/audio/PreviewBassDeviceLease.cpp
     src/tools/video_export/VideoExportAudioRenderPlan.h
@@ -1210,6 +1212,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/PreviewAudioWorkerFactory.cpp
             src/audio/PreviewAudioWorker.h
             src/audio/PreviewAudioWorker.cpp
+            src/audio/PreviewBassDefaultDevice.h
+            src/audio/PreviewBassDefaultDevice.cpp
             src/audio/PreviewBassDeviceLease.h
             src/audio/PreviewBassDeviceLease.cpp
             src/tools/probe/SoundtouchProbe.cpp
@@ -1811,6 +1815,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/QtPreviewSfxRuntime.cpp
             src/audio/PreviewBassEmergencyPause.h
             src/audio/PreviewBassEmergencyPause.cpp
+            src/audio/PreviewBassDefaultDevice.h
+            src/audio/PreviewBassDefaultDevice.cpp
             src/audio/PreviewBassDeviceLease.h
             src/audio/PreviewBassDeviceLease.cpp
         LIBS Qt6::Core soundtouch

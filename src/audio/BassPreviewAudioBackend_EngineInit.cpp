@@ -2,6 +2,7 @@
 
 #include "BassPreviewDebugLogRouting.h"
 #include "BassPreviewRetainedState.h"
+#include "PreviewBassDefaultDevice.h"
 #include "PreviewBassEmergencyPause.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
@@ -21,7 +22,6 @@
 #include <QtMath>
 
 #include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
-#include <mutex>
 #include <cstring>
 
 #ifdef MIACODE_HAS_BASS_AUDIO
@@ -51,37 +51,6 @@ struct DefaultBassEndpoint {
     HRESULT comResult = E_FAIL;
     HRESULT endpointResult = E_FAIL;
 };
-
-struct ConcreteEndpointConfig {
-    std::once_flag once;
-    bool disabledDefaultDevice = false;
-    int errorCode = BASS_OK;
-};
-
-ConcreteEndpointConfig& concreteEndpointConfig()
-{
-    static ConcreteEndpointConfig config;
-    return config;
-}
-
-bool disableBassDefaultDeviceEntry(int* errorCode)
-{
-    // BASS_CONFIG_DEV_DEFAULT can only be changed before BASS has enumerated or
-    // initialized a device. BASS_Free does not reopen that configuration window,
-    // so a physical-output rebuild must reuse the result of the first attempt
-    // rather than call BASS_SetConfig again.
-    ConcreteEndpointConfig& config = concreteEndpointConfig();
-    std::call_once(config.once, [&config] {
-        config.disabledDefaultDevice = BASS_SetConfig(BASS_CONFIG_DEV_DEFAULT, FALSE) != FALSE;
-        if (!config.disabledDefaultDevice) {
-            config.errorCode = static_cast<int>(BASS_ErrorGetCode());
-        }
-    });
-    if (errorCode != nullptr) {
-        *errorCode = config.errorCode;
-    }
-    return config.disabledDefaultDevice;
-}
 
 DefaultBassEndpoint resolveDefaultBassEndpoint()
 {
@@ -320,12 +289,13 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     timer.start();
     _mc_op_.note(QStringLiteral("device_sr=%1").arg(deviceSampleRate_));
 #ifdef Q_OS_WIN
-    // BASS_Init(-1) means "follow the Windows default device". Disable that mode
-    // once, before the first BASS enumeration/initialization, and bind every engine
-    // lifetime to the concrete Core Audio endpoint instead. A device rebuild happens
-    // after BASS_Free, when this BASS setting is deliberately no longer mutable.
+    // BASS_Init(-1) means "follow the Windows default device". main() disables that
+    // mode before anything in the process reaches BASS, so every engine lifetime can
+    // bind to the concrete Core Audio endpoint instead; this reads back that single
+    // process-wide attempt. A device rebuild happens after BASS_Free, when the
+    // setting is no longer mutable anyway.
     int errorCode = BASS_OK;
-    if (!disableBassDefaultDeviceEntry(&errorCode)) {
+    if (!miacode::preview_audio::disableBassDefaultDeviceEntry(&errorCode)) {
         lastNativeErrorCode_ = errorCode;
         appendAudioDebugLog(QString("bass_endpoint_bind_failed reason=disable_default err=%1")
                                 .arg(errorCode));
