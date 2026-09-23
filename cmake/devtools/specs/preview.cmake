@@ -356,6 +356,9 @@ if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     )
     target_compile_definitions(preview_audio_worker_spec PRIVATE MIACODE_HAS_BASS_AUDIO=1)
     target_include_directories(preview_audio_worker_spec PRIVATE third_party/bass/include)
+    # The BASS backend resolves track paths through common/ChartAssetPaths.h, whose
+    # background helpers include <QImage>.
+    target_link_libraries(preview_audio_worker_spec PRIVATE Qt6::Gui)
     if (WIN32)
         target_link_libraries(preview_audio_worker_spec PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
