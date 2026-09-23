@@ -51,19 +51,29 @@ Item {
         && root.viewState.bottomPanelVisible && root.timelineSession.panelVisible
     readonly property bool exportVideoActive:
         root.pages.activePageId === "export"
-    readonly property bool exportRangeActive:
-        root.exportVideoActive && root.pages.exportSession
-        && root.pages.exportSession.activeTab === "export"
-        && root.pages.exportSession.settingsTab === "output"
     readonly property real previewEditorAvailableWidth:
         Math.max(1, workspaceSplit.width - (preview.visible ? Theme.splitDividerThickness : 0))
     signal openRequested()
     signal settingsRequested()
 
+    function isRangePreviewPageActive(session) {
+        return root.pages.activePageId === "export"
+            && !!session
+            && session.activeTab === "export"
+            && session.settingsTab === "output"
+    }
+
     function syncRangePreviewState() {
-        if (!root.exportRangeActive) {
+        const session = root.pages.exportSession
+        if (!root.isRangePreviewPageActive(session)) {
             root.rangePreviewState.armed = false
+            return
         }
+
+        root.rangePreviewState.startSeconds = session.exportStartSeconds
+        root.rangePreviewState.endSeconds = session.exportEndSeconds
+        root.rangePreviewState.armed = !session.fullRangeExport
+            || session.exportEndSeconds < session.contentDurationSeconds
     }
 
     QtObject {
@@ -84,9 +94,16 @@ Item {
         target: root.pages.exportSession
         function onActiveTabChanged() { root.syncRangePreviewState() }
         function onSettingsTabChanged() { root.syncRangePreviewState() }
+        function onRangeChanged() { root.syncRangePreviewState() }
+        // A selection export is an explicit range-playback entry, even when
+        // the applied range happens to cover the full chart.
         function onSelectionRangeApplied() {
-            root.rangePreviewState.startSeconds = root.pages.exportSession.exportStartSeconds
-            root.rangePreviewState.endSeconds = root.pages.exportSession.exportEndSeconds
+            const session = root.pages.exportSession
+            if (!root.isRangePreviewPageActive(session))
+                return
+
+            root.rangePreviewState.startSeconds = session.exportStartSeconds
+            root.rangePreviewState.endSeconds = session.exportEndSeconds
             root.rangePreviewState.armed = true
         }
     }
@@ -314,6 +331,7 @@ Item {
                         pages: root.pages
                         previewSession: root.previewSession
                         previewSettings: root.previewSettings
+                        rangePreviewState: root.rangePreviewState
                     }
 
                     LatencyPage {

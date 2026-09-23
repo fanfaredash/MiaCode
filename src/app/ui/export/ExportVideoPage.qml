@@ -47,6 +47,14 @@ Rectangle {
             root.session.settingsTab = "output"
     }
 
+    function armRangePreview(startSecond, endSecond) {
+        if (!root.rangePreviewState)
+            return
+        root.rangePreviewState.startSeconds = startSecond
+        root.rangePreviewState.endSeconds = endSecond
+        root.rangePreviewState.armed = true
+    }
+
     function fontIndexForPath(options, path) {
         if (!options)
             return 0
@@ -523,11 +531,7 @@ Rectangle {
                                 exportSession: root.session
                                 previewSession: root.previewSession
                                 onRangeInteractionRequested: function(startSecond, endSecond) {
-                                    if (root.rangePreviewState) {
-                                        root.rangePreviewState.startSeconds = startSecond
-                                        root.rangePreviewState.endSeconds = endSecond
-                                        root.rangePreviewState.armed = true
-                                    }
+                                    root.armRangePreview(startSecond, endSecond)
                                 }
                             }
                         }
@@ -552,11 +556,8 @@ Rectangle {
                                 onEditingFinished: {
                                     if (root.session) {
                                         text = root.session.setExportStartText(text)
-                                        if (root.rangePreviewState) {
-                                            root.rangePreviewState.startSeconds = root.session.exportStartSeconds
-                                            root.rangePreviewState.endSeconds = root.session.exportEndSeconds
-                                            root.rangePreviewState.armed = true
-                                        }
+                                        root.armRangePreview(root.session.exportStartSeconds,
+                                                               root.session.exportEndSeconds)
                                     }
                                 }
                             }
@@ -583,11 +584,8 @@ Rectangle {
                                 onEditingFinished: {
                                     if (root.session) {
                                         text = root.session.setExportEndText(text)
-                                        if (root.rangePreviewState) {
-                                            root.rangePreviewState.startSeconds = root.session.exportStartSeconds
-                                            root.rangePreviewState.endSeconds = root.session.exportEndSeconds
-                                            root.rangePreviewState.armed = true
-                                        }
+                                        root.armRangePreview(root.session.exportStartSeconds,
+                                                               root.session.exportEndSeconds)
                                     }
                                 }
                             }
