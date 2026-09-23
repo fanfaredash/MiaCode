@@ -89,7 +89,11 @@ def extract_archive(archive: Path, dest: Path):
     if seven:
         run([seven, "x", "-y", f"-o{dest}", archive])
         return
-    run([sys.executable, "-m", "py7zr", "x", archive, f"-o{dest}"])
+    # py7zr's CLI takes the destination positionally and rejects 7z's -o
+    # flag, so use its API instead.
+    import py7zr
+    with py7zr.SevenZipFile(archive, "r") as stream:
+        stream.extractall(path=dest)
 
 
 def keys():
