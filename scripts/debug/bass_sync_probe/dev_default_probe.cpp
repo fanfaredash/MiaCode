@@ -1,11 +1,12 @@
 // Measures when BASS_SetConfig(BASS_CONFIG_DEV_DEFAULT, FALSE) stops being accepted.
 //
-// On Windows the preview engine disables BASS's "follow the default device" mode once
-// per process, under std::call_once, before it binds a concrete endpoint
-// (disableBassDefaultDeviceEntry in src/audio/BassPreviewAudioBackend_EngineInit.cpp).
-// If any other BASS user in the process already initialized a device, for example the
-// waveform cache's no-sound decode device 0, that call fails and the cached failure keeps
-// the preview engine down until the process restarts.
+// On Windows MiaCode disables BASS's "follow the default device" mode once per process,
+// under std::call_once, so the preview engine can bind a concrete endpoint
+// (disableBassDefaultDeviceEntry in src/audio/PreviewBassDefaultDevice.cpp); main() makes
+// that call before anything reaches BASS. Before 4d7c274e the preview engine made it
+// lazily, and when another BASS user had already initialized a device, for example the
+// waveform cache's no-sound decode device 0, the cached failure kept the preview engine
+// down until the process restarted.
 //
 // The config window is process-global, so every case must run in a fresh process:
 //   ./dev_default_probe <case>

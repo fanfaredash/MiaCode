@@ -3,9 +3,10 @@
 #
 # Stage 1 (automatic): loads the shipped bass.dll and checks, one fresh process per case,
 #   whether BASS_SetConfig(BASS_CONFIG_DEV_DEFAULT, FALSE) still succeeds after another
-#   BASS user has initialized device 0. The preview engine performs that call once per
-#   process (std::call_once in disableBassDefaultDeviceEntry), so a failure there keeps
-#   preview audio, and with it Play, dead until restart.
+#   BASS user has initialized device 0. MiaCode performs that call once per process
+#   (std::call_once in disableBassDefaultDeviceEntry). Before 4d7c274e the preview engine
+#   made it lazily, so a failure there kept preview audio, and with it Play, dead until
+#   restart. Fixed builds make it at the top of main(); on those a HIT is a regression.
 # Stage 2 (guided): copies a chart to a fresh folder (no .miacode, so the waveform cache
 #   misses), launches MiaCode with --debug, has the tester press Play right away, then
 #   reads the logs for the engine init result. Repeats as many rounds as the tester wants.
