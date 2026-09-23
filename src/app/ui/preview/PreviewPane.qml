@@ -8,6 +8,7 @@ Rectangle {
 
     required property var previewSession
     required property var preferences
+    required property var rangePreviewState
     property bool documentAvailable: true
     // See PreviewTransport: the canvas menu hides on the export page.
     property bool exportPageActive: false
@@ -131,6 +132,7 @@ Rectangle {
         anchors.bottom: statistics.top
         previewSession: root.previewSession
         preferences: root.preferences
+        rangePreviewState: root.rangePreviewState
         exportPageActive: root.exportPageActive
         dataAvailable: root.documentAvailable
         enabled: root.documentAvailable

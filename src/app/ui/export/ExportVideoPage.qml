@@ -11,6 +11,7 @@ Rectangle {
     required property var pages
     required property var previewSession
     required property var previewSettings
+    property var rangePreviewState: null
     readonly property var session: pages && pages.exportSession ? pages.exportSession : null
     readonly property bool introSettingsEnabled: !!root.session
                                                   && root.session.introEnabled
@@ -521,6 +522,13 @@ Rectangle {
                                 Layout.fillWidth: true
                                 exportSession: root.session
                                 previewSession: root.previewSession
+                                onRangeInteractionRequested: function(startSecond, endSecond) {
+                                    if (root.rangePreviewState) {
+                                        root.rangePreviewState.startSeconds = startSecond
+                                        root.rangePreviewState.endSeconds = endSecond
+                                        root.rangePreviewState.armed = true
+                                    }
+                                }
                             }
                         }
                         RowLayout {
@@ -541,7 +549,16 @@ Rectangle {
                                 Layout.preferredWidth: 100
                                 Layout.alignment: Qt.AlignVCenter
                                 text: root.session ? root.session.exportStartSeconds.toFixed(3) : "0"
-                                onEditingFinished: if (root.session) text = root.session.setExportStartText(text)
+                                onEditingFinished: {
+                                    if (root.session) {
+                                        text = root.session.setExportStartText(text)
+                                        if (root.rangePreviewState) {
+                                            root.rangePreviewState.startSeconds = root.session.exportStartSeconds
+                                            root.rangePreviewState.endSeconds = root.session.exportEndSeconds
+                                            root.rangePreviewState.armed = true
+                                        }
+                                    }
+                                }
                             }
                             Item { Layout.fillWidth: true }
                         }
@@ -563,7 +580,16 @@ Rectangle {
                                 Layout.preferredWidth: 100
                                 Layout.alignment: Qt.AlignVCenter
                                 text: root.session ? root.session.exportEndSeconds.toFixed(3) : "0"
-                                onEditingFinished: if (root.session) text = root.session.setExportEndText(text)
+                                onEditingFinished: {
+                                    if (root.session) {
+                                        text = root.session.setExportEndText(text)
+                                        if (root.rangePreviewState) {
+                                            root.rangePreviewState.startSeconds = root.session.exportStartSeconds
+                                            root.rangePreviewState.endSeconds = root.session.exportEndSeconds
+                                            root.rangePreviewState.armed = true
+                                        }
+                                    }
+                                }
                             }
                             Item { Layout.fillWidth: true }
                         }
@@ -878,4 +904,5 @@ Rectangle {
                 exportRangeEndField.text = root.session.exportEndSeconds.toFixed(3)
         }
     }
+
 }

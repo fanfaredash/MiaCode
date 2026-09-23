@@ -24,6 +24,7 @@ Item {
     required property var editorController
     required property var editorSync
     required property var latency
+    property var rangePreviewState: rangePreviewStateObject
     property bool compact: false
     property real sidebarDragWidth: 0
     property bool sidebarResizing: false
@@ -50,10 +51,55 @@ Item {
         && root.viewState.bottomPanelVisible && root.timelineSession.panelVisible
     readonly property bool exportVideoActive:
         root.pages.activePageId === "export"
+    readonly property bool exportRangeActive:
+        root.exportVideoActive && root.pages.exportSession
+        && root.pages.exportSession.activeTab === "export"
+        && root.pages.exportSession.settingsTab === "output"
     readonly property real previewEditorAvailableWidth:
         Math.max(1, workspaceSplit.width - (preview.visible ? Theme.splitDividerThickness : 0))
     signal openRequested()
     signal settingsRequested()
+
+    function syncRangePreviewState() {
+        if (!root.exportRangeActive) {
+            root.rangePreviewState.armed = false
+        }
+    }
+
+    QtObject {
+        id: rangePreviewStateObject
+        property bool armed: false
+        property real startSeconds: 0
+        property real endSeconds: 0
+    }
+
+    Component.onCompleted: root.syncRangePreviewState()
+
+    Connections {
+        target: root.pages
+        function onActivePageIdChanged() { root.syncRangePreviewState() }
+    }
+
+    Connections {
+        target: root.pages.exportSession
+        function onActiveTabChanged() { root.syncRangePreviewState() }
+        function onSettingsTabChanged() { root.syncRangePreviewState() }
+        function onSelectionRangeApplied() {
+            root.rangePreviewState.startSeconds = root.pages.exportSession.exportStartSeconds
+            root.rangePreviewState.endSeconds = root.pages.exportSession.exportEndSeconds
+            root.rangePreviewState.armed = true
+        }
+    }
+
+    Connections {
+        target: root.previewSession
+        function onPositionChanged() {
+            if (root.rangePreviewState.armed
+                    && root.previewSession.playing
+                    && root.previewSession.positionSeconds >= root.rangePreviewState.endSeconds)
+                root.previewSession.playing = false
+        }
+    }
 
     function persistBottomPanelHeightRatio() {
         if (!root.bottomPanelEffectivelyVisible || centerSplit.height <= 0
@@ -309,6 +355,7 @@ Item {
                 surfaceActive: !fullscreenPreview.visible
                 previewSession: root.previewSession
                 preferences: root.preferences
+                rangePreviewState: root.rangePreviewState
                 exportPageActive: root.exportVideoActive
                 SplitView.preferredWidth: root.previewEditorAvailableWidth
                                           * root.preferences.previewWidthRatio
@@ -441,6 +488,7 @@ Item {
             anchors.bottom: parent.bottom
             previewSession: root.previewSession
             preferences: root.preferences
+            rangePreviewState: root.rangePreviewState
             showCanvasMenuButton: false
         }
     }

@@ -966,6 +966,7 @@ void ExportSession::applyPendingSelectionRangeExport()
     }
     hasPendingSelectionRangeExport_ = false;
     setExportRangeSeconds(pendingRangeStartSeconds_, pendingRangeEndSeconds_);
+    emit selectionRangeApplied();
 }
 
 void ExportSession::clearPendingSelectionRangeExport()
