@@ -318,6 +318,10 @@ affects both live diagnostics and exported overlays.
   the only reason a device hotplug can't disturb a running video export is that
   `MainWindow.ExportFlow.cpp` pauses the preview before opening the export dialog. If export ever
   starts while playback continues, that guard must be re-examined — it is the sole protection.
+- **BASS process-level config ⇄ every BASS consumer.** Windows `BASS_CONFIG_DEV_DEFAULT` closes at the
+  process's first BASS device enumeration or `BASS_Init` — any thread, any device, including the
+  waveform decoder's no-sound device 0. `main()` sets it first through
+  `src/audio/PreviewBassDefaultDevice.h`; a new BASS consumer must not run before that call.
 
 ## 12. Latency-page audition reuses the main preview transport
 

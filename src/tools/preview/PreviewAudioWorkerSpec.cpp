@@ -20,9 +20,13 @@
 
 #include "audio/MiniaudioPreviewAudioBackend.h"
 #include "audio/PreviewAudioWorker.h"
+#include "audio/PreviewBassDefaultDevice.h"
 #include "audio/QtPreviewSfxRuntime.h"
 #ifdef MIACODE_HAS_BASS_AUDIO
 #include "audio/BassPreviewAudioBackend.h"
+#endif
+#if defined(MIACODE_HAS_BASS_AUDIO) && defined(Q_OS_WIN)
+#include "bass.h"
 #endif
 
 #ifndef MIACODE_SOURCE_ROOT
@@ -109,6 +113,34 @@ bool verifyWindowsBassFxLoaderCachesImmediateErrors(QTextStream& err)
                                      QStringLiteral("FreeLibrary(module);"),
                                      QStringLiteral("_mc_op_.fail(")}),
                  "GetProcAddress failure caches GetLastError before FreeLibrary", err);
+    return ok;
+}
+
+bool verifyBassDefaultDeviceEntryIsSettledAtStartup(QTextStream& err)
+{
+    // The engine used to make the process's only DEV_DEFAULT attempt, lazily, so an
+    // uncached chart's waveform decode (BASS_Init(0)) got there first and preview
+    // audio stayed dead until restart.
+    QFile mainFile(QStringLiteral(MIACODE_SOURCE_ROOT) + QStringLiteral("/src/app/main.cpp"));
+    QFile engineFile(
+        QStringLiteral(MIACODE_SOURCE_ROOT)
+        + QStringLiteral("/src/audio/BassPreviewAudioBackend_EngineInit.cpp"));
+    if (!mainFile.open(QIODevice::ReadOnly | QIODevice::Text)
+        || !engineFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return expect(false, "main and BASS engine-init sources are readable", err);
+    }
+    const QString mainSource = QString::fromUtf8(mainFile.readAll());
+    const QString engineSource = QString::fromUtf8(engineFile.readAll());
+    bool ok = true;
+    ok &= expect(tokensAppearInOrder(mainSource,
+                                    {QStringLiteral("int main("),
+                                     QStringLiteral("disableBassDefaultDeviceEntry("),
+                                     QStringLiteral("QApplication app(")}),
+                 "main() settles DEV_DEFAULT before the application can reach BASS", err);
+    ok &= expect(engineSource.contains(QStringLiteral("disableBassDefaultDeviceEntry(")),
+                 "engine init reads back the process-wide DEV_DEFAULT result", err);
+    ok &= expect(!engineSource.contains(QStringLiteral("BASS_SetConfig(BASS_CONFIG_DEV_DEFAULT")),
+                 "engine init makes no DEV_DEFAULT attempt of its own", err);
     return ok;
 }
 
@@ -2566,6 +2598,79 @@ bool verifyAssetLifecycleCallbackCanReenterWorker(QTextStream& err)
                   "reentrant asset lifecycle callback can post without deadlock", err);
 }
 
+#if defined(MIACODE_HAS_BASS_AUDIO) && defined(Q_OS_WIN)
+bool initAndFreeNoSoundDeviceOnAnotherThread()
+{
+    // What an uncached chart's waveform decode does on its worker thread.
+    bool initialized = false;
+    std::thread decoder([&initialized] {
+        initialized = BASS_Init(0, 44100, BASS_DEVICE_NOSPEAKER, nullptr, nullptr) != FALSE;
+        if (initialized) {
+            BASS_Free();
+        }
+    });
+    decoder.join();
+    return initialized;
+}
+
+int runBassDefaultDeviceStartupChild(QTextStream& err)
+{
+    // Fixed order: main() first, then the waveform decode, then preview engine init.
+    bool ok = true;
+    int errorCode = -1;
+    ok &= expect(disableBassDefaultDeviceEntry(&errorCode) && errorCode == 0,
+                 "startup attempt disables DEV_DEFAULT in a fresh process", err);
+    ok &= expect(initAndFreeNoSoundDeviceOnAnotherThread(),
+                 "no-sound device initializes after the startup attempt", err);
+    errorCode = -1;
+    ok &= expect(disableBassDefaultDeviceEntry(&errorCode) && errorCode == 0,
+                 "engine-time call still reports DEV_DEFAULT disabled", err);
+    ok &= expect(BASS_GetConfig(BASS_CONFIG_DEV_DEFAULT) == 0,
+                 "BASS keeps default-device following disabled", err);
+    return ok ? 0 : 2;
+}
+
+int runBassDefaultDeviceLateChild(QTextStream& err)
+{
+    // Pre-fix order: the waveform decode reaches BASS before anyone disables DEV_DEFAULT.
+    bool ok = true;
+    ok &= expect(initAndFreeNoSoundDeviceOnAnotherThread(),
+                 "no-sound device initializes in a fresh process", err);
+    int errorCode = 0;
+    ok &= expect(!disableBassDefaultDeviceEntry(&errorCode) && errorCode != 0,
+                 "a first DEV_DEFAULT attempt after any BASS_Init is rejected", err);
+    return ok ? 0 : 2;
+}
+
+bool childProcessPasses(const QString& childFlag, const char* message, QTextStream& err)
+{
+    QProcess child;
+    child.setProcessChannelMode(QProcess::MergedChannels);
+    child.start(QCoreApplication::applicationFilePath(), {childFlag});
+    if (!child.waitForStarted(2'000) || !child.waitForFinished(10'000)) {
+        child.kill();
+        child.waitForFinished();
+        return expect(false, message, err);
+    }
+    const bool passed = child.exitStatus() == QProcess::NormalExit && child.exitCode() == 0;
+    if (!passed) {
+        err << child.readAll() << Qt::endl;
+    }
+    return expect(passed, message, err);
+}
+
+bool verifyBassDefaultDeviceEntryOrdering(QTextStream& err)
+{
+    // DEV_DEFAULT is process-wide and one-way, so each ordering needs a fresh process.
+    bool ok = true;
+    ok &= childProcessPasses(QStringLiteral("--bass-default-device-startup-child"),
+                             "DEV_DEFAULT settled at startup survives a later no-sound init", err);
+    ok &= childProcessPasses(QStringLiteral("--bass-default-device-late-child"),
+                             "DEV_DEFAULT can no longer be settled after a no-sound init", err);
+    return ok;
+}
+#endif
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -2579,6 +2684,14 @@ int main(int argc, char* argv[])
     if (QCoreApplication::arguments().contains(QStringLiteral("--reentrant-asset-lifecycle-child"))) {
         return runReentrantAssetLifecycleChild(err);
     }
+#if defined(MIACODE_HAS_BASS_AUDIO) && defined(Q_OS_WIN)
+    if (QCoreApplication::arguments().contains(QStringLiteral("--bass-default-device-startup-child"))) {
+        return runBassDefaultDeviceStartupChild(err);
+    }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--bass-default-device-late-child"))) {
+        return runBassDefaultDeviceLateChild(err);
+    }
+#endif
 
     bool ok = true;
     ok &= verifyFacadeQueuesOwnerThreadCallsAndDropsDestroyedReceiver(err);
@@ -2602,6 +2715,10 @@ int main(int argc, char* argv[])
     ok &= verifyProductionMiniaudioFactoryRunsOnWorker(err);
     ok &= verifyMiniaudioImplementationHasNoFacadeAlias(err);
     ok &= verifyWindowsBassFxLoaderCachesImmediateErrors(err);
+    ok &= verifyBassDefaultDeviceEntryIsSettledAtStartup(err);
+#if defined(MIACODE_HAS_BASS_AUDIO) && defined(Q_OS_WIN)
+    ok &= verifyBassDefaultDeviceEntryOrdering(err);
+#endif
     ok &= verifyExceptionBoundaryAndReservedPauseTiming(err);
     ok &= verifyWarmupTimingIncludesSnapshotGetters(err);
     ok &= verifyDevicePauseBarrierDropsOlderQueuedPlayback(err);

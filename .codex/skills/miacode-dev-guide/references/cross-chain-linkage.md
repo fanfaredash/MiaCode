@@ -319,6 +319,8 @@ Implication:
   - Check `MuriPanelEntries.cpp`
   - Check `MainWindow.ValidationFlow.cpp`
   - Check `MuriSpec.cpp`
+- Add a BASS consumer or another BASS process-level config:
+  - Check that it cannot run before `main()` calls `disableBassDefaultDeviceEntry` (`src/audio/PreviewBassDefaultDevice.h`); Windows `BASS_CONFIG_DEV_DEFAULT` closes at the process's first BASS device enumeration or `BASS_Init`, on any thread or device, including the waveform decoder's no-sound device 0
 
 Selection-to-range export flows from `PlainCodeEditor` through `MainWindow::ExportSection` and `TimelineQuickModel::resolveExportRangeForSelection` into `VideoExportDialog`'s existing range page. The resolver snaps to comma-delimited objects, preserves slash/chained-slide tokens, includes explicitly selected comma timing, uses preview flow speed for the pre-render lead-in, and ends one frame after selected visual/judge tails reported by the export-only `timelineRenderNoteExportVisualEndSecond`. The global timeline snapshot keeps the pre-existing `timelineRenderLineVisualEndSecond` semantics unchanged.
 

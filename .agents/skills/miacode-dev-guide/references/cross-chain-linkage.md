@@ -409,6 +409,10 @@ affects both live diagnostics and exported overlays.
   `VideoExportController.cpp`.
 - Muri list anchoring/dedupe → `MuriPanelEntries.cpp`, `MainWindow.ValidationFlow.cpp`,
   `src/tools/muri/MuriSpec.cpp`.
+- BASS process-level config (Windows `BASS_CONFIG_DEV_DEFAULT`) closes at the process's first BASS
+  device enumeration or `BASS_Init` — any thread, any device, including the waveform decoder's
+  no-sound device 0. `main()` sets it first through `src/audio/PreviewBassDefaultDevice.h`; a new
+  BASS consumer must not run before that call.
 
 ## 12. Latency-page audition reuses the main preview transport
 
