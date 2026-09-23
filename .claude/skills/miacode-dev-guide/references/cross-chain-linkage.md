@@ -23,6 +23,8 @@
 - QML model 是投影/命令入口，不重新计算文档 dirty 或制造第二个 workspace。
 - 异步分析、播放与导航结果必须匹配各自的文档 revision / session generation / sequence；换谱后拒绝旧结果。
 - 设备切换的即时音频停止与 GUI 状态更新不是同一线程动作；不要用 GUI 回调替代音频屏障。
+- BASS 进程级配置在进程首次 BASS 设备枚举或初始化后即不可改，任何线程、任何设备（含波形解码的 no-sound 设备）都算；
+  Windows 的 `BASS_CONFIG_DEV_DEFAULT` 由 `main()` 经 `src/audio/PreviewBassDefaultDevice.h` 最先设定，新增 BASS 消费者不得抢在它之前。
 - 预览与导出共享纯时间/场景/SFX 语义；headless 帧不能依赖 QML Timer 推动动画。
 - 窗口、engine、音频资源和导出任务按 owner 生命周期释放；合并 Spec 不得削弱编译、链接或进程隔离。
 

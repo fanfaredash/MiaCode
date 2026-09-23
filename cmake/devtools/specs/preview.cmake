@@ -334,6 +334,8 @@ miacode_add_spec(preview_audio_worker_spec
         src/audio/QtPreviewSfxRuntime.cpp
         src/audio/PreviewBassEmergencyPause.h
         src/audio/PreviewBassEmergencyPause.cpp
+        src/audio/PreviewBassDefaultDevice.h
+        src/audio/PreviewBassDefaultDevice.cpp
         src/audio/PreviewBassDeviceLease.h
         src/audio/PreviewBassDeviceLease.cpp
     LIBS Qt6::Core soundtouch
