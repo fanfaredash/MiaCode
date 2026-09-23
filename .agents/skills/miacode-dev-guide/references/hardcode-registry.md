@@ -120,6 +120,11 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   SYNC-PAIR mirrored as `kMaxContentScale` in `TimelineSceneStateBuilder.cpp` and the literal `4.0`
   in `TimelineView.cpp`/`TimelineView.Core.cpp`/`TimelineQuickStateBridge.cpp` `setContentScale`
   clamps — change all together. See `cross-chain-linkage.md`.
+- `src/app/ui/WindowParityMetrics.h` — `kWorkspaceContentMinWidth = 440` protects the central
+  editor/export column. `kEmbeddedPreviewPanelPreferredWidthMax = 900` is only an automatic-layout
+  recommendation: manual preview resizing may exceed it, but its live maximum must subtract the
+  current sidebar, splitter, and content minimum. The persisted split ratio excludes sidebar and
+  splitter widths so window resize/maximize and outline fold/unfold remain proportional.
 - `src/tools/media/MediaPrependPolicy.h` + `.cpp` — toolbox media-prepend ffmpeg policy: audio
   normalizes both segments to stereo `44100 Hz` and fades the source in over `5 ms`; audio output
   encoders follow the resolved track format (`libmp3lame -q:a 2`, `pcm_s16le`, `flac`, or

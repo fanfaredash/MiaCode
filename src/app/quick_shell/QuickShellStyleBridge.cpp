@@ -268,7 +268,7 @@ void QuickShellStyleBridge::refreshFromBackend()
         {QStringLiteral("topChromeHeight"), 78},
         {QStringLiteral("statusHeight"), 28},
         {QStringLiteral("previewPanelMinWidth"), previewPanelMinWidth},
-        {QStringLiteral("previewPanelMaxWidth"), miacode::window_parity::kEmbeddedPreviewPanelWidthMax},
+        {QStringLiteral("previewPanelPreferredMaxWidth"), miacode::window_parity::kEmbeddedPreviewPanelPreferredWidthMax},
         {QStringLiteral("previewControlStatsCardMinWidth"), miacode::window_parity::kPreviewControlStatsCardMinWidth},
         {QStringLiteral("previewTransportButtonWidth"), miacode::window_parity::kPreviewTransportButtonWidth},
         {QStringLiteral("previewTransportCardMarginX"), miacode::window_parity::kPreviewTransportCardMarginX},
@@ -432,7 +432,7 @@ void QuickShellStyleBridge::refreshFromBackend()
             qBound(
                 previewPanelMinWidth,
                 shellWidth,
-                miacode::window_parity::kEmbeddedPreviewPanelWidthMax
+                miacode::window_parity::kEmbeddedPreviewPanelPreferredWidthMax
             )
         );
     }

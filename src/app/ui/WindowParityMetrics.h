@@ -82,7 +82,9 @@ constexpr int kEmbeddedPreviewPanelMinWidth =
     kPreviewTransportMinimumContentWidth
     + (kPreviewTransportCardMarginX + kPreviewPanelMarginX) * 2;
 constexpr qreal kEmbeddedPreviewPanelWidthRatio = 0.50;
-constexpr int kEmbeddedPreviewPanelWidthMax = 900;
+// Automatic-layout recommendation only. Manual resizing is bounded by the
+// live width left after reserving the sidebar, splitter, and content minimum.
+constexpr int kEmbeddedPreviewPanelPreferredWidthMax = 900;
 constexpr int kPreviewControlCardRadius = 10;
 constexpr int kPreviewStatsCardRadius = 10;
 constexpr int kPreviewStatsChipRadius = 9;

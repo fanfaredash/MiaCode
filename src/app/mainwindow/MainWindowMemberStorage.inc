@@ -224,6 +224,8 @@
         bool pendingQuickTimelineCursorCenterView_ = false;
         BottomTabsTabId currentBottomTabsTabId_ = BottomTabsTabId::Timeline;
         double bottomTabsContentScale_ = 1.0;
+        // Preview share within the resizable content+preview area. The fixed
+        // outline/sidebar and splitter widths are excluded.
         double previewPaneWidthRatio_ = 0.0;
         bool bottomTabsResizeDragActive_ = false;
         int bottomTabsResizeStartGlobalY_ = 0;

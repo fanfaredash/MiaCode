@@ -58,16 +58,20 @@ ApplicationWindow {
                 - metric("statusHeight", 28)
         )
     )
+    // User preference within the resizable content+preview area. Sidebar and
+    // splitter widths are deliberately excluded so folding or resizing them
+    // redistributes space proportionally without changing user intent.
+    property real previewPanePreferredRatio: 0
     property bool previewPaneUserResized: false
     property bool previewPaneStartupBalancePending: true
     property bool startupLayoutLocked: true
     property bool startupContentReady: false
     property real lastPreviewCanvasAspectRatio: 1.0
     property real previewPaneWidthBeforeExport: 0
+    property real previewPaneRatioBeforeExport: 0
     property bool previewPaneWidthBeforeExportUserResized: false
     property bool previewPaneWidthRestorePending: false
     property real lastPreviewPaneRestoreGeneration: 0
-    property real lastPreviewPaneSyncWidth: 0
     property real pendingStartupLayoutWidth: 0
     property real pendingStartupLayoutHeight: 0
     property real startupMinimumWindowWidth: 960
@@ -393,8 +397,15 @@ ApplicationWindow {
         const leftMinWidth = workspacePaneMinWidth()
         const minimumRightWidth = previewPaneMinimumRightWidth(totalWidth)
         return availableWidth >= leftMinWidth + minimumRightWidth
-            ? Math.min(metric("previewPanelMaxWidth", 900), availableWidth - leftMinWidth)
+            ? Math.min(metric("previewPanelPreferredMaxWidth", 900), availableWidth - leftMinWidth)
             : availableWidth
+    }
+
+    function previewPaneUserMaxWidth(totalWidth) {
+        return Math.max(
+            0,
+            previewPaneAvailableWidth(totalWidth) - contentPaneMinWidth()
+        )
     }
 
     function previewPaneTargetWidth(totalWidth, totalHeight, minimumStatsHeight) {
@@ -471,29 +482,18 @@ ApplicationWindow {
     }
 
     function previewPaneMaxWidth(totalWidth, totalHeight) {
-        const minWidth = previewPaneMinWidth()
-        const maxByWindow = previewPaneRightMaxWidth(totalWidth)
-        return Math.max(minWidth, Math.min(metric("previewPanelMaxWidth", 900), maxByWindow))
+        return previewPaneUserMaxWidth(totalWidth)
     }
 
     function previewPaneForcedMaxWidth(totalWidth, totalHeight) {
-        const availableWidth = Math.max(0, totalWidth - previewPaneHandleWidth())
-        const reservedWorkspaceWidth = workspacePaneMinWidth()
-        const maxByCurrentWindow = Math.max(
-            previewPaneMinWidth(),
-            availableWidth - reservedWorkspaceWidth
-        )
-        return Math.max(
-            previewPaneMinWidth(),
-            Math.min(previewPaneMaxWidth(totalWidth, totalHeight), maxByCurrentWindow)
-        )
+        return previewPaneMaxWidth(totalWidth, totalHeight)
     }
 
     function clampPreviewPaneWidth(candidate, totalWidth, totalHeight) {
-        const minWidth = previewPaneMinWidth()
         const maxWidth = previewPaneForcedMaxWidth(totalWidth, totalHeight)
-        if (maxWidth <= minWidth)
-            return minWidth
+        const minWidth = Math.min(previewPaneMinWidth(), maxWidth)
+        if (maxWidth <= 0)
+            return 0
         return Math.max(minWidth, Math.min(candidate, maxWidth))
     }
 
@@ -515,16 +515,35 @@ ApplicationWindow {
         const ratio = controller ? controller.previewPaneWidthRatio : 0
         if (ratio <= 0 || ratio >= 1)
             return 0
-        return clampPreviewPaneWidth(totalWidth * ratio, totalWidth, totalHeight)
+        return previewPaneWidthForRatio(ratio, totalWidth, totalHeight)
+    }
+
+    function previewPaneWidthForRatio(ratio, totalWidth, totalHeight) {
+        if (ratio <= 0 || ratio >= 1)
+            return 0
+        return clampPreviewPaneWidth(
+            previewPaneAvailableWidth(totalWidth) * ratio,
+            totalWidth,
+            totalHeight
+        )
+    }
+
+    function previewPaneRatioForWidth(width, totalWidth) {
+        const availableWidth = previewPaneAvailableWidth(totalWidth)
+        if (availableWidth <= 0)
+            return 0
+        return Math.max(0, Math.min(1, width / availableWidth))
     }
 
     function persistPreviewPaneWidthRatio() {
         if (!controller || workspaceRow.width <= 0)
             return
         const boundedWidth = boundedWorkspaceWidth(workspaceRow.width)
-        if (boundedWidth <= 0)
+        const ratio = previewPaneRatioForWidth(previewPaneWidth, boundedWidth)
+        if (boundedWidth <= 0 || ratio <= 0 || ratio >= 1)
             return
-        controller.setPreviewPaneWidthRatio(previewPaneWidth / boundedWidth)
+        previewPanePreferredRatio = ratio
+        controller.setPreviewPaneWidthRatio(ratio)
     }
 
     function fittedPreviewFrameWidth(hostWidth, hostHeight) {
@@ -580,6 +599,7 @@ ApplicationWindow {
             return
         }
         const savedWidth = previewPaneSavedWidth(resolvedWidth, resolvedHeight)
+        previewPanePreferredRatio = controller ? controller.previewPaneWidthRatio : 0
         previewPaneUserResized = savedWidth > 0
         previewPaneStartupBalancePending = true
         startupMinimumWindowWidth = metric("minimumWindowWidth", 1000)
@@ -601,29 +621,10 @@ ApplicationWindow {
         requestEmbeddedInlineSurfaceActivation("startup_layout_ready")
     }
 
-    function syncPreviewPaneWidth(totalWidth, totalHeight, preserveUserChoice, preserveCurrentWidth) {
+    function syncPreviewPaneWidth(totalWidth, totalHeight, preserveUserChoice) {
         const boundedTotalWidth = boundedWorkspaceWidth(totalWidth)
         if (boundedTotalWidth <= 0)
             return
-        const previousSyncWidth = lastPreviewPaneSyncWidth
-        lastPreviewPaneSyncWidth = boundedTotalWidth
-        const windowShrank = previousSyncWidth > 0 && boundedTotalWidth < previousSyncWidth - 1
-        const forcedMaxWidth = previewPaneForcedMaxWidth(boundedTotalWidth, totalHeight)
-        const userWidthOverflows = previewPaneWidth > forcedMaxWidth + 0.5
-        const releaseUserResizeForShrink = windowShrank
-            && previewPaneUserResized
-            && !preserveCurrentWidth
-            && userWidthOverflows
-        if (releaseUserResizeForShrink) {
-            controller.logPreviewInteraction(
-                "preview_pane_user_resize_released",
-                "reason=window_shrink previous_width=" + previousSyncWidth
-                    + " next_width=" + boundedTotalWidth
-                    + " preview_width=" + previewPaneWidth
-                    + " forced_max=" + forcedMaxWidth
-            )
-            previewPaneUserResized = false
-        }
         noteStartupLayoutActivity(boundedTotalWidth, totalHeight)
         if (startupLayoutLocked) {
             const savedWidth = previewPaneSavedWidth(boundedTotalWidth, totalHeight)
@@ -644,11 +645,6 @@ ApplicationWindow {
         const fallbackWidth = previewPaneStartupBalancePending
             ? defaultWidth
             : clampPreviewPaneWidth(defaultWidth, boundedTotalWidth, totalHeight)
-        if (preserveCurrentWidth && previewPaneWidth > 0) {
-            previewPaneWidth = clampPreviewPaneWidth(previewPaneWidth, boundedTotalWidth, totalHeight)
-            previewPaneStartupBalancePending = false
-            return
-        }
         if (!preserveUserChoice || !previewPaneUserResized) {
             previewPaneWidth = fallbackWidth
             if (!preserveUserChoice)
@@ -656,14 +652,16 @@ ApplicationWindow {
             previewPaneStartupBalancePending = false
             return
         }
-        if (previewPaneWidth <= 0) {
+        if (previewPaneWidth <= 0 || previewPanePreferredRatio <= 0 || previewPanePreferredRatio >= 1) {
             previewPaneWidth = fallbackWidth
             previewPaneStartupBalancePending = false
             return
         }
-        previewPaneWidth = clampPreviewPaneWidth(previewPaneWidth, boundedTotalWidth, totalHeight)
-        if (previewPaneWidth >= previewPaneForcedMaxWidth(boundedTotalWidth, totalHeight))
-            previewPaneUserResized = false
+        previewPaneWidth = previewPaneWidthForRatio(
+            previewPanePreferredRatio,
+            boundedTotalWidth,
+            totalHeight
+        )
         previewPaneStartupBalancePending = false
     }
 
@@ -682,6 +680,9 @@ ApplicationWindow {
             + " preview_width_state=" + previewPaneWidth
             + " preview_frame=" + previewPaneFrame.width + "x" + previewPaneFrame.height
             + " preview_canvas=" + embeddedPreviewFrame.width + "x" + embeddedPreviewFrame.height
+            + " preferred_ratio=" + previewPanePreferredRatio
+            + " effective_ratio=" + previewPaneRatioForWidth(previewPaneWidth, boundedWorkspaceWidth(workspaceRow.width))
+            + " content_min=" + contentPaneMinWidth()
             + " transport_host=" + embeddedTransportStackHost.width + "x" + embeddedTransportStackHost.height
             + " transport=" + embeddedTransport.width + "x" + embeddedTransport.height
             + " stats=" + embeddedStatsPanel.width + "x" + embeddedStatsPanel.height
@@ -698,7 +699,7 @@ ApplicationWindow {
     onMetricsMapChanged: {
         Qt.callLater(function() {
             applyWindowMinimumSize()
-            syncPreviewPaneWidth(workspaceRow.width, workspaceRow.height, true, !startupLayoutLocked)
+            syncPreviewPaneWidth(workspaceRow.width, workspaceRow.height, true)
         })
     }
     onVisibleChanged: {
@@ -826,6 +827,7 @@ ApplicationWindow {
                 root.lastPreviewPaneRestoreGeneration = nextRestoreGeneration
                 if (Math.abs(root.lastPreviewCanvasAspectRatio - 1.0) <= 0.0001 && previewPaneWidth > 0) {
                     root.previewPaneWidthBeforeExport = previewPaneWidth
+                    root.previewPaneRatioBeforeExport = previewPanePreferredRatio
                     root.previewPaneWidthBeforeExportUserResized = previewPaneUserResized
                     root.previewPaneWidthRestorePending = true
                 }
@@ -839,11 +841,19 @@ ApplicationWindow {
             root.lastPreviewCanvasAspectRatio = nextAspectRatio
             const boundedWidth = boundedWorkspaceWidth(workspaceRow.width)
             if (restoringToSquare && root.previewPaneWidthRestorePending && root.previewPaneWidthBeforeExport > 0) {
-                previewPaneWidth = clampPreviewPaneWidth(
-                    root.previewPaneWidthBeforeExport,
-                    boundedWidth,
-                    workspaceRow.height
-                )
+                previewPaneWidth = root.previewPaneWidthBeforeExportUserResized
+                        && root.previewPaneRatioBeforeExport > 0
+                    ? previewPaneWidthForRatio(
+                        root.previewPaneRatioBeforeExport,
+                        boundedWidth,
+                        workspaceRow.height
+                    )
+                    : clampPreviewPaneWidth(
+                        root.previewPaneWidthBeforeExport,
+                        boundedWidth,
+                        workspaceRow.height
+                    )
+                previewPanePreferredRatio = root.previewPaneRatioBeforeExport
                 previewPaneUserResized = root.previewPaneWidthBeforeExportUserResized
                 root.previewPaneWidthRestorePending = false
                 return
@@ -1433,6 +1443,10 @@ ApplicationWindow {
                                 boundedWidth,
                                 workspaceRow.height
                             )
+                            previewPanePreferredRatio = previewPaneRatioForWidth(
+                                previewPaneWidth,
+                                boundedWidth
+                            )
                             previewPaneUserResized = true
                             dragMoveCount += 1
                             if (dragMoveCount === 1 || dragMoveCount % 15 === 0) {
@@ -1476,7 +1490,10 @@ ApplicationWindow {
                 Rectangle {
                     id: previewPaneFrame
                     Layout.preferredWidth: previewPaneWidth
-                    Layout.minimumWidth: previewPaneMinWidth()
+                    Layout.minimumWidth: Math.min(
+                        previewPaneMinWidth(),
+                        previewPaneMaxWidth(boundedWorkspaceWidth(workspaceRow.width), workspaceRow.height)
+                    )
                     Layout.maximumWidth: previewPaneMaxWidth(boundedWorkspaceWidth(workspaceRow.width), workspaceRow.height)
                     Layout.fillHeight: true
                     color: appBackgroundActive() ? "transparent" : tone("panelBg", "#f5f7fa")

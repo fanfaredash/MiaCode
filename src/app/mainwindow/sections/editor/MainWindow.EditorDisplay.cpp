@@ -395,9 +395,18 @@ void MainWindow::EditorSection::loadPortableState()
         state_.bottomTabsContentScale_ =
             ui.value("bottom_tabs_content_scale").toDouble(state_.bottomTabsContentScale_);
     }
-    if (ui.value("preview_pane_width_ratio").isDouble()) {
+    const QJsonValue previewSplitRatio = ui.value("preview_pane_split_ratio");
+    const QJsonValue legacyPreviewWidthRatio = ui.value("preview_pane_width_ratio");
+    if (previewSplitRatio.isDouble() || legacyPreviewWidthRatio.isDouble()) {
+        // The legacy value included the sidebar in its denominator. Use it as
+        // a one-time approximation; the next visual-layout save writes the
+        // split-area ratio under the new key.
         state_.previewPaneWidthRatio_ =
-            qBound(0.0, ui.value("preview_pane_width_ratio").toDouble(state_.previewPaneWidthRatio_), 1.0);
+            qBound(
+                0.0,
+                (previewSplitRatio.isDouble() ? previewSplitRatio : legacyPreviewWidthRatio)
+                    .toDouble(state_.previewPaneWidthRatio_),
+                1.0);
     }
     if (ui.value("outline_dock_collapsed").isBool()) {
         state_.outlineDockCollapsed_ = ui.value("outline_dock_collapsed").toBool(state_.outlineDockCollapsed_);
@@ -828,10 +837,11 @@ void MainWindow::EditorSection::savePortableState() const
     // content-scale ratio rather than pixels (see loadPortableState()).
     ui.insert("bottom_tabs_content_scale", state_.bottomTabsContentScale_);
     if (state_.previewPaneWidthRatio_ > 0.0) {
-        ui.insert("preview_pane_width_ratio", state_.previewPaneWidthRatio_);
+        ui.insert("preview_pane_split_ratio", state_.previewPaneWidthRatio_);
     } else {
-        ui.remove("preview_pane_width_ratio");
+        ui.remove("preview_pane_split_ratio");
     }
+    ui.remove("preview_pane_width_ratio");
     ui.insert("outline_dock_collapsed", state_.outlineDockCollapsed_);
     ui.insert("outline_dock_expanded_width", state_.outlineDockExpandedWidth_);
     ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);

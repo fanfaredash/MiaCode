@@ -24,6 +24,8 @@ class QuickShellController : public QObject
     Q_PROPERTY(QStringList previewStatsTexts READ previewStatsTexts NOTIFY shellStateChanged)
     Q_PROPERTY(double previewCanvasAspectRatio READ previewCanvasAspectRatio NOTIFY shellStateChanged)
     Q_PROPERTY(qulonglong previewPaneRestoreGeneration READ previewPaneRestoreGeneration NOTIFY shellStateChanged)
+    // User-selected preview share of the resizable content+preview area. The
+    // fixed sidebar and splitter are excluded from the ratio denominator.
     Q_PROPERTY(double previewPaneWidthRatio READ previewPaneWidthRatio NOTIFY shellStateChanged)
     Q_PROPERTY(double previewSeekSingleStepSeconds READ previewSeekSingleStepSeconds CONSTANT)
     // Inline export progress (export launched from the Export page's embedded

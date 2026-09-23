@@ -42,6 +42,8 @@ public:
     virtual void beginShellPreviewHeldSeek(int direction, int key) = 0;
     virtual void stopShellPreviewHeldSeek(int key = 0) = 0;
     virtual void setShellPreviewFullscreen(bool fullscreen) = 0;
+    // Preview share of the resizable content+preview area; excludes sidebar
+    // and splitter widths so window/sidebar changes preserve the split.
     virtual void setShellPreviewPaneWidthRatio(double ratio) = 0;
     virtual void setShellBottomTabsHeight(int height) = 0;
     virtual void setShellBottomTabsCurrentTab(const QString& tabId) = 0;

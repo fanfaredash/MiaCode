@@ -80,7 +80,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `qml/QuickShellMain.qml`). The single application `QMenuBar` is owned explicitly by
   `MainWindow` and exposed through `QuickShellNativeContentProvider::shellMenuBarWidget()`;
   the hidden `QMainWindow` layout must not own a menu bar that QuickShell reparents into its
-  top-chrome surface.
+  top-chrome surface. Preview divider persistence is a ratio of the resizable content+preview
+  area, excluding the live outline/sidebar width and splitter. Automatic layout keeps a 900
+  logical-pixel recommendation; manual resizing may exceed it only while preserving the live
+  content-column minimum. Window resize/maximize and outline fold/unfold reapply the saved split
+  ratio without replacing it when a temporary minimum-width clamp is required.
 - Appearance prefs + first-run onboarding: theme pref persisted via
   `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
   `MainWindow::WindowSection::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`

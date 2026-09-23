@@ -95,6 +95,45 @@ bool verifyExplicitStartupTargetSkipsSessionRestore(QTextStream& err)
             err);
 }
 
+bool verifyProtectedProportionalPreviewResize(QTextStream& err)
+{
+    const QString qml = readSource(QStringLiteral("src/app/quick_shell/qml/QuickShellMain.qml"));
+    const QString metrics = readSource(QStringLiteral("src/app/ui/WindowParityMetrics.h"));
+    return require(
+               qml.contains(QStringLiteral(
+                   "previewPaneAvailableWidth(totalWidth) - contentPaneMinWidth()")),
+               QStringLiteral("manual preview sizing must reserve the live content minimum"),
+               err)
+        && require(
+            qml.contains(QStringLiteral(
+                "previewPaneAvailableWidth(totalWidth) * ratio")),
+            QStringLiteral("saved preview sizing must use the content+preview split area"),
+            err)
+        && require(
+            qml.contains(QStringLiteral(
+                "previewPaneRatioForWidth(previewPaneWidth, boundedWidth)")),
+            QStringLiteral("preview drag persistence must exclude sidebar and splitter widths"),
+            err)
+        && require(
+            qml.contains(QStringLiteral(
+                "Layout.minimumWidth: contentPaneMinWidth()")),
+            QStringLiteral("the central content column must retain its structural minimum"),
+            err)
+        && require(
+            qml.contains(QStringLiteral(
+                "const minWidth = Math.min(previewPaneMinWidth(), maxWidth)")),
+            QStringLiteral("transient undersized windows must prioritize the content minimum"),
+            err)
+        && require(
+            !qml.contains(QStringLiteral("preview_pane_user_resize_released")),
+            QStringLiteral("window shrink must clamp rather than discard the user split"),
+            err)
+        && require(
+            metrics.contains(QStringLiteral("kEmbeddedPreviewPanelPreferredWidthMax")),
+            QStringLiteral("the 900px preview width must be documented as an automatic preference"),
+            err);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -105,7 +144,8 @@ int main(int argc, char* argv[])
 
     if (!verifyPolicy(err)
         || !verifyChartDropUsesQsgOnly(err)
-        || !verifyExplicitStartupTargetSkipsSessionRestore(err)) {
+        || !verifyExplicitStartupTargetSkipsSessionRestore(err)
+        || !verifyProtectedProportionalPreviewResize(err)) {
         return 1;
     }
 

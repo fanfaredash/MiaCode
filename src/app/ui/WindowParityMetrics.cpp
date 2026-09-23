@@ -49,7 +49,7 @@ int computePreviewPanelTargetWidth(
         : qMin(resolvedAvailableWidth, kEmbeddedPreviewPanelMinWidth);
     const int rightMaxWidth =
         (resolvedAvailableWidth >= resolvedLeftMinWidth + minimumRightWidth)
-        ? qMin(kEmbeddedPreviewPanelWidthMax, resolvedAvailableWidth - resolvedLeftMinWidth)
+        ? qMin(kEmbeddedPreviewPanelPreferredWidthMax, resolvedAvailableWidth - resolvedLeftMinWidth)
         : resolvedAvailableWidth;
     const int preferredRightMaxWidth = qMax(minimumRightWidth, rightMaxWidth);
     int preferredRightWidth = qRound(static_cast<qreal>(resolvedAvailableWidth) * kEmbeddedPreviewPanelWidthRatio);
@@ -101,7 +101,7 @@ int computePreviewPanelTargetWidthForAdaptiveStats(
         : qMin(resolvedAvailableWidth, kEmbeddedPreviewPanelMinWidth);
     const int rightMaxWidth =
         (resolvedAvailableWidth >= resolvedLeftMinWidth + minimumRightWidth)
-        ? qMin(kEmbeddedPreviewPanelWidthMax, resolvedAvailableWidth - resolvedLeftMinWidth)
+        ? qMin(kEmbeddedPreviewPanelPreferredWidthMax, resolvedAvailableWidth - resolvedLeftMinWidth)
         : resolvedAvailableWidth;
     if (rightMaxWidth <= 0) {
         return 0;
