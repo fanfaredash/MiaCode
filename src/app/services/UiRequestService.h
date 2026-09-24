@@ -20,8 +20,11 @@ enum class NoticeSeverity {
 
 struct FileRequest {
     QString title;
-    // File path for file pickers, directory path for folder pickers.  Empty is
-    // allowed and means "let the platform choose".
+    // Where the picker opens.  Folder pickers take a directory.  File pickers
+    // take either a directory, opened with nothing selected, or a file, whose
+    // directory is opened with the file preselected — an existing one for an
+    // open dialog, possibly a new one (or a bare name) for a save dialog.
+    // Empty is allowed and means "let the platform choose".
     QString startPath;
     QStringList nameFilters;
     bool saveMode = false;

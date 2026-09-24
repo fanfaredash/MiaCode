@@ -1,8 +1,42 @@
 #include "UiRequestService.h"
 
+#include <QDir>
+#include <QFileInfo>
+
 namespace miacode {
 
 namespace {
+
+// Resolves FileRequest::startPath into the `startFolder` / `startFile` URLs the
+// shell hands straight to its dialogs.  They must come from
+// QUrl::fromLocalFile: spelling them in QML as "file://" + "C:/charts" parses
+// the drive letter as a host, and the dialog then blocks the GUI thread for
+// seconds per lookup resolving the SMB share \\c\charts before giving up.
+void addStartLocation(const FileRequest& request, QVariantMap& payload)
+{
+    const QString path = request.startPath.trimmed();
+    // Qt resource paths are not browsable folders.
+    if (path.isEmpty() || path.startsWith(QLatin1Char(':'))) {
+        return;
+    }
+    const QFileInfo info(QDir::cleanPath(path));
+    const bool absolute = info.isAbsolute();
+    if (request.selectFolder || info.isDir()) {
+        if (absolute) {
+            payload.insert(QStringLiteral("startFolder"),
+                           QUrl::fromLocalFile(info.absoluteFilePath()));
+        }
+        return;
+    }
+    if (absolute) {
+        payload.insert(QStringLiteral("startFolder"), QUrl::fromLocalFile(info.absolutePath()));
+    }
+    // An open dialog refuses a preselection that does not exist, while a save
+    // dialog proposes the name even when there is no folder to open it in.
+    if (request.saveMode || info.isFile()) {
+        payload.insert(QStringLiteral("startFile"), QUrl::fromLocalFile(info.filePath()));
+    }
+}
 
 QString severityId(NoticeSeverity severity)
 {
@@ -35,6 +69,7 @@ QString UiRequestService::requestFile(const FileRequest& request, FileCallback o
     payload.insert(QStringLiteral("nameFilters"), request.nameFilters);
     payload.insert(QStringLiteral("saveMode"), request.saveMode);
     payload.insert(QStringLiteral("selectFolder"), request.selectFolder);
+    addStartLocation(request, payload);
     emit fileRequested(requestId, payload);
     return requestId;
 }

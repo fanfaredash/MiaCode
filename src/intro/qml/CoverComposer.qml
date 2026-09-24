@@ -177,8 +177,11 @@ Item {
         var s = p.toString()
         if (s.length === 0) return ""
         if (s.indexOf("://") >= 0) return s
-        if (s.charAt(0) === "/") return "file://" + encodeURI(s)
-        return "file:///" + encodeURI(s)   // Windows drive path (C:/…)
+        // encodeURI leaves '#' and '?' alone, which would cut "Song #2/bg.png"
+        // at a fragment.
+        var encoded = encodeURI(s).replace(/#/g, "%23").replace(/\?/g, "%3F")
+        if (s.charAt(0) === "/") return "file://" + encoded
+        return "file:///" + encoded   // Windows drive path (C:/…)
     }
 
     function selectLayerKey(key) {

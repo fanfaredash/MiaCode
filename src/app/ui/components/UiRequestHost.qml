@@ -24,12 +24,15 @@ Item {
     width: 0
     height: 0
 
+    // startFolder / startFile arrive as URLs built by UiRequestService with
+    // QUrl::fromLocalFile. Never rebuild them from startPath here: "file://" +
+    // "C:/..." names host "c", and the dialog stalls on that SMB lookup.
     function openRequest(requestId, request) {
         if (request.selectFolder) {
             root.activeFolderRequestId = requestId
             folderDialog.title = request.title
-            if (request.startPath)
-                folderDialog.currentFolder = root.toFolderUrl(request.startPath)
+            if (request.startFolder)
+                folderDialog.currentFolder = request.startFolder
             folderDialog.open()
             return
         }
@@ -38,25 +41,14 @@ Item {
         fileDialog.nameFilters = request.nameFilters && request.nameFilters.length > 0
                                  ? request.nameFilters
                                  : [qsTrId("qml.all_files")]
+        // Mode first: an open dialog rejects a selectedFile that does not
+        // exist, a save dialog accepts the proposed name.
         fileDialog.fileMode = request.saveMode ? FileDialog.SaveFile : FileDialog.OpenFile
-        if (request.startPath) {
-            fileDialog.currentFolder = root.toFolderUrl(root.parentPath(request.startPath))
-            fileDialog.selectedFile = root.toFileUrl(request.startPath)
-        }
+        if (request.startFolder)
+            fileDialog.currentFolder = request.startFolder
+        if (request.startFile)
+            fileDialog.selectedFile = request.startFile
         fileDialog.open()
-    }
-
-    function parentPath(path) {
-        const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
-        return separator > 0 ? path.substring(0, separator) : path
-    }
-
-    function toFileUrl(path) {
-        return path.startsWith("file:") ? path : "file://" + path
-    }
-
-    function toFolderUrl(path) {
-        return root.toFileUrl(path)
     }
 
     Connections {

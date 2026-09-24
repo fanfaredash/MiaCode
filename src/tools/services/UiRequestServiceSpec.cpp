@@ -7,7 +7,10 @@
 #include "app/services/UiRequestService.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTextStream>
 #include <QUrl>
 #include <QVariantMap>
@@ -115,6 +118,98 @@ bool verifyCancellationAndUnknownIds(QTextStream& err)
                       && other.pendingFileRequestCount() == 1,
                   QStringLiteral("resolving one request leaves the other pending and untouched"),
                   err);
+    return ok;
+}
+
+QVariantMap requestPayload(const miacode::FileRequest& request)
+{
+    miacode::UiRequestService service;
+    QSignalSpy requested(&service, &miacode::UiRequestService::fileRequested);
+    service.requestFile(request, [](const QString&) {});
+    return requested.isEmpty() ? QVariantMap() : requested.at(0).at(1).toMap();
+}
+
+// The dialogs open wherever startFolder / startFile point, verbatim. A URL
+// glued together as "file://" + "C:/..." names host "c", which on Windows
+// turns every dialog open into SMB lookups of \\c\... on the GUI thread.
+bool verifyStartLocation(QTextStream& err)
+{
+    QTemporaryDir root;
+    bool ok = require(root.isValid(), QStringLiteral("a scratch folder is available"), err);
+    if (!ok) {
+        return false;
+    }
+    // '#' is the character a hand-built URL loses to the fragment.
+    const QString chartDir = QDir(root.path()).filePath(QStringLiteral("Song #2"));
+    const QString chartPath = QDir(chartDir).filePath(QStringLiteral("maidata.txt"));
+    QDir().mkpath(chartDir);
+    QFile chart(chartPath);
+    ok &= require(chart.open(QIODevice::WriteOnly), QStringLiteral("the scratch chart is written"), err);
+    chart.close();
+
+    const auto localPathOf = [](const QVariantMap& payload, const char* key) {
+        const QUrl url = payload.value(QLatin1String(key)).toUrl();
+        return url.isValid() && url.host().isEmpty() ? url.toLocalFile() : QString();
+    };
+
+    miacode::FileRequest open;
+    open.startPath = chartPath;
+    QVariantMap payload = requestPayload(open);
+    ok &= require(localPathOf(payload, "startFolder") == chartDir
+                      && localPathOf(payload, "startFile") == chartPath,
+                  QStringLiteral("an existing file opens its folder with the file preselected, "
+                                 "both as host-less local URLs"),
+                  err);
+
+    open.startPath = chartDir;
+    payload = requestPayload(open);
+    ok &= require(localPathOf(payload, "startFolder") == chartDir
+                      && !payload.contains(QStringLiteral("startFile")),
+                  QStringLiteral("a directory opens itself with nothing preselected"), err);
+
+    open.startPath = QDir(chartDir).filePath(QStringLiteral("missing.mp3"));
+    payload = requestPayload(open);
+    ok &= require(localPathOf(payload, "startFolder") == chartDir
+                      && !payload.contains(QStringLiteral("startFile")),
+                  QStringLiteral("an open dialog never preselects a file that does not exist"), err);
+
+    miacode::FileRequest save;
+    save.saveMode = true;
+    save.startPath = QDir(chartDir).filePath(QStringLiteral("out.mp4"));
+    payload = requestPayload(save);
+    ok &= require(localPathOf(payload, "startFolder") == chartDir
+                      && localPathOf(payload, "startFile") == save.startPath,
+                  QStringLiteral("a save dialog proposes a file that does not exist yet"), err);
+
+    save.startPath = QStringLiteral("cover-layout.miacover");
+    payload = requestPayload(save);
+    ok &= require(!payload.contains(QStringLiteral("startFolder"))
+                      && localPathOf(payload, "startFile") == QStringLiteral("cover-layout.miacover"),
+                  QStringLiteral("a bare save name is proposed without inventing a folder, "
+                                 "and is never read as a host name"),
+                  err);
+
+    miacode::FileRequest folder;
+    folder.selectFolder = true;
+    folder.startPath = chartDir;
+    payload = requestPayload(folder);
+    ok &= require(localPathOf(payload, "startFolder") == chartDir
+                      && !payload.contains(QStringLiteral("startFile")),
+                  QStringLiteral("a folder picker opens the folder it was given"), err);
+
+    folder.startPath = QString();
+    payload = requestPayload(folder);
+    ok &= require(!payload.contains(QStringLiteral("startFolder")),
+                  QStringLiteral("no start path leaves the location to the platform"), err);
+
+#ifdef Q_OS_WIN
+    save.startPath = QStringLiteral("C:/charts/song/out.mp4");
+    payload = requestPayload(save);
+    ok &= require(localPathOf(payload, "startFolder") == QStringLiteral("C:/charts/song")
+                      && localPathOf(payload, "startFile") == save.startPath,
+                  QStringLiteral("a drive-letter path stays a local path, not the share \\\\c\\charts"),
+                  err);
+#endif
     return ok;
 }
 
@@ -307,7 +402,7 @@ int main(int argc, char** argv)
     QCoreApplication app(argc, argv);
     QTextStream err(stderr);
     const bool ok = verifyFileRequestRoundTrip(err) && verifyCancellationAndUnknownIds(err)
-        && verifyNotices(err) && verifyActionableNotices(err) && verifyConfirmations(err)
+        && verifyStartLocation(err) && verifyNotices(err) && verifyActionableNotices(err) && verifyConfirmations(err)
         && verifyChoices(err);
     if (ok) {
         QTextStream out(stdout);

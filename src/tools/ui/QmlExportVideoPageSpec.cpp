@@ -1,4 +1,5 @@
 #include <QCoreApplication>
+#include <QDir>
 #include <QGuiApplication>
 #include <QQmlComponent>
 #include <QVariantMap>
@@ -6,7 +7,9 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QQuickStyle>
+#include <QTemporaryDir>
 #include <QTextStream>
+#include <QUrl>
 #include <QtTest/QTest>
 
 #include <algorithm>
@@ -920,9 +923,17 @@ bool verifyRequestHostLoop(QTextStream& err)
         return false;
     }
 
+    // UiRequestService hands over the start location as QUrl::fromLocalFile
+    // URLs; the host must use them as given rather than re-spell startPath.
+    QTemporaryDir outputRoot;
+    const QString outputDir = QDir(outputRoot.path()).filePath(QStringLiteral("Song #2"));
+    QDir().mkpath(outputDir);
+    const QString outputPath = QDir(outputDir).filePath(QStringLiteral("out.mp4"));
     QVariantMap saveRequest;
     saveRequest.insert(QStringLiteral("title"), QStringLiteral("Choose output"));
-    saveRequest.insert(QStringLiteral("startPath"), QStringLiteral("/tmp/out.mp4"));
+    saveRequest.insert(QStringLiteral("startPath"), outputPath);
+    saveRequest.insert(QStringLiteral("startFolder"), QUrl::fromLocalFile(outputDir));
+    saveRequest.insert(QStringLiteral("startFile"), QUrl::fromLocalFile(outputPath));
     saveRequest.insert(QStringLiteral("nameFilters"), QStringList{QStringLiteral("MP4 (*.mp4)")});
     saveRequest.insert(QStringLiteral("saveMode"), true);
     saveRequest.insert(QStringLiteral("selectFolder"), false);
@@ -934,6 +945,14 @@ bool verifyRequestHostLoop(QTextStream& err)
                       && fileDialog->property("nameFilters").toStringList()
                           == QStringList{QStringLiteral("MP4 (*.mp4)")},
                   QStringLiteral("a save request configures the real file dialog and records its id"),
+                  err);
+    const QUrl dialogFolder = fileDialog->property("currentFolder").toUrl();
+    const QUrl dialogFile = fileDialog->property("selectedFile").toUrl();
+    ok &= require(outputRoot.isValid() && dialogFolder.host().isEmpty()
+                      && QDir(dialogFolder.toLocalFile()) == QDir(outputDir)
+                      && dialogFile == QUrl::fromLocalFile(outputPath),
+                  QStringLiteral("the dialog opens at the service's local URLs, never at a "
+                                 "host-named \"file://C:/...\" spelling"),
                   err);
 
     QMetaObject::invokeMethod(fileDialog, "accepted");

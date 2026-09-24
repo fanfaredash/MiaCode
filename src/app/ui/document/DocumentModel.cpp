@@ -436,7 +436,16 @@ void DocumentModel::requestMetadataAudio(std::function<void(const QString&)> onS
     if (uiRequests_ == nullptr) return;
     miacode::FileRequest request;
     request.title = qtTrId("track_metadata.read_from_audio");
-    request.startPath = currentFilePath();
+    // The chart's own track when it is the MP3 this picker reads, so the usual
+    // pick is one keypress; otherwise the chart's folder. Never the chart
+    // itself: preselecting maidata.txt would offer the one file it must not read.
+    const QString chartPath = currentFilePath();
+    const QString trackPath = miacode::chart_assets::resolveTrackPath(chartPath);
+    if (QFileInfo(trackPath).suffix().compare(QStringLiteral("mp3"), Qt::CaseInsensitive) == 0) {
+        request.startPath = trackPath;
+    } else if (!chartPath.isEmpty()) {
+        request.startPath = QFileInfo(chartPath).absolutePath();
+    }
     request.nameFilters = QStringList{
         qtTrId("track_metadata.metadata_audio_file_filter"),
         qtTrId("track_metadata.all_files"),
@@ -659,7 +668,7 @@ void DocumentModel::requestChartMediaImport(miacode::ChartMediaService::Kind kin
     const bool video = kind == miacode::ChartMediaService::Kind::Video;
     miacode::FileRequest request;
     request.title = qtTrId(video ? "track_metadata.import_background_video" : "track_metadata.import_file");
-    request.startPath = chartPath;
+    request.startPath = QFileInfo(chartPath).absolutePath();
     request.nameFilters = QStringList{
         qtTrId(video ? "track_metadata.video_file_filter" : "track_metadata.image_file_filter"),
         qtTrId("track_metadata.all_files"),
