@@ -63,56 +63,102 @@ int trimmedEnd(const QString& text, int start, int end)
     return end;
 }
 
-struct NoteRange {
-    int start = 0;
-    int end = 0;
-};
-
-// Whitespace separates notes just like `/` does — both parsers flush the
-// pending token on every space — so `A1 B2` is a two-note each, not one item.
-// Finds the whitespace-delimited note equal to `normalizedPad` inside
-// `[start, end)` when that range holds more than one, and widens the removal
-// over one adjacent whitespace run so the surviving notes stay separated.
-bool findWhitespaceSeparatedNote(
-    const QString& text,
-    int start,
-    int end,
-    const QString& normalizedPad,
-    int* removalStart,
-    int* removalEnd)
+// Where a pad lands in `[start, end)` when that range holds no note: right
+// after its leading controls. When the range covers a line break the beat
+// belongs to the LAST line it reaches: appending at the trimmed content end
+// would strand the pad on the previous line, behind that line's trailing
+// comment.
+int emptyTokenPadPosition(const QString& text, int start, int end)
 {
-    QVector<NoteRange> notes;
-    int position = start;
-    while (position < end) {
-        position = skipSpaces(text, position, end);
-        if (position >= end) {
-            break;
-        }
-        int noteEnd = position;
-        while (noteEnd < end && !text.at(noteEnd).isSpace()) {
-            ++noteEnd;
-        }
-        notes.append(NoteRange{position, noteEnd});
-        position = noteEnd;
-    }
-    if (notes.size() < 2) {
-        return false;
-    }
-    for (int index = 0; index < notes.size(); ++index) {
-        const NoteRange& note = notes.at(index);
-        if (!isSelectedOrdinaryTouch(text.mid(note.start, note.end - note.start), normalizedPad)) {
-            continue;
-        }
-        if (index > 0) {
-            *removalStart = notes.at(index - 1).end;
-            *removalEnd = note.end;
+    const QVector<miacode::simai::ChartContentSpan> spans =
+        miacode::simai::chartContentSpans(text, start, end);
+    const int lastNewline = end > start
+        ? text.lastIndexOf(QLatin1Char('\n'), end - 1)
+        : -1;
+    int contentStart = start;
+    int contentEnd = start;
+    if (!spans.isEmpty()) {
+        if (lastNewline >= start) {
+            // Only that last line's own text counts; whatever preceded the line
+            // break belongs to the bar above.
+            const miacode::simai::ChartContentSpan& lastSpan = spans.constLast();
+            contentStart = qMax(lastSpan.start, lastNewline + 1);
+            contentEnd = trimmedEnd(text, contentStart, qMax(contentStart, lastSpan.end));
         } else {
-            *removalStart = note.start;
-            *removalEnd = notes.at(1).start;
+            contentStart = spans.first().start;
+            contentEnd = trimmedEnd(text, contentStart, spans.first().end);
         }
-        return true;
     }
-    return false;
+    // Controls are part of the token prefix, not an each-note separator — a
+    // `{16}` opening the line still has to precede the authored pad.
+    return firstTouchCandidateStart(text, contentStart, contentEnd);
+}
+
+// A caret inside `(…)`, `{…}` or `<HS*…>` stands for the whole control, so it
+// is moved past the control's closing bracket. Only called for a note-free
+// token, whose spans hold nothing but whitespace and complete controls.
+int positionAfterEnclosingControl(
+    const QString& text,
+    const QVector<miacode::simai::ChartContentSpan>& spans,
+    int position)
+{
+    for (const miacode::simai::ChartContentSpan& span : spans) {
+        const int spanEnd = trimmedEnd(text, span.start, span.end);
+        int controlStart = skipSpaces(text, span.start, spanEnd);
+        while (controlStart < spanEnd) {
+            const QChar opening = text.at(controlStart);
+            const bool isHsDirective = text.mid(controlStart, 4) == QStringLiteral("<HS*");
+            const QChar closing = isHsDirective
+                ? QLatin1Char('>')
+                : opening == QLatin1Char('(')
+                    ? QLatin1Char(')')
+                    : opening == QLatin1Char('{') ? QLatin1Char('}') : QChar();
+            if (closing.isNull()) {
+                break;
+            }
+            const int closePosition = text.indexOf(closing, controlStart + (isHsDirective ? 4 : 1));
+            if (closePosition < 0 || closePosition >= spanEnd) {
+                break;
+            }
+            if (position > controlStart && position <= closePosition) {
+                return closePosition + 1;
+            }
+            controlStart = skipSpaces(text, closePosition + 1, spanEnd);
+        }
+    }
+    return position;
+}
+
+// Right-click in a note-free token ends that beat AT the caret when controls
+// sit on both sides of it: `{24}|{16},` becomes `{24},{16}A1,` — the controls
+// right of the caret open the new beat and the pad follows them, exactly where
+// a left click would put it in that new beat. The comma goes right after the
+// last control left of the caret, never after whitespace; when a line break
+// (and any comment ending on it) sits between that control and the caret, the
+// comma opens the caret's line instead, so the edit never moves across a
+// comment or a line break. Returns -1 when the caret has no control on one
+// side, so the caller falls back to the left-click position.
+int caretBeatSplitPosition(
+    const QString& text,
+    const QVector<miacode::simai::ChartContentSpan>& spans,
+    int caret)
+{
+    int leftContentEnd = -1;
+    bool rightHasContent = false;
+    for (const miacode::simai::ChartContentSpan& span : spans) {
+        const int leftEnd = trimmedEnd(text, span.start, qMin(span.end, qMax(span.start, caret)));
+        if (leftEnd > span.start) {
+            leftContentEnd = leftEnd;
+        }
+        if (skipSpaces(text, qMax(span.start, caret), span.end) < span.end) {
+            rightHasContent = true;
+        }
+    }
+    if (!rightHasContent || leftContentEnd < 0) {
+        return -1;
+    }
+    const int caretLineBreak = text.lastIndexOf(QLatin1Char('\n'), caret - 1);
+    return caretLineBreak >= leftContentEnd ? caretLineBreak + 1 : leftContentEnd;
 }
 
 } // namespace
@@ -154,8 +200,13 @@ TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
         }
     }
 
+    // A pad already in the beat is removed by a left or Ctrl+Shift click. The
+    // right button always opens a new beat instead, even for a pad the current
+    // beat already holds. Items are split on `/` and `` ` `` only: whitespace
+    // between two notes is not valid simai, so `A1 B2` is one item.
+    const bool removesExistingPad = separator != QLatin1Char(',');
     for (const miacode::simai::ChartContentSpan& span : spans) {
-        if (empty) {
+        if (empty || !removesExistingPad) {
             break;
         }
         const int spanEnd = trimmedEnd(text, span.start, span.end);
@@ -185,15 +236,6 @@ TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
                 plan.valid = true;
                 return plan;
             }
-            int removalStart = 0;
-            int removalEnd = 0;
-            if (findWhitespaceSeparatedNote(text, padStart, padEnd, normalizedPad, &removalStart, &removalEnd)) {
-                plan.insertionText.clear();
-                plan.insertionPosition = removalStart;
-                plan.removalLength = removalEnd - removalStart;
-                plan.valid = true;
-                return plan;
-            }
             if (itemEnd >= spanEnd) {
                 break;
             }
@@ -203,8 +245,26 @@ TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
     }
 
     if (separator == QLatin1Char(',')) {
-        plan.insertionPosition = lastContentEnd;
-        plan.insertionText = QString(separator) + normalizedPad;
+        const int splitPosition = empty
+            ? caretBeatSplitPosition(
+                  text, spans, positionAfterEnclosingControl(text, spans, position))
+            : -1;
+        if (splitPosition >= 0) {
+            // One replacement carries both edits: the comma at the split and
+            // the pad after the controls that move into the new beat.
+            const int padPosition = emptyTokenPadPosition(text, splitPosition, tokenEnd);
+            plan.insertionPosition = splitPosition;
+            plan.removalLength = padPosition - splitPosition;
+            plan.insertionText = QString(separator)
+                + text.mid(splitPosition, plan.removalLength) + normalizedPad;
+        } else {
+            // The new beat opens exactly where a left click would write the
+            // pad, so it keeps the same side of every comment and line break.
+            plan.insertionPosition = empty
+                ? emptyTokenPadPosition(text, plan.tokenStart, tokenEnd)
+                : lastContentEnd;
+            plan.insertionText = QString(separator) + normalizedPad;
+        }
         plan.valid = true;
         return plan;
     }
@@ -219,34 +279,10 @@ TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
         return plan;
     }
 
-    // Empty token. When it covers a line break the beat belongs to the LAST
-    // line it reaches: appending at the trimmed content end would strand the
-    // pad on the previous line, behind that line's trailing comment.
-    const int lastNewline = tokenEnd > plan.tokenStart
-        ? text.lastIndexOf(QLatin1Char('\n'), tokenEnd - 1)
-        : -1;
-    int contentStart = plan.tokenStart;
-    int contentEnd = plan.tokenStart;
-    if (!spans.isEmpty()) {
-        if (lastNewline >= plan.tokenStart) {
-            // Only that last line's own text counts; whatever preceded the line
-            // break belongs to the bar above.
-            const miacode::simai::ChartContentSpan& lastSpan = spans.constLast();
-            contentStart = qMax(lastSpan.start, lastNewline + 1);
-            contentEnd = trimmedEnd(text, contentStart, qMax(contentStart, lastSpan.end));
-        } else {
-            contentStart = spans.first().start;
-            contentEnd = trimmedEnd(text, contentStart, spans.first().end);
-        }
-    }
-    // Controls are part of the token prefix, not an each-note separator — a
-    // `{16}` opening the line still has to precede the authored pad.
-    plan.insertionPosition = firstTouchCandidateStart(text, contentStart, contentEnd);
-    // Keep the conventional whitespace gap when a BPM/subdivision prefix
-    // immediately precedes the newly authored pad.
-    const bool needsSpace = plan.insertionPosition > plan.tokenStart
-        && !text.at(plan.insertionPosition - 1).isSpace();
-    plan.insertionText = needsSpace ? QStringLiteral(" ") + normalizedPad : normalizedPad;
+    // The pad is written flush against the controls: authoring never inserts
+    // whitespace of its own.
+    plan.insertionPosition = emptyTokenPadPosition(text, plan.tokenStart, tokenEnd);
+    plan.insertionText = normalizedPad;
     plan.valid = true;
     return plan;
 }

@@ -88,21 +88,21 @@ int main(int argc, char** argv)
                                                        const QString& expected, const QString& message) {
         expectTouchPadEdit(text, pos, backtick, QStringLiteral("A1"), expected, message);
     };
-    expectTouchEdit(QStringLiteral("(160){16}"), 0, false, QStringLiteral("(160){16} A1"),
+    expectTouchEdit(QStringLiteral("(160){16}"), 0, false, QStringLiteral("(160){16}A1"),
                     QStringLiteral("timing-only token receives a pad without a touch separator"));
-    expectTouchEdit(QStringLiteral("{16}"), 0, false, QStringLiteral("{16} A1"),
+    expectTouchEdit(QStringLiteral("{16}"), 0, false, QStringLiteral("{16}A1"),
                     QStringLiteral("meter-only token receives a pad without a touch separator"));
-    expectTouchEdit(QStringLiteral("<HS*1.5>"), 0, false, QStringLiteral("<HS*1.5> A1"),
+    expectTouchEdit(QStringLiteral("<HS*1.5>"), 0, false, QStringLiteral("<HS*1.5>A1"),
                     QStringLiteral("HS-only token receives a pad without a touch separator"));
     expectTouchEdit(QStringLiteral("(160){16} || lead-in"), 0, false,
-                    QStringLiteral("(160){16} A1 || lead-in"),
+                    QStringLiteral("(160){16}A1 || lead-in"),
                     QStringLiteral("comment-only token content does not require a touch separator"));
     expectTouchEdit(QStringLiteral("1/A1/B2"), 2, false, QStringLiteral("1/B2"),
                     QStringLiteral("existing middle pad removes its preceding separator"));
     expectTouchEdit(QStringLiteral("A1/B2"), 0, false, QStringLiteral("B2"),
                     QStringLiteral("existing first pad removes its following separator"));
     expectTouchEdit(QStringLiteral("A1"), 0, true, QString(),
-                    QStringLiteral("existing sole pad is removed regardless of mouse separator"));
+                    QStringLiteral("Ctrl+Shift on an existing pad removes it instead of adding a pseudo-each"));
     expectTouchEdit(QStringLiteral("1`A1/B2"), 2, false, QStringLiteral("1/B2"),
                     QStringLiteral("mixed separators remove the separator before the matched pad"));
     expectTouchEdit(QStringLiteral("1/A1/A1"), 2, false, QStringLiteral("1/A1"),
@@ -165,20 +165,62 @@ int main(int argc, char** argv)
                     QStringLiteral("empty first beat after a commented line stays on the note line"));
     expectTouchEdit(QStringLiteral("1,2,\n\n,5,"), 6, false, QStringLiteral("1,2,\n\nA1,5,"),
                     QStringLiteral("a multi-line empty token uses its last line"));
-    expectTouchEdit(QStringLiteral("(120)\n{16},,,,"), 6, false, QStringLiteral("(120)\n{16} A1,,,,"),
+    expectTouchEdit(QStringLiteral("(120)\n{16},,,,"), 6, false, QStringLiteral("(120)\n{16}A1,,,,"),
                     QStringLiteral("controls opening the token's last line still precede the pad"));
-    expectTouchEdit(QStringLiteral("(120)\n{16} ,,,,"), 6, false, QStringLiteral("(120)\n{16} A1 ,,,,"),
+    expectTouchEdit(QStringLiteral("(120)\n{16} ,,,,"), 6, false, QStringLiteral("(120)\n{16}A1 ,,,,"),
                     QStringLiteral("controls on the last line precede the pad, trailing space kept"));
     expectTouchEdit(QStringLiteral("1,2,\n(180){16},3,"), 5, false,
-                    QStringLiteral("1,2,\n(180){16} A1,3,"),
+                    QStringLiteral("1,2,\n(180){16}A1,3,"),
                     QStringLiteral("bpm+meter opening the last line still precede the pad"));
 
-    // NOTE: `findWhitespaceSeparatedNote` lets `A1 B2` toggle each half on its
-    // own, because both of MiaCode's parsers flush the pending token on
-    // whitespace. That is deliberately NOT asserted here: plain simai does not
-    // define whitespace as an each separator, so the behaviour tracks our
-    // parsers rather than a guaranteed language rule and must not be frozen
-    // into the spec.
+    // Authoring never adds whitespace of its own. `{24}|{16},,,` is the
+    // reported case: the caret sits between the two controls of a note-free
+    // beat. A left click fills that beat; a right click ends it at the caret.
+    expectTouchEdit(QStringLiteral("{24}{16},,,"), 4, false, QStringLiteral("{24}{16}A1,,,"),
+                    QStringLiteral("left click in a controls-only beat lands after every control"));
+    const auto expectCommaEdit = [&out, &failed](const QString& text, int pos,
+                                                 const QString& expected, const QString& message) {
+        QTextDocument document(text);
+        QTextCursor cursor(&document);
+        cursor.setPosition(pos);
+        const auto plan = miacode::editor::planTouchPadAuthoringEdit(
+            document.toPlainText(), cursor.position(), QStringLiteral("A1"), QLatin1Char(','));
+        const bool applied = miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan);
+        expect(applied && document.toPlainText() == expected
+                   && cursor.position() == expected.lastIndexOf(QStringLiteral("A1")) + 2,
+               message, out, &failed);
+    };
+    expectCommaEdit(QStringLiteral("{24}{16},,,"), 4, QStringLiteral("{24},{16}A1,,,"),
+                    QStringLiteral("right click between controls ends the beat at the caret"));
+    expectCommaEdit(QStringLiteral("{24}{16},,,"), 2, QStringLiteral("{24},{16}A1,,,"),
+                    QStringLiteral("a caret inside a control splits after that control"));
+    expectCommaEdit(QStringLiteral("{24}{16},,,"), 0, QStringLiteral("{24}{16},A1,,,"),
+                    QStringLiteral("right click at the beat start appends a new beat after it"));
+    expectCommaEdit(QStringLiteral("{24}{16},,,"), 8, QStringLiteral("{24}{16},A1,,,"),
+                    QStringLiteral("right click after every control appends a new beat after it"));
+    expectCommaEdit(QStringLiteral("{24} {16},,,"), 5, QStringLiteral("{24}, {16}A1,,,"),
+                    QStringLiteral("the split comma hugs the control, not the whitespace"));
+    // Inserting never moves an edit across a comment or a line break: the
+    // comma stays on the caret's side of both.
+    expectCommaEdit(QStringLiteral("{24}\n{16},,,"), 5, QStringLiteral("{24}\n,{16}A1,,,"),
+                    QStringLiteral("a split below a line break opens the caret's line"));
+    expectCommaEdit(QStringLiteral("{24}\n{16},,,"), 4, QStringLiteral("{24},\n{16}A1,,,"),
+                    QStringLiteral("a split above a line break stays on the caret's line"));
+    expectCommaEdit(QStringLiteral("{24} || x\n{16},"), 10, QStringLiteral("{24} || x\n,{16}A1,"),
+                    QStringLiteral("a split never moves a comment into the new beat"));
+    expectCommaEdit(QStringLiteral("1,2, ||c\n,5,"), 9, QStringLiteral("1,2, ||c\n,A1,5,"),
+                    QStringLiteral("right click in a multi-line empty beat opens the new beat on the caret's line"));
+    expectCommaEdit(QStringLiteral("{16}1/2,"), 4, QStringLiteral("{16}1/2,A1,"),
+                    QStringLiteral("right click never splits a beat that holds notes"));
+    expectCommaEdit(QStringLiteral("1/A1,"), 0, QStringLiteral("1/A1,A1,"),
+                    QStringLiteral("right click on a pad the beat already holds still opens a new beat"));
+    expectCommaEdit(QStringLiteral("A1,"), 0, QStringLiteral("A1,A1,"),
+                    QStringLiteral("right click never removes a sole pad"));
+
+    // Whitespace between two notes is not valid simai; only `/` and `` ` ``
+    // separate items, so a click never removes half of `A1 B2`.
+    expectTouchEdit(QStringLiteral("A1 B2"), 0, false, QStringLiteral("A1 B2/A1"),
+                    QStringLiteral("whitespace does not separate touch items"));
 
     {
         QTextDocument document(QStringLiteral("1,2,"));
