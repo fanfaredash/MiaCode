@@ -69,8 +69,6 @@ public:
         bool caseSensitive, bool wholeWord) const;
     void setDocumentContext(int difficultyId, quint64 revision);
     bool acceptsCaret(int difficultyId, quint64 revision, bool imeComposing) const;
-    bool acceptsTouchAuthoring(int difficultyId, quint64 revision, bool imeComposing,
-                               bool editorHasFocus) const;
 
     Q_INVOKABLE QVariantMap processKeyForQml(
         const QString& text, int anchor, int position, const QString& input, int key, int modifiers);
@@ -90,8 +88,6 @@ public:
                                              bool wholeWord) const;
     Q_INVOKABLE void setDocumentContextForQml(int difficultyId, qulonglong revision);
     Q_INVOKABLE bool publishCaretForQml(int difficultyId, qulonglong revision, bool imeComposing);
-    Q_INVOKABLE bool acceptsTouchAuthoringForQml(int difficultyId, qulonglong revision,
-                                                 bool imeComposing, bool editorHasFocus) const;
     Q_INVOKABLE QVariantList bookmarksForQml(const QString& text) const;
     Q_INVOKABLE QVariantMap createBookmarkForQml(const QString& text, int line, const QString& title) const;
     Q_INVOKABLE QVariantMap renameBookmarkForQml(const QString& text, int line, const QString& title) const;
@@ -117,7 +113,10 @@ public:
     Q_INVOKABLE void clearAllHistory();
     // A closed tab takes its history with it.
     Q_INVOKABLE void dropHistoryScope(const QString& scopeId);
-    Q_INVOKABLE void recordQmlTransaction(const QString& before, const QString& after);
+    // `touchTokenStart` marks a touch-pad authoring step: undo and redo hand
+    // that token offset back so the editor re-parks the preview on its beat.
+    Q_INVOKABLE void recordQmlTransaction(const QString& before, const QString& after,
+                                          int touchTokenStart = -1);
     Q_INVOKABLE QVariantMap undoQmlTransaction();
     Q_INVOKABLE QVariantMap redoQmlTransaction();
     Q_INVOKABLE void updateCompletionForQml(const QString& text, int position);
@@ -140,7 +139,7 @@ private:
     // One undo/redo step, expressed as the minimal replacement that turns the
     // document the editor currently holds into the one the step restores.
     QVariantMap restoreTransaction(int start, const QString& replaced,
-                                   const QString& replacement) const;
+                                   const QString& replacement, int touchTokenStart) const;
 
     bool halfWidthInputEnabled_ = true;
     bool overwriteMode_ = false;
@@ -167,6 +166,9 @@ private:
         int start = 0;
         QString removed;
         QString inserted;
+        // Same offset before and after the step: a touch edit never changes
+        // text ahead of its own token.
+        int touchTokenStart = -1;
     };
     struct QmlHistory {
         QVector<QmlUndoEntry> undo;

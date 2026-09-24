@@ -80,7 +80,10 @@ bool EditorSyncController::requestTouchPadAuthoring(
 
 bool EditorSyncController::editorContextActive() const
 {
-    return editorVisible_ && editorFocused_ && !imeComposing_
+    // Focus is deliberately not required: pressing the preview to author a
+    // touch takes focus away from the editor, and the edit still belongs at
+    // the caret the editor keeps (persistentSelection) until it is refocused.
+    return editorVisible_ && !imeComposing_
         && contextDifficultyId_ > 0
         && contextDifficultyId_ == readyDifficultyId_
         && contextRevision_ == readyRevision_;
@@ -166,7 +169,7 @@ void EditorSyncController::setEditorContext(
         caretPending_ = false;
         deliveredCaretValid_ = false;
     }
-    if (!editorFocused_ || imeComposing_) {
+    if (imeComposing_) {
         pendingTouchPadControlHold_ = false;
         scheduleTouchPadControlHoldDelivery();
     }
@@ -450,8 +453,7 @@ void EditorSyncController::scheduleTouchPadDelivery()
     QMetaObject::invokeMethod(this, [this] {
         touchPadDeliveryQueued_ = false;
         const TouchPadRequest request = pendingTouchPadRequests_.dequeue();
-        if (readinessAccepts(request.difficultyId, request.revision)
-            && editorFocused_ && !imeComposing_) {
+        if (readinessAccepts(request.difficultyId, request.revision) && !imeComposing_) {
             emit touchPadAuthoringRequested(
                 request.pad, request.separator,
                 request.difficultyId, request.revision,

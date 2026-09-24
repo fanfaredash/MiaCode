@@ -176,6 +176,43 @@ bool verifyCaretPublishingFollowsTheSameRule(QTextStream& err)
     return ok;
 }
 
+bool verifyTouchAuthoringDoesNotNeedEditorFocus(QTextStream& err)
+{
+    EditorSyncController controller;
+    makeReady(controller);
+    QSignalSpy holds(&controller, &EditorSyncController::touchPadControlHoldChanged);
+    QSignalSpy requests(&controller, &EditorSyncController::touchPadAuthoringRequested);
+
+    // Pressing the preview takes focus from the editor between the Ctrl press
+    // and the click's release; the hold and the click must both survive it and
+    // land at the caret the editor last published (a backward selection's
+    // anchor is past its caret).
+    controller.setEditorContext(kDifficulty, kRevision, 9, 4, true, false, 1, 5, false);
+    controller.setTouchPadControlHold(true);
+    flush();
+    controller.setEditorContext(kDifficulty, kRevision, 9, 4, false, false, 1, 5, false);
+    flush();
+    bool ok = require(holds.count() == 1 && holds.first().at(0).toBool(),
+                      QStringLiteral("losing editor focus does not drop a held Ctrl"), err);
+    ok = ok
+        && require(controller.requestTouchPadAuthoring(QStringLiteral("B7"), QLatin1Char(',')),
+                   QStringLiteral("a touch click is accepted while the editor is unfocused"), err);
+    flush();
+    ok = ok
+        && require(requests.count() == 1 && requests.first().at(4).toInt() == 9
+                       && requests.first().at(5).toInt() == 4,
+                   QStringLiteral("the touch request carries the published anchor and caret"), err);
+
+    // IME composition still owns the caret, focused or not.
+    controller.setEditorContext(kDifficulty, kRevision, 4, 4, false, true, 1, 5, false);
+    flush();
+    ok = ok
+        && require(holds.count() == 2 && !holds.last().at(0).toBool()
+                       && !controller.requestTouchPadAuthoring(QStringLiteral("B7"), QLatin1Char('/')),
+                   QStringLiteral("IME composition releases the hold and refuses touch clicks"), err);
+    return ok;
+}
+
 bool verifyFollowCarriesItsIdentityForTheEditorToGateOn(QTextStream& err)
 {
     EditorSyncController controller;
@@ -229,6 +266,7 @@ int main(int argc, char** argv)
         && verifyLosingTheEditorCancelsPendingWork(err)
         && verifyLocationPublishersShareTheGate(err)
         && verifyCaretPublishingFollowsTheSameRule(err)
+        && verifyTouchAuthoringDoesNotNeedEditorFocus(err)
         && verifyFollowCarriesItsIdentityForTheEditorToGateOn(err);
     if (ok) {
         out << "editor_sync_controller_spec ok" << Qt::endl;

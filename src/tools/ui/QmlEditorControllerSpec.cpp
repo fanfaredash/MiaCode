@@ -1169,9 +1169,8 @@ int main(int argc, char** argv)
 
     controller.setDocumentContext(3, 42);
     expect(controller.acceptsCaret(3, 42, false) && !controller.acceptsCaret(3, 41, false)
-               && !controller.acceptsTouchAuthoring(3, 42, true, false)
-               && controller.acceptsTouchAuthoring(3, 42, false, true),
-           QStringLiteral("caret and Ctrl touch authoring reject stale revisions and IME composition"), out, &failed);
+               && !controller.acceptsCaret(3, 42, true),
+           QStringLiteral("caret publishing rejects stale revisions and IME composition"), out, &failed);
     const auto touchTransaction = controller.touchPadAuthoringForQml(
         QStringLiteral("1,,"), 2, 2, QStringLiteral("A1"), QLatin1Char('/'));
     expect(touchTransaction.value(QStringLiteral("consumed")).toBool()
@@ -1181,6 +1180,19 @@ int main(int argc, char** argv)
                       == QStringLiteral("A1")
                && touchTransaction.value(QStringLiteral("touchTokenStart")).toInt() == 2,
            QStringLiteral("Ctrl touch authoring is returned as one editor transaction with its token anchor"), out, &failed);
+    // Undo and redo of a touch edit hand its token anchor back, so the editor
+    // can park the preview on that beat again; ordinary edits carry none.
+    controller.clearAllHistory();
+    controller.recordQmlTransaction(QStringLiteral("1,,"), QStringLiteral("1,A1,"), 2);
+    const auto touchUndo = controller.undoQmlTransaction();
+    const auto touchRedo = controller.redoQmlTransaction();
+    controller.recordQmlTransaction(QStringLiteral("1,A1,"), QStringLiteral("1,A1,2,"));
+    const auto plainUndo = controller.undoQmlTransaction();
+    expect(touchUndo.value(QStringLiteral("touchTokenStart")).toInt() == 2
+               && touchRedo.value(QStringLiteral("touchTokenStart")).toInt() == 2
+               && !plainUndo.contains(QStringLiteral("touchTokenStart")),
+           QStringLiteral("undo and redo of a touch edit carry its preview anchor, other edits none"),
+           out, &failed);
     const auto createdBookmark = controller.createBookmarkForQml(QStringLiteral("1,2,"), 1, QStringLiteral("intro"));
     expect(createdBookmark.value(QStringLiteral("hasEdit")).toBool()
                && createdBookmark.value(QStringLiteral("replacementText")).toString().contains(QStringLiteral("[intro]")),

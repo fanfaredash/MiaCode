@@ -99,6 +99,10 @@ bool Session::eventFilter(QObject*, QEvent* event)
 {
     if (event->type() == QEvent::ApplicationDeactivate) {
         setPauseDisplayAltHoldActive(false);
+        // Alt+Tab eats the Ctrl release, so leaving the app ends the hold too.
+        if (editorSyncController_ != nullptr) {
+            editorSyncController_->setTouchPadControlHold(false);
+        }
         return false;
     }
 
@@ -122,8 +126,31 @@ bool Session::eventFilter(QObject*, QEvent* event)
             return true;
         }
 
+        // Ctrl (Command on macOS) arms touch-pad authoring on the preview from
+        // anywhere in the root window, not only from the focused editor: the
+        // click it enables lands on the preview, which does not keep the
+        // editor focused. This filter only observes — Ctrl shortcuts still run.
+        bool controlArmsTouchAuthoring = false;
+        if (keyEvent->key() == Qt::Key_Control
+            && !keyEvent->isAutoRepeat()
+            && editorSyncController_ != nullptr) {
+            if (event->type() == QEvent::KeyPress) {
+                controlArmsTouchAuthoring = previewTouchPadAuthoringShortcutEnabled_
+                    && rootWindow != nullptr
+                    && QGuiApplication::focusWindow() == rootWindow
+                    && editorAuthoringContextActive();
+                if (controlArmsTouchAuthoring) {
+                    editorSyncController_->setTouchPadControlHold(true);
+                }
+            } else if (event->type() == QEvent::KeyRelease) {
+                editorSyncController_->setTouchPadControlHold(false);
+            }
+        }
+
         const PauseDisplayHoldKey hold = pauseDisplayHoldKey();
-        if (keyEvent->key() == hold.key) {
+        // A Ctrl pause-display hold key yields to touch authoring, which owns
+        // Ctrl whenever it can author.
+        if (keyEvent->key() == hold.key && !controlArmsTouchAuthoring) {
             if (event->type() == QEvent::KeyPress
                 && !keyEvent->isAutoRepeat()
                 && keyEvent->modifiers() == hold.pressModifiers) {

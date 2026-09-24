@@ -298,12 +298,6 @@ bool EditorController::acceptsCaret(int difficultyId, quint64 revision, bool ime
     return !imeComposing && difficultyId == activeDifficultyId_ && revision == documentRevision_;
 }
 
-bool EditorController::acceptsTouchAuthoring(
-    int difficultyId, quint64 revision, bool imeComposing, bool editorHasFocus) const
-{
-    return editorHasFocus && acceptsCaret(difficultyId, revision, imeComposing);
-}
-
 void EditorController::setCompletion(const miacode::editor::SimaiCompletionSession& completion)
 {
     completion_ = completion;
@@ -405,7 +399,6 @@ bool EditorController::publishCaretForQml(int difficultyId, qulonglong revision,
 {
     return acceptsCaret(difficultyId, revision, imeComposing);
 }
-bool EditorController::acceptsTouchAuthoringForQml(int difficultyId, qulonglong revision, bool imeComposing, bool editorHasFocus) const { return acceptsTouchAuthoring(difficultyId, revision, imeComposing, editorHasFocus); }
 QVariantList EditorController::bookmarksForQml(const QString& text) const
 {
     QVariantList result;
@@ -534,14 +527,16 @@ void EditorController::dropHistoryScope(const QString& scopeId)
     }
 }
 
-void EditorController::recordQmlTransaction(const QString& before, const QString& after)
+void EditorController::recordQmlTransaction(
+    const QString& before, const QString& after, int touchTokenStart)
 {
     if (before == after) return;
     const TextDelta delta = computeTextDelta(before, after);
     QmlHistory& history = activeHistory();
     history.undo.append({delta.start,
                          before.mid(delta.start, delta.fromEnd - delta.start),
-                         after.mid(delta.start, delta.toEnd - delta.start)});
+                         after.mid(delta.start, delta.toEnd - delta.start),
+                         touchTokenStart});
     // 每步保存修改区间内的原文和新文；达到历史上限后移除最早的记录。
     if (history.undo.size() > kMaxHistorySteps) {
         history.undo.remove(0, history.undo.size() - kMaxHistorySteps);
@@ -550,18 +545,22 @@ void EditorController::recordQmlTransaction(const QString& before, const QString
     setUndoAvailability(true, false);
 }
 QVariantMap EditorController::restoreTransaction(
-    int start, const QString& replaced, const QString& replacement) const
+    int start, const QString& replaced, const QString& replacement, int touchTokenStart) const
 {
     // The caret lands on the restored text and selects it, so the step is
     // visible. Undoing an insertion restores nothing, which collapses the
     // selection at the point the inserted text used to begin.
-    return {{QStringLiteral("consumed"), true},
-            {QStringLiteral("hasEdit"), true},
-            {QStringLiteral("replacementStart"), start},
-            {QStringLiteral("replacementEnd"), start + replaced.size()},
-            {QStringLiteral("replacementText"), replacement},
-            {QStringLiteral("anchor"), start},
-            {QStringLiteral("position"), start + replacement.size()}};
+    QVariantMap transaction{{QStringLiteral("consumed"), true},
+                            {QStringLiteral("hasEdit"), true},
+                            {QStringLiteral("replacementStart"), start},
+                            {QStringLiteral("replacementEnd"), start + replaced.size()},
+                            {QStringLiteral("replacementText"), replacement},
+                            {QStringLiteral("anchor"), start},
+                            {QStringLiteral("position"), start + replacement.size()}};
+    if (touchTokenStart >= 0) {
+        transaction.insert(QStringLiteral("touchTokenStart"), touchTokenStart);
+    }
+    return transaction;
 }
 QVariantMap EditorController::undoQmlTransaction()
 {
@@ -571,7 +570,7 @@ QVariantMap EditorController::undoQmlTransaction()
     const auto entry = history.undo.takeLast();
     history.redo.append(entry);
     setUndoAvailability(!history.undo.isEmpty(), true);
-    return restoreTransaction(entry.start, entry.inserted, entry.removed);
+    return restoreTransaction(entry.start, entry.inserted, entry.removed, entry.touchTokenStart);
 }
 QVariantMap EditorController::redoQmlTransaction()
 {
@@ -581,7 +580,7 @@ QVariantMap EditorController::redoQmlTransaction()
     const auto entry = history.redo.takeLast();
     history.undo.append(entry);
     setUndoAvailability(true, !history.redo.isEmpty());
-    return restoreTransaction(entry.start, entry.removed, entry.inserted);
+    return restoreTransaction(entry.start, entry.removed, entry.inserted, entry.touchTokenStart);
 }
 
 } // namespace miacode::ui

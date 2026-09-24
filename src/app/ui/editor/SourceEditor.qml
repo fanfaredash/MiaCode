@@ -101,10 +101,15 @@ Rectangle {
                     root.documentSession.documentRevision,
                     root.imeComposing)
             root.contextCaretPending = false
+            // Anchor and caret, not start and end: touch authoring writes at
+            // the caret, which is the start of a backward selection.
+            const caret = sourceArea.cursorPosition
             root.syncController.setEditorContext(
                 root.documentSession.currentDifficultyId,
                 root.documentSession.documentRevision,
-                sourceArea.selectionStart, sourceArea.selectionEnd,
+                caret === sourceArea.selectionStart ? sourceArea.selectionEnd
+                                                    : sourceArea.selectionStart,
+                caret,
                 sourceArea.activeFocus, root.imeComposing,
                 root.viewState.editorCursorLine,
                 root.viewState.editorCursorColumn,
@@ -234,12 +239,24 @@ Rectangle {
     function undo() {
         // 先提交输入法文字，再从与当前正文一致的历史中取出撤销步骤。
         Qt.inputMethod.commit()
-        applyEditorTransaction(editorController.undoQmlTransaction(), true)
+        applyHistoryTransaction(editorController.undoQmlTransaction())
     }
 
     function redo() {
         Qt.inputMethod.commit()
-        applyEditorTransaction(editorController.redoQmlTransaction(), true)
+        applyHistoryTransaction(editorController.redoQmlTransaction())
+    }
+
+    // 撤销/重做 touch 点击输入时，预览回到该拍，与写入时的停靠位置一致。
+    function applyHistoryTransaction(transaction) {
+        if (applyEditorTransaction(transaction, true) && transaction.touchTokenStart !== undefined)
+            publishTouchPadPreviewAnchor(transaction.touchTokenStart)
+    }
+
+    function publishTouchPadPreviewAnchor(tokenStart) {
+        root.syncController.setTouchPadPreviewAnchor(
+            root.documentSession.currentDifficultyId, root.documentSession.documentRevision,
+            sourceArea.text, tokenStart)
     }
 
     function cut() {
@@ -598,7 +615,9 @@ Rectangle {
             sourceArea.select(transaction.anchor, transaction.position)
             sourceArea.syncingFromController = false
             if (transaction.undoGroup)
-                root.editorController.recordQmlTransaction(before, sourceArea.text)
+                root.editorController.recordQmlTransaction(
+                    before, sourceArea.text,
+                    transaction.touchTokenStart !== undefined ? transaction.touchTokenStart : -1)
             sourceArea.historyText = sourceArea.text
             root.documentSession.chartText = sourceArea.text
         } else if (transaction.anchor !== sourceArea.selectionStart
@@ -1041,10 +1060,10 @@ Rectangle {
             Keys.onPressed: function(event) {
                 if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown)
                     root.beginUserViewportInteraction()
-                if (event.key === Qt.Key_Control) {
-                    root.syncController.setTouchPadControlHold(true)
+                // A bare Ctrl arms touch authoring; Session's application
+                // filter tracks it window-wide, the editor has nothing to do.
+                if (event.key === Qt.Key_Control)
                     return
-                }
                 if (event.matches(StandardKey.Find)) {
                     root.openFindReplace()
                     event.accepted = true
@@ -1100,10 +1119,6 @@ Rectangle {
                 // macOS 物理 Control+Z types "z" into the chart. Swallow it.
                 if (transaction.suppressFallbackInsert)
                     event.accepted = true
-            }
-            Keys.onReleased: function(event) {
-                if (event.key === Qt.Key_Control)
-                    root.syncController.setTouchPadControlHold(false)
             }
             Component.onCompleted: {
                 root.syncTextFromController()
@@ -1279,7 +1294,9 @@ Rectangle {
         }
         function onTouchPadAuthoringRequested(pad, separator, difficultyId,
                                                revision, anchor, position) {
-            if (!sourceArea.activeFocus || root.imeComposing
+            // No focus check: the click that asked for this was on the preview,
+            // and the editor keeps its caret until it takes focus back below.
+            if (root.imeComposing
                     || difficultyId !== root.documentSession.currentDifficultyId
                     || revision !== root.documentSession.documentRevision)
                 return
@@ -1289,9 +1306,8 @@ Rectangle {
             const tx = root.editorController.touchPadAuthoringForQml(
                 sourceArea.text, anchor, position, pad, separator)
             if (root.applyEditorTransaction(tx)) {
-                root.syncController.setTouchPadPreviewAnchor(
-                    difficultyId, root.documentSession.documentRevision,
-                    sourceArea.text, tx.touchTokenStart)
+                sourceArea.forceActiveFocus()
+                root.publishTouchPadPreviewAnchor(tx.touchTokenStart)
             }
         }
     }
