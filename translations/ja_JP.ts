@@ -4265,9 +4265,9 @@ The file may be open in preview, a media player, File Explorer preview pane, or 
         <source>Enable clock_count</source>
         <translation>clock_count を有効化</translation>
     </message>
-    <message id="qml.enter_to_jump_ctrl_shift_b_to_create_delete_to_remove_f2_to_rena">
-        <source>Enter to jump; Ctrl+Shift+B to create; Delete to remove; F2 to rename; right-click for the bookmark menu</source>
-        <translation>Enter で移動、Ctrl+Shift+B で作成、Delete で削除、F2 で名前変更、右クリックでブックマークメニュー</translation>
+    <message id="qml.enter_to_jump_delete_to_remove_f2_to_rename_right_click_for_the">
+        <source>Enter to jump; Delete to remove; F2 to rename; right-click for the bookmark menu</source>
+        <translation>Enter で移動、Delete で削除、F2 で名前変更、右クリックでブックマークメニュー</translation>
     </message>
     <message id="qml.errors">
         <source>Errors</source>

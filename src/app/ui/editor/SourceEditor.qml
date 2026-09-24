@@ -343,12 +343,6 @@ Rectangle {
         return applyEditorTransaction(editorController.createBookmarkForQml(
             sourceArea.text, line, qsTrId("qml.bookmarks")))
     }
-    function createBookmarkAtCurrentLine() {
-        return createBookmarkAtLine(activeLine)
-    }
-    function deleteBookmarkAtCurrentLine() {
-        return applyEditorTransaction(editorController.deleteBookmarkForQml(sourceArea.text, activeLine))
-    }
     function deleteBookmarkAtLine(line) {
         return applyEditorTransaction(editorController.deleteBookmarkForQml(sourceArea.text, line))
     }
@@ -1066,18 +1060,6 @@ Rectangle {
                     return
                 if (event.matches(StandardKey.Find)) {
                     root.openFindReplace()
-                    event.accepted = true
-                    return
-                }
-                if ((event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)
-                        && event.key === Qt.Key_B) {
-                    root.createBookmarkAtCurrentLine()
-                    event.accepted = true
-                    return
-                }
-                if ((event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)
-                        && event.key === Qt.Key_Delete) {
-                    root.deleteBookmarkAtCurrentLine()
                     event.accepted = true
                     return
                 }

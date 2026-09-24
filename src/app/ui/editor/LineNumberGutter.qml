@@ -25,7 +25,7 @@ Item {
     Accessible.name: bookmarked(activeLine)
         ? qsTrId("qml.bookmarks_and_line_numbers_line_1_has_a_bookmark").arg(activeLine)
         : qsTrId("qml.bookmarks_and_line_numbers_no_bookmark_on_line_1").arg(activeLine)
-    Accessible.description: qsTrId("qml.enter_to_jump_ctrl_shift_b_to_create_delete_to_remove_f2_to_rena")
+    Accessible.description: qsTrId("qml.enter_to_jump_delete_to_remove_f2_to_rename_right_click_for_the")
     activeFocusOnTab: true
     focus: false
 
@@ -154,10 +154,6 @@ Item {
             event.accepted = true
         } else if (event.key === Qt.Key_F2 && bookmarked(activeLine)) {
             renameRequested(activeLine)
-            event.accepted = true
-        } else if ((event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)
-                   && event.key === Qt.Key_B) {
-            createRequested(activeLine)
             event.accepted = true
         }
     }
