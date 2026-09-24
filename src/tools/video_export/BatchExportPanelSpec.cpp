@@ -4,8 +4,11 @@
 #include "tools/video_export/BatchExportPanel.h"
 #include "tools/video_export/BatchExportTaskLayout.h"
 #include "tools/video_export/VideoExportDialogInternal.h"
+#include "tools/video_export/VideoExportOutput.h"
 
 #include <iterator>
+#include <QFile>
+#include <QTemporaryDir>
 
 namespace {
 
@@ -118,6 +121,46 @@ bool verifyExportFpsOptionsIncludeThirty(QTextStream& err)
                    err);
 }
 
+bool verifyOutputModePathsAndPairCollisionHandling(QTextStream& err)
+{
+    if (!require(
+            videoExportOutputModeFromToken(QStringLiteral("wav")) == VideoExportOutputMode::Wav
+                && videoExportOutputModeFromToken(QStringLiteral("mp4_and_wav"))
+                    == VideoExportOutputMode::Mp4AndWav
+                && videoExportOutputModeFromToken(QStringLiteral("unknown"))
+                    == VideoExportOutputMode::Mp4,
+            QStringLiteral("output-mode tokens must round-trip and preserve the MP4 legacy default"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            videoExportOutputPaths(
+                QStringLiteral("result.wav"), VideoExportOutputMode::Mp4AndWav)
+                == QStringList({QStringLiteral("result.mp4"), QStringLiteral("result.wav")}),
+            QStringLiteral("combined output must share one filename stem"),
+            err)) {
+        return false;
+    }
+
+    QTemporaryDir directory;
+    if (!require(directory.isValid(), QStringLiteral("temporary output directory must be available"), err)) {
+        return false;
+    }
+    const QString occupiedWav = QDir(directory.path()).filePath(QStringLiteral("song.wav"));
+    QFile file(occupiedWav);
+    if (!require(file.open(QIODevice::WriteOnly), QStringLiteral("collision fixture must be writable"), err)) {
+        return false;
+    }
+    file.close();
+    const QString unique = makeUniqueVideoExportOutputPath(
+        QDir(directory.path()).filePath(QStringLiteral("song.mp4")),
+        VideoExportOutputMode::Mp4AndWav);
+    return require(
+        QFileInfo(unique).fileName() == QStringLiteral("song(1).mp4"),
+        QStringLiteral("combined output must advance both suffixes when either sibling exists"),
+        err);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -136,6 +179,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyExportFpsOptionsIncludeThirty(err)) {
+        return 1;
+    }
+    if (!verifyOutputModePathsAndPairCollisionHandling(err)) {
         return 1;
     }
 

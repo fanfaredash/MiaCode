@@ -349,6 +349,12 @@ must copy both fields; `VideoExportSnapshot::{toJson,fromJson}` must serialize t
 `UltraCompactWithPv` and `UltraCompact` tokens share encoder tuning; only `UltraCompact` suppresses
 PV in the prepared export task, never in the live/export-page preview.
 
+`outputMode` follows the same boundary and is serialized as `export.output_mode`. Its legacy
+default is MP4. The shared `VideoExportOutput.h` path helpers must be used by single export, batch
+export, worker completion reporting, and final promotion so `MP4 + WAV` always uses one stem and
+advances both sibling filenames when either already exists. WAV-only visibility changes belong to
+the Output tab; do not disable or hide controls on the range, gameplay, skin, visuals, or intro tabs.
+
 The selected intro sound and its independent `introSoundVolume` follow the same single/batch
 snapshot boundary. The dialog persists the 0..2 volume (0%..200%), applies it immediately through
 `QtPreviewSfxRuntime::applyLevels`, and export restores it from `intro.sound_volume` before the

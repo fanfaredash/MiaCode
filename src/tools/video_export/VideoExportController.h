@@ -17,6 +17,7 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "common/PreviewGameplayConfig.h"
 #include "tools/video_export/VideoExportRuntimePolicy.h"
+#include "tools/video_export/VideoExportOutput.h"
 class QProgressDialog;
 
 enum class VideoExportPreset {
@@ -173,6 +174,7 @@ inline QVariantMap introBannerStyleMap(const IntroBannerSpec& intro)
 
 struct VideoExportTask {
     QString outputPath;
+    VideoExportOutputMode outputMode = VideoExportOutputMode::Mp4;
     QString chartPath;
     QString backgroundMediaPath;
     QString trackPath;

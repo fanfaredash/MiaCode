@@ -638,7 +638,7 @@ VideoExportDialog::VideoExportDialog(
     auto* outputColumn = new QVBoxLayout(outputRow);
     outputColumn->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     outputColumn->setSpacing(6);
-    auto* outputLabel = new QLabel(UiText::text(QStringLiteral("video_export.output")), outputRow);
+    auto* outputLabel = new QLabel(UiText::text(QStringLiteral("video_export.output_file")), outputRow);
     outputColumn->addWidget(outputLabel, 0);
     auto* outputControlRow = new QWidget(outputRow);
     auto* outputControlLayout = new QHBoxLayout(outputControlRow);
@@ -654,6 +654,19 @@ VideoExportDialog::VideoExportDialog(
     outputControlLayout->addWidget(outputPathEdit_, 1);
     outputControlLayout->addWidget(browseButton, 0);
     outputColumn->addWidget(outputControlRow, 0);
+    outputFilesHintLabel_ = new QLabel(outputRow);
+    outputFilesHintLabel_->setWordWrap(true);
+    {
+        QFont hintFont = outputFilesHintLabel_->font();
+        hintFont.setPointSizeF(qMax(7.0, hintFont.pointSizeF() - 1.0));
+        outputFilesHintLabel_->setFont(hintFont);
+    }
+    outputFilesHintLabel_->setStyleSheet(
+        QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
+    outputColumn->addWidget(outputFilesHintLabel_, 0);
+    connect(outputPathEdit_, &QLineEdit::textChanged, this, [this]() {
+        refreshOutputFilesHint();
+    });
     outputPageLayout->addWidget(outputRow, 0);
     miacode::ui::busyTick();  // keep the export-switch spinner turning during the build
     // Beta20-fix — 2x2 grid layout for the 4 dropdown options.
@@ -687,7 +700,7 @@ VideoExportDialog::VideoExportDialog(
         int column,
         const QString& labelText,
         QWidget* control
-    ) {
+    ) -> QWidget* {
         auto* field = new QWidget(optionsGrid);
         auto* fieldLayout = new QVBoxLayout(field);
         fieldLayout->setContentsMargins(0, 0, 0, 0);
@@ -696,9 +709,39 @@ VideoExportDialog::VideoExportDialog(
         fieldLayout->addWidget(label, 0);
         fieldLayout->addWidget(control, 0);
         optionsGridLayout->addWidget(field, row, column);
+        return field;
     };
 
-    // Resolution dropdown (row 0, col 0).
+    selectedOutputMode_ = baseTask_.outputMode;
+    outputModeCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
+    outputModeCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.output_mode.mp4")),
+        static_cast<int>(VideoExportOutputMode::Mp4));
+    outputModeCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.output_mode.wav")),
+        static_cast<int>(VideoExportOutputMode::Wav));
+    outputModeCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.output_mode.both")),
+        static_cast<int>(VideoExportOutputMode::Mp4AndWav));
+    outputModeCombo_->setCurrentIndex(qMax(
+        0, outputModeCombo_->findData(static_cast<int>(selectedOutputMode_))));
+    miacode::ui::applyDialogComboBoxStyle(outputModeCombo_, 12);
+    connect(outputModeCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedOutputMode_ = static_cast<VideoExportOutputMode>(
+            outputModeCombo_->itemData(index).toInt());
+        refreshOutputModeUi(true);
+        persistExportOnlySettings();
+    });
+    addOptionField(
+        0,
+        0,
+        UiText::text(QStringLiteral("dialog.video_export.output_mode")),
+        outputModeCombo_);
+
+    // Resolution dropdown (row 1, col 0).
     int currentPresetIndex = -1;
     for (int i = 0; i < static_cast<int>(std::size(kResolutionPresets)); ++i) {
         const QSize size(kResolutionPresets[i].width, kResolutionPresets[i].height);
@@ -742,9 +785,10 @@ VideoExportDialog::VideoExportDialog(
         applySelectedAspectRatioToPreview(true);
         persistExportOnlySettings();
     });
-    addOptionField(0, 0, UiText::text(QStringLiteral("dialog.video_export.resolution")), resolutionCombo_);
+    resolutionOptionField_ = addOptionField(
+        1, 0, UiText::text(QStringLiteral("dialog.video_export.resolution")), resolutionCombo_);
 
-    // FPS dropdown (row 0, col 1).
+    // FPS dropdown (row 1, col 1).
     selectedFps_ = normaliseExportFps(baseTask_.fps);
     fpsCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
     for (int fps : kFpsOptions) {
@@ -759,12 +803,11 @@ VideoExportDialog::VideoExportDialog(
         selectedFps_ = fpsCombo_->itemData(index).toInt();
         persistExportOnlySettings();
     });
-    addOptionField(0, 1, UiText::text(QStringLiteral("dialog.video_export.fps")), fpsCombo_);
+    fpsOptionField_ = addOptionField(
+        1, 1, UiText::text(QStringLiteral("dialog.video_export.fps")), fpsCombo_);
 
-    // Audio quality dropdown (row 1, col 0) — picks AAC bitrate forwarded
-    // to ffmpeg as `-b:a <kbps>k`. Default 192 is a step above the previous
-    // hard-coded 160k baseline; 320k matches the AAC LC stereo ceiling for
-    // users who care about bgm fidelity in the exported clip.
+    // Audio quality dropdown (row 0, col 1) controls AAC inside MP4. WAV output
+    // keeps the mixer's native lossless PCM format.
     selectedAudioBitrateKbps_ = normaliseAudioBitrateKbps(baseTask_.audioBitrateKbps);
     const auto formatAudioBitrateLabel = [](int kbps) -> QString {
         return QStringLiteral("%1 kbps").arg(kbps);
@@ -783,14 +826,14 @@ VideoExportDialog::VideoExportDialog(
         selectedAudioBitrateKbps_ = audioBitrateCombo_->itemData(index).toInt();
         persistExportOnlySettings();
     });
-    addOptionField(
-        1,
+    audioBitrateOptionField_ = addOptionField(
         0,
+        1,
         UiText::text(QStringLiteral("dialog.video_export.audio_bitrate")),
         audioBitrateCombo_
     );
 
-    // Export Settings dropdown (row 1, col 1).
+    // Export Settings dropdown (row 2, col 0).
     selectedPreset_ = baseTask_.preset;
     presetCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
     presetCombo_->addItem(
@@ -809,9 +852,9 @@ VideoExportDialog::VideoExportDialog(
         selectedPreset_ = static_cast<VideoExportPreset>(presetCombo_->itemData(index).toInt());
         persistExportOnlySettings();
     });
-    addOptionField(
-        1,
-        1,
+    presetOptionField_ = addOptionField(
+        2,
+        0,
         UiText::text(QStringLiteral("dialog.video_export.preset")),
         presetCombo_
     );
@@ -841,14 +884,15 @@ VideoExportDialog::VideoExportDialog(
             static_cast<VideoExportSizePreset>(sizePresetCombo_->itemData(index).toInt());
         persistExportOnlySettings();
     });
-    addOptionField(
+    sizePresetOptionField_ = addOptionField(
         2,
-        0,
+        1,
         UiText::text(QStringLiteral("dialog.video_export.size_preset")),
         sizePresetCombo_
     );
 
     outputPageLayout->addWidget(optionsGrid, 0);
+    refreshOutputModeUi(false);
 
     rangeContent_ = new QWidget(rangePage);
     auto* rangeLayout = new QVBoxLayout(rangeContent_);

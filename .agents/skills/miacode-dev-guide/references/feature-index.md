@@ -520,6 +520,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   during export only (falling back to a sibling still image).
   Owners: `VideoExportDialog*` (UI/persistence), `VideoExportRuntimePolicy.*` (policy),
   `VideoExportEncoder.cpp` (encoder arguments), and `VideoExportPreparedTask.cpp` (media/GOP/audio).
+- Output format is selected on the Output tab through `VideoExportOutputMode` (`MP4`, `WAV`, or
+  `MP4 + WAV`). The editable output filename remains the stem owner and the native Save As dialog
+  mirrors all three choices. A live hint below the path shows the actual sibling filename(s)
+  generated from that stem. WAV-only hides the encoding controls that do not affect PCM output
+  (resolution, FPS, audio bitrate, render quality, and file-size preset); every other tab remains
+  available. `VideoExportOutput.h` owns suffix normalization, sibling output paths, and pair-aware
+  collision numbering. `VideoExportPreparedTask.cpp` promotes the existing PCM16 mixed WAV
+  directly when no intro sound is present; with an intro it performs one audio-only PCM WAV
+  finalization pass to add the same opening sound used by MP4. WAV-only then returns and skips the
+  raw-video pipe, frame rendering, video encoding, and MP4 remux. `MP4 + WAV` keeps the full video
+  path and prepares the sibling WAV afterward without rerunning the audio mixer.
 - Snapshot boundary (contract): `VideoExportSnapshot.{h,cpp}` (`toJson`, `fromJson`,
   `buildVideoExportTaskFromSnapshot`).
 - Export-video HUD compatibility: the Visuals checkbox "Fix HUD font line spacing" persists as

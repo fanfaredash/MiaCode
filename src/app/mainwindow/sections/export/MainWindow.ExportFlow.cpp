@@ -1527,7 +1527,9 @@ void MainWindow::ExportSection::handleBatchExportConfirmed()
             failedCharts.append(job.displayName + QStringLiteral(" - ") + failureText);
         } else {
             ++successCount;
-            exportedFiles.append(QFileInfo(snapshot.outputPath).fileName());
+            for (const QString& outputPath : videoExportOutputPaths(snapshot.outputPath, snapshot.outputMode)) {
+                exportedFiles.append(QFileInfo(outputPath).fileName());
+            }
         }
         if (exportCovers) {
             VideoExportTask coverTask;

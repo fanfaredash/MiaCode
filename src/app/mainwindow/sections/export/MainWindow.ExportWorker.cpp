@@ -420,6 +420,9 @@ QString localizeExportWorkerMessageForSystemLanguage(const QString& rawMessage)
     if (trimmed == QLatin1String("Repacking MP4 for fast start...")) {
         return QStringLiteral("Finalizing video...");
     }
+    if (trimmed == QLatin1String("Finalizing WAV audio...")) {
+        return QStringLiteral("Finalizing WAV audio...");
+    }
     if (trimmed == QLatin1String("Collecting export summary...")) {
         return QStringLiteral("Finishing up...");
     }
@@ -435,6 +438,7 @@ bool exportWorkerProgressUsesBusyIndicator(const QString& rawMessage)
     const QString trimmed = rawMessage.trimmed();
     return trimmed == QLatin1String("Finalizing encoded video stream...")
         || trimmed == QLatin1String("Repacking MP4 for fast start...")
+        || trimmed == QLatin1String("Finalizing WAV audio...")
         || trimmed == QLatin1String("Collecting export summary...")
         || trimmed == QLatin1String("Export completed.");
 }
@@ -469,6 +473,9 @@ QString localizeExportWorkerMessageForUiLanguage(const QString& rawMessage)
     }
     if (trimmed == QLatin1String("Repacking MP4 for fast start...")) {
         return UiText::text(QStringLiteral("dialog.video_export.progress.repacking"));
+    }
+    if (trimmed == QLatin1String("Finalizing WAV audio...")) {
+        return UiText::text(QStringLiteral("dialog.video_export.progress.finalizing_wav"));
     }
     if (trimmed == QLatin1String("Collecting export summary...")) {
         return UiText::text(QStringLiteral("dialog.video_export.progress.finishing"));
@@ -1294,16 +1301,20 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
     }
 
     if (owner_.videoExportWorkerSuccess_) {
-        const QFileInfo resolvedOutputInfo(owner_.videoExportWorkerOutputPath_);
-        const QString resolvedOutputName = resolvedOutputInfo.fileName().trimmed().isEmpty()
-            ? QDir::toNativeSeparators(owner_.videoExportWorkerOutputPath_)
-            : resolvedOutputInfo.fileName();
+        QStringList resolvedOutputNames;
+        for (const QString& outputPath : videoExportOutputPaths(
+                 owner_.videoExportWorkerOutputPath_, owner_.videoExportWorkerSnapshot_.outputMode)) {
+            const QFileInfo outputInfo(outputPath);
+            resolvedOutputNames.append(outputInfo.fileName().trimmed().isEmpty()
+                ? QDir::toNativeSeparators(outputPath)
+                : outputInfo.fileName());
+        }
         QMessageBox dialog(
             QMessageBox::Information,
             UiText::text(QStringLiteral("dialog.video_export.title")),
             QStringLiteral("%1\n\n%2")
                 .arg(UiText::text(QStringLiteral("dialog.video_export.message.completed")))
-                .arg(resolvedOutputName),
+                .arg(resolvedOutputNames.join(QLatin1Char('\n'))),
             QMessageBox::NoButton,
             UiDialogs::effectiveParentWidget(&owner_)
         );

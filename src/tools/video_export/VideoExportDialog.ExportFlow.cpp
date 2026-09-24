@@ -146,6 +146,45 @@ QString resolveOutputPathForExport(const QString& outputPath, const QString& bas
     return QDir::cleanPath(absolutePath);
 }
 
+QString mp4OutputFilter()
+{
+    return UiText::text(QStringLiteral("dialog.video_export.save_filter.mp4"));
+}
+
+QString wavOutputFilter()
+{
+    return UiText::text(QStringLiteral("dialog.video_export.save_filter.wav"));
+}
+
+QString bothOutputFilter()
+{
+    return UiText::text(QStringLiteral("dialog.video_export.save_filter.both"));
+}
+
+QString outputFilterForMode(VideoExportOutputMode mode)
+{
+    switch (mode) {
+    case VideoExportOutputMode::Wav:
+        return wavOutputFilter();
+    case VideoExportOutputMode::Mp4AndWav:
+        return bothOutputFilter();
+    case VideoExportOutputMode::Mp4:
+    default:
+        return mp4OutputFilter();
+    }
+}
+
+VideoExportOutputMode outputModeForFilter(const QString& filter)
+{
+    if (filter == wavOutputFilter()) {
+        return VideoExportOutputMode::Wav;
+    }
+    if (filter == bothOutputFilter()) {
+        return VideoExportOutputMode::Mp4AndWav;
+    }
+    return VideoExportOutputMode::Mp4;
+}
+
 QString videoExportWidgetSummary(QWidget* widget)
 {
     if (widget == nullptr) {
@@ -499,6 +538,7 @@ bool VideoExportDialog::buildBatchTaskTemplate(VideoExportTask* task, QString* e
     updated.outputWidth = selectedSize.width() > 0 ? selectedSize.width() : updated.outputWidth;
     updated.outputHeight = selectedSize.height() > 0 ? selectedSize.height() : updated.outputHeight;
     updated.fps = qMax(1, selectedFps_);
+    updated.outputMode = selectedOutputMode_;
     updated.audioBitrateKbps = normaliseAudioBitrateKbps(selectedAudioBitrateKbps_);
     updated.preset = selectedPreset_;
     updated.sizePreset = selectedSizePreset_;
@@ -583,7 +623,7 @@ void VideoExportDialog::applyThemeStyles()
     setStyleSheet(sheet);
 
     // Dialog dropdowns (miacode::ui::createDialogComboBox).
-    for (QComboBox* combo : {resolutionCombo_, fpsCombo_, audioBitrateCombo_,
+    for (QComboBox* combo : {outputModeCombo_, resolutionCombo_, fpsCombo_, audioBitrateCombo_,
                              presetCombo_, sizePresetCombo_, backgroundScaleModeCombo_,
                              introSoundCombo_}) {
         miacode::ui::applyDialogComboBoxStyle(combo, 12);
@@ -604,6 +644,10 @@ void VideoExportDialog::applyThemeStyles()
     }
     if (outputPathEdit_ != nullptr) {
         outputPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
+    }
+    if (outputFilesHintLabel_ != nullptr) {
+        outputFilesHintLabel_->setStyleSheet(
+            QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
     }
     if (introBackgroundPathEdit_ != nullptr) {
         introBackgroundPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
@@ -881,16 +925,79 @@ void VideoExportDialog::browseOutputPath()
     const QString initial = outputPathEdit_ != nullptr
         ? resolveOutputPathForExport(outputPathEdit_->text(), baseDirectory)
         : QString();
+    QString selectedFilter = outputFilterForMode(selectedOutputMode_);
     const QString selected = QFileDialog::getSaveFileName(
         this,
         UiText::text(QStringLiteral("video_export.export_video")),
-        initial,
-        QStringLiteral("MP4 Video (*.mp4)")
+        videoExportPrimaryOutputPath(initial, selectedOutputMode_),
+        QStringList{mp4OutputFilter(), wavOutputFilter(), bothOutputFilter()}.join(QStringLiteral(";;")),
+        &selectedFilter
     );
     if (selected.isEmpty() || outputPathEdit_ == nullptr) {
         return;
     }
-    outputPathEdit_->setText(displayOutputPathForDialog(selected, baseDirectory));
+    selectedOutputMode_ = outputModeForFilter(selectedFilter);
+    if (outputModeCombo_ != nullptr) {
+        const QSignalBlocker blocker(outputModeCombo_);
+        outputModeCombo_->setCurrentIndex(qMax(
+            0, outputModeCombo_->findData(static_cast<int>(selectedOutputMode_))));
+    }
+    refreshOutputModeUi(false);
+    outputPathEdit_->setText(displayOutputPathForDialog(
+        videoExportPrimaryOutputPath(selected, selectedOutputMode_), baseDirectory));
+    persistExportOnlySettings();
+}
+
+void VideoExportDialog::refreshOutputModeUi(bool rewritePathSuffix)
+{
+    if (rewritePathSuffix && outputPathEdit_ != nullptr && !outputPathEdit_->text().trimmed().isEmpty()) {
+        outputPathEdit_->setText(QDir::toNativeSeparators(
+            videoExportPrimaryOutputPath(outputPathEdit_->text(), selectedOutputMode_)));
+    }
+    const bool showVideoOptions = selectedOutputMode_ != VideoExportOutputMode::Wav;
+    for (QWidget* field : {resolutionOptionField_, fpsOptionField_, audioBitrateOptionField_,
+                           presetOptionField_, sizePresetOptionField_}) {
+        if (field != nullptr) {
+            field->setVisible(showVideoOptions);
+        }
+    }
+    refreshOutputFilesHint();
+    if (isVisible()) {
+        QTimer::singleShot(0, this, [this]() { refreshDialogGeometry(); });
+    }
+}
+
+void VideoExportDialog::refreshOutputFilesHint()
+{
+    if (outputFilesHintLabel_ == nullptr || outputPathEdit_ == nullptr) {
+        return;
+    }
+
+    const QStringList outputPaths = videoExportOutputPaths(
+        outputPathEdit_->text(), selectedOutputMode_);
+    QStringList outputNames;
+    for (const QString& path : outputPaths) {
+        outputNames.append(QFileInfo(path).fileName());
+    }
+    outputNames.removeAll(QString());
+
+    if (outputNames.isEmpty()) {
+        outputFilesHintLabel_->clear();
+        outputFilesHintLabel_->setToolTip(QString());
+        outputFilesHintLabel_->hide();
+        return;
+    }
+    if (outputNames.size() >= 2) {
+        outputFilesHintLabel_->setText(UiText::text(
+            QStringLiteral("dialog.video_export.output_files_hint.two"))
+                .arg(outputNames.at(0), outputNames.at(1)));
+    } else {
+        outputFilesHintLabel_->setText(UiText::text(
+            QStringLiteral("dialog.video_export.output_files_hint.one"))
+                .arg(outputNames.constFirst()));
+    }
+    outputFilesHintLabel_->setToolTip(outputPaths.join(QLatin1Char('\n')));
+    outputFilesHintLabel_->show();
 }
 
 bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessage) const
@@ -908,6 +1015,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
         return false;
     }
     updated.outputPath = resolveOutputPathForExport(outputPath, baseDirectory);
+    updated.outputMode = selectedOutputMode_;
     const QSize selectedSize = selectedResolution();
     updated.outputWidth = selectedSize.width() > 0 ? selectedSize.width() : updated.outputWidth;
     updated.outputHeight = selectedSize.height() > 0 ? selectedSize.height() : updated.outputHeight;
@@ -1187,7 +1295,9 @@ bool VideoExportDialog::commitFocusedEditorOnReturn()
             commitFlowSpeedEditor(editor);
         } else if (editor == outputPathEdit_) {
             editor->setText(displayOutputPathForDialog(
-                resolveOutputPathForExport(editor->text().trimmed(), exportBaseDirectory(baseTask_)),
+                videoExportPrimaryOutputPath(
+                    resolveOutputPathForExport(editor->text().trimmed(), exportBaseDirectory(baseTask_)),
+                    selectedOutputMode_),
                 exportBaseDirectory(baseTask_)
             ));
         }

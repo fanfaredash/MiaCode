@@ -172,6 +172,8 @@ signals:
 
 private:
     void browseOutputPath();
+    void refreshOutputModeUi(bool rewritePathSuffix);
+    void refreshOutputFilesHint();
     void onExportButtonClicked();
     void startExport();
     bool applyUiToTask(VideoExportTask* task, QString* errorMessage) const;
@@ -316,6 +318,14 @@ private:
     VideoExportTask requestedExportTask_;
 
     QLineEdit* outputPathEdit_ = nullptr;
+    QLabel* outputFilesHintLabel_ = nullptr;
+    QComboBox* outputModeCombo_ = nullptr;
+    VideoExportOutputMode selectedOutputMode_ = VideoExportOutputMode::Mp4;
+    QWidget* resolutionOptionField_ = nullptr;
+    QWidget* fpsOptionField_ = nullptr;
+    QWidget* audioBitrateOptionField_ = nullptr;
+    QWidget* presetOptionField_ = nullptr;
+    QWidget* sizePresetOptionField_ = nullptr;
     QComboBox* resolutionCombo_ = nullptr;
     QSize selectedResolution_ = QSize();
     QComboBox* fpsCombo_ = nullptr;

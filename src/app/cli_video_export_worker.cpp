@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QString>
@@ -186,6 +187,11 @@ int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
     };
     if (result.success) {
         finishedObject.insert(QStringLiteral("output_path"), task.outputPath);
+        QJsonArray outputPaths;
+        for (const QString& path : videoExportOutputPaths(task.outputPath, task.outputMode)) {
+            outputPaths.append(path);
+        }
+        finishedObject.insert(QStringLiteral("output_paths"), outputPaths);
     } else {
         finishedObject.insert(QStringLiteral("error"), result.message);
         finishedObject.insert(QStringLiteral("details"), result.details);

@@ -380,6 +380,9 @@ QString localizeExportWorkerMessageForUiLanguage(const QString& rawMessage)
     if (trimmed == QLatin1String("Repacking MP4 for fast start...")) {
         return UiText::text(QStringLiteral("dialog.video_export.progress.repacking"));
     }
+    if (trimmed == QLatin1String("Finalizing WAV audio...")) {
+        return UiText::text(QStringLiteral("dialog.video_export.progress.finalizing_wav"));
+    }
     if (trimmed == QLatin1String("Collecting export summary...")) {
         return UiText::text(QStringLiteral("dialog.video_export.progress.finishing"));
     }
@@ -640,6 +643,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.outputHeight = requestedTask.outputHeight;
     built.fps = requestedTask.fps;
     built.audioBitrateKbps = requestedTask.audioBitrateKbps;
+    built.outputMode = requestedTask.outputMode;
     built.preset = requestedTask.preset;
     built.sizePreset = requestedTask.sizePreset;
     built.fullRangeExport = requestedTask.fullRangeExport;
@@ -649,7 +653,8 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.outputPath = resolveVideoExportOutputPath(
         requestedTask.outputPath,
         built.projectDir,
-        defaultOutputName
+        defaultOutputName,
+        built.outputMode
     );
     built.showTimestamp = requestedTask.showTimestamp;
     built.showObjectStatsHud = requestedTask.showObjectStatsHud;
@@ -856,13 +861,15 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.outputHeight = requestedTask.outputHeight;
     built.fps = requestedTask.fps;
     built.audioBitrateKbps = requestedTask.audioBitrateKbps;
+    built.outputMode = requestedTask.outputMode;
     built.preset = requestedTask.preset;
     built.sizePreset = requestedTask.sizePreset;
     built.fullRangeExport = true;
     built.outputPath = resolveVideoExportOutputPath(
         QString(),
-       outputDirectory,
-       defaultOutputName
+        outputDirectory,
+        defaultOutputName,
+        built.outputMode
     );
     built.showTimestamp = requestedTask.showTimestamp;
     built.showObjectStatsHud = requestedTask.showObjectStatsHud;

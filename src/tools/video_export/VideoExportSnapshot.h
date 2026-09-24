@@ -49,6 +49,7 @@ struct VideoExportSnapshot {
     VideoExportSizePreset sizePreset = VideoExportSizePreset::Standard;
     bool fullRangeExport = true;
     QString outputPath;
+    VideoExportOutputMode outputMode = VideoExportOutputMode::Mp4;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
     bool showChartInfoHud = false;

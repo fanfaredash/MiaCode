@@ -124,6 +124,16 @@ void VideoExportDialog::loadPersistedSettings()
 {
     const QJsonObject settings = miacode::video_export::loadDialogPreferences();
 
+    selectedOutputMode_ = videoExportOutputModeFromToken(
+        settings.value(QStringLiteral("output_mode")).toString(),
+        selectedOutputMode_);
+    if (outputModeCombo_ != nullptr) {
+        const QSignalBlocker blocker(outputModeCombo_);
+        outputModeCombo_->setCurrentIndex(qMax(
+            0, outputModeCombo_->findData(static_cast<int>(selectedOutputMode_))));
+    }
+    refreshOutputModeUi(true);
+
     const int savedWidth = settings.value(QStringLiteral("resolution_width")).toInt(selectedResolution_.width());
     const int savedHeight = settings.value(QStringLiteral("resolution_height")).toInt(selectedResolution_.height());
     if (savedWidth > 0 && savedHeight > 0) {
@@ -265,6 +275,7 @@ void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
     settings.insert(QStringLiteral("resolution_height"), task.outputHeight);
     settings.insert(QStringLiteral("fps"), task.fps);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), task.audioBitrateKbps);
+    settings.insert(QStringLiteral("output_mode"), videoExportOutputModeToken(task.outputMode));
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(task.preset));
     settings.insert(
         QStringLiteral("size_preset"),
@@ -282,6 +293,7 @@ void VideoExportDialog::persistExportOnlySettings() const
     settings.insert(QStringLiteral("resolution_height"), selectedResolution().height());
     settings.insert(QStringLiteral("fps"), selectedFps_);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), selectedAudioBitrateKbps_);
+    settings.insert(QStringLiteral("output_mode"), videoExportOutputModeToken(selectedOutputMode_));
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(selectedPreset_));
     settings.insert(
         QStringLiteral("size_preset"),
