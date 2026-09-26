@@ -159,6 +159,7 @@ public:
 
     void enter(int previousActiveDifficultyId);
     void leave();
+    void replaceDocument(int preferredDifficultyId);
 
     Q_INVOKABLE void selectDifficulty(int difficultyId);
     Q_INVOKABLE void setActiveTab(const QString& tabId);

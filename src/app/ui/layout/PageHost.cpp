@@ -45,6 +45,16 @@ PageHost::PageHost(miacode::ShellNotifications& notifications,
         openVideoExportPage();
     });
     connect(&document, &DocumentModel::documentReplaced, this, [this]() {
+        if (activePageId_ == QLatin1String("export")) {
+            resumeDifficultyId_ = document_ != nullptr
+                ? document_->currentDifficultyId() : 0;
+            resumeEditorKey_.clear();
+            resumeEditorKeyExplicit_ = false;
+            if (ExportSession* const session = exportSessionObject(); session != nullptr) {
+                session->replaceDocument(resumeDifficultyId_);
+            }
+            return;
+        }
         if (activePageId_ != QLatin1String("latency")) {
             return;
         }

@@ -375,6 +375,51 @@ void ExportSession::leave()
     setUnavailableReason(QString());
 }
 
+void ExportSession::replaceDocument(int preferredDifficultyId)
+{
+    ++pagePrepareGeneration_;
+    stopAudition();
+    clearPendingSelectionRangeExport();
+
+    const bool retainUserSettings = hasSeededTask_;
+    const VideoExportTask previousTask = task_;
+    task_ = VideoExportTask();
+    if (retainUserSettings) {
+        miacode::video_export::copyVideoExportUserSettings(previousTask, &task_);
+    }
+    chartDurationSeconds_ = 0.0;
+    task_.exportStartSeconds = 0.0;
+    task_.contentDurationSeconds = 0.0;
+    task_.fullRangeExport = true;
+
+    batchSelectedDifficultyIds_.clear();
+    int nextDifficultyId = difficultyExists(preferredDifficultyId)
+        ? preferredDifficultyId : 0;
+    if (nextDifficultyId == 0 && engine() != nullptr) {
+        const QList<int> ids = engine()->difficultyIds();
+        if (!ids.isEmpty()) {
+            nextDifficultyId = ids.constFirst();
+        }
+    }
+    if (selectedDifficultyId_ != nextDifficultyId) {
+        selectedDifficultyId_ = nextDifficultyId;
+        emit selectedDifficultyIdChanged();
+    }
+    rebuildDifficultyList();
+
+    if (pageSessionActive_) {
+        seedFromDifficulty(selectedDifficultyId_);
+        syncAudition();
+    }
+    if (selectedDifficultyId_ <= 0 || !difficultyHasChartBody(selectedDifficultyId_)) {
+        emit outputChanged();
+        emit videoChanged();
+        emit introChanged();
+        emit rangeChanged();
+        emit batchChanged();
+    }
+}
+
 void ExportSession::selectDifficulty(int difficultyId)
 {
     const int next = difficultyExists(difficultyId) ? difficultyId : 0;
