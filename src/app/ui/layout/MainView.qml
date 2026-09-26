@@ -40,9 +40,10 @@ Item {
     readonly property bool editorActive: state.hasActiveEditor && !pages.overlayActive
     readonly property bool chartEditorActive: documentSession.hasDocument
         && documentSession.currentDifficultyId > 0 && !pages.overlayActive
+    readonly property alias mainMenuCommands: menuCommands
     readonly property real minimumWidth: splitView.minimumWorkspaceWidth
-    readonly property real minimumHeight: titleBar.height + platformMenuLoader.height
-        + mainToolBar.height + statusBar.height + splitView.minimumHeight
+    readonly property real minimumHeight: chromeHost.height + statusBar.height
+        + splitView.minimumHeight
     readonly property bool compact: width < minimumWidth + splitView.expandedSidebarWidth
     property bool latencySceneActive: false
 
@@ -221,87 +222,108 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        WindowTitleBar {
-            id: titleBar
+        Item {
+            id: chromeHost
             width: parent.width
-            height: visible ? implicitHeight : 0
-            visible: root.platform.customTitleBar
-            hostWindow: root.hostWindow
-            platform: root.platform
-            menuCommands: menuCommands
-            shortcuts: root.applicationContext.shortcuts
-            documentSession: root.documentSession
-            pet: root.applicationContext.pet
-            saveEnabled: root.editorActive
-            wholeDocumentSaveEnabled: root.documentSession.hasDocument
-            documentAvailable: root.documentSession.hasDocument
-            editorCommandsEnabled: root.editorActive
-            chartCommandsEnabled: root.chartEditorActive
-            toolCommandsEnabled: root.documentSession.hasDocument
-            leadingInset: root.applicationContext.windowChrome
-                ? root.applicationContext.windowChrome.titleBarLeadingInset
-                : 0
-            documentTitle: root.documentTitle
-            normalizationEnabled: root.pages.activePageId !== "export"
-        }
+            height: titleBar.height + platformMenuLoader.height
+                    + (root.platform.nativeMenuBar ? 0 : mainToolBar.height)
 
-        Loader {
-            id: platformMenuLoader
-            width: parent.width
-            height: active ? 30 : 0
-            active: !root.platform.customTitleBar
-            sourceComponent: MainMenu {
-                width: platformMenuLoader.width
-                height: 30
-                availableWidth: width
-                commands: menuCommands
+            WindowTitleBar {
+                id: titleBar
+                width: parent.width
+                height: visible ? implicitHeight : 0
+                visible: root.platform.customTitleBar
+                hostWindow: root.hostWindow
+                platform: root.platform
+                nativeHeight: root.platform.nativeMenuBar
+                    && root.applicationContext.windowChrome
+                    ? root.applicationContext.windowChrome.titleBarHeight
+                    : 0
+                menuCommands: menuCommands
                 shortcuts: root.applicationContext.shortcuts
                 documentSession: root.documentSession
                 pet: root.applicationContext.pet
-                commandsEnabled: true
                 saveEnabled: root.editorActive
                 wholeDocumentSaveEnabled: root.documentSession.hasDocument
                 documentAvailable: root.documentSession.hasDocument
                 editorCommandsEnabled: root.editorActive
                 chartCommandsEnabled: root.chartEditorActive
                 toolCommandsEnabled: root.documentSession.hasDocument
+                leadingInset: root.applicationContext.windowChrome
+                    ? root.applicationContext.windowChrome.titleBarLeadingInset
+                    : 0
+                leadingToolAreaWidth: root.platform.nativeMenuBar
+                    ? mainToolBar.leadingActionsRight : 0
+                trailingToolAreaWidth: root.platform.nativeMenuBar
+                    ? mainToolBar.trailingActionsWidth : 0
+                documentTitle: root.documentTitle
                 normalizationEnabled: root.pages.activePageId !== "export"
             }
-        }
 
-        MainToolBar {
-            id: mainToolBar
-            width: parent.width
-            height: implicitHeight
-            hostWindow: root.hostWindow
-            sidebarActive: root.compact
-                           ? state.compactPanel === "sidebar"
-                           : state.sidebarVisible
-            bottomActive: (state.difficultyEditorActive || state.latencyEditorActive)
-                          && state.bottomPanelVisible && root.timelineSession.panelVisible
-            bottomPanelEnabled: state.difficultyEditorActive || state.latencyEditorActive
-            saveEnabled: root.editorActive
-            canUndo: splitView.canUndo
-            canRedo: splitView.canRedo
-            onToggleSidebarRequested: root.toggleSidebar()
-            onToggleBottomRequested: {
-                state.bottomPanelVisible = !state.bottomPanelVisible
-                root.preferences.bottomPanelVisible = state.bottomPanelVisible
+            Loader {
+                id: platformMenuLoader
+                y: titleBar.height
+                width: parent.width
+                height: active ? 30 : 0
+                active: !root.platform.customTitleBar
+                sourceComponent: MainMenu {
+                    width: platformMenuLoader.width
+                    height: 30
+                    availableWidth: width
+                    commands: menuCommands
+                    shortcuts: root.applicationContext.shortcuts
+                    documentSession: root.documentSession
+                    pet: root.applicationContext.pet
+                    commandsEnabled: true
+                    saveEnabled: root.editorActive
+                    wholeDocumentSaveEnabled: root.documentSession.hasDocument
+                    documentAvailable: root.documentSession.hasDocument
+                    editorCommandsEnabled: root.editorActive
+                    chartCommandsEnabled: root.chartEditorActive
+                    toolCommandsEnabled: root.documentSession.hasDocument
+                    normalizationEnabled: root.pages.activePageId !== "export"
+                }
             }
-            onUndoRequested: root.undo()
-            onRedoRequested: root.redo()
-            onOpenRequested: openFileDialog.open()
-            onSaveRequested: root.saveDocument()
-            onAudioSettingsRequested: audioSettingsDialog.open()
-            onPreviewSettingsRequested: previewSettingsDialog.open()
-            onUnavailableFeatureRequested: featureName => root.showUnavailableFeature(featureName)
+
+            MainToolBar {
+                id: mainToolBar
+                y: root.platform.nativeMenuBar
+                   ? 0
+                   : titleBar.height + platformMenuLoader.height
+                z: root.platform.nativeMenuBar ? 2 : 0
+                width: parent.width
+                height: root.platform.nativeMenuBar ? titleBar.height : implicitHeight
+                hostWindow: root.hostWindow
+                integratedInTitleBar: root.platform.nativeMenuBar
+                titleBarLeadingInset: titleBar.leadingInset
+                sidebarActive: root.compact
+                               ? state.compactPanel === "sidebar"
+                               : state.sidebarVisible
+                bottomActive: (state.difficultyEditorActive || state.latencyEditorActive)
+                              && state.bottomPanelVisible && root.timelineSession.panelVisible
+                bottomPanelEnabled: state.difficultyEditorActive || state.latencyEditorActive
+                saveEnabled: root.editorActive
+                canUndo: splitView.canUndo
+                canRedo: splitView.canRedo
+                onToggleSidebarRequested: root.toggleSidebar()
+                onToggleBottomRequested: {
+                    state.bottomPanelVisible = !state.bottomPanelVisible
+                    root.preferences.bottomPanelVisible = state.bottomPanelVisible
+                }
+                onUndoRequested: root.undo()
+                onRedoRequested: root.redo()
+                onOpenRequested: openFileDialog.open()
+                onSaveRequested: root.saveDocument()
+                onAudioSettingsRequested: audioSettingsDialog.open()
+                onPreviewSettingsRequested: previewSettingsDialog.open()
+                onUnavailableFeatureRequested: featureName => root.showUnavailableFeature(featureName)
+            }
         }
 
         Item {
             id: mainViewHost
             width: parent.width
-            height: parent.height - titleBar.height - platformMenuLoader.height
-                    - mainToolBar.height - statusBar.height
+            height: parent.height - chromeHost.height - statusBar.height
 
             MainSplitView {
                 id: splitView
@@ -359,7 +381,7 @@ Item {
 
     Shortcut {
         sequences: [StandardKey.Close]
-        enabled: root.editorActive
+        enabled: root.editorActive && !root.platform.nativeMenuBar
         onActivated: splitView.requestCloseActiveEditor()
     }
 

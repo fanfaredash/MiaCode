@@ -20,6 +20,7 @@ WindowChrome::WindowChrome(QObject* parent)
 
 WindowChrome::~WindowChrome()
 {
+    stopObservingMacOsFullScreen();
     if (QCoreApplication::instance() != nullptr) {
         QCoreApplication::instance()->removeNativeEventFilter(this);
     }
@@ -32,6 +33,15 @@ void WindowChrome::setTitleBarLeadingInset(qreal inset)
     }
     titleBarLeadingInset_ = inset;
     emit titleBarLeadingInsetChanged();
+}
+
+void WindowChrome::setTitleBarHeight(qreal height)
+{
+    if (qFuzzyCompare(titleBarHeight_, height)) {
+        return;
+    }
+    titleBarHeight_ = height;
+    emit titleBarHeightChanged();
 }
 
 void WindowChrome::attach(QWindow* window)
@@ -59,17 +69,19 @@ void WindowChrome::attach(QWindow* window)
     setTitleBarLeadingInset(0);
 #elif defined(Q_OS_MACOS)
     applyMacOs(window);
+    observeMacOsFullScreen(window);
     QObject::connect(
         window,
-        &QWindow::widthChanged,
+        &QWindow::windowStateChanged,
         this,
-        &WindowChrome::refreshTitleBarMetrics,
-        static_cast<Qt::ConnectionType>(Qt::UniqueConnection));
-    QObject::connect(
-        window,
-        &QWindow::visibleChanged,
-        this,
-        &WindowChrome::handleWindowVisibleChanged,
+        [this](Qt::WindowState state) {
+            if (state == Qt::WindowFullScreen) {
+                setTitleBarLeadingInset(0);
+                return;
+            }
+            setTitleBarLeadingInset(windowedTitleBarLeadingInset_);
+            setTitleBarHeight(windowedTitleBarHeight_);
+        },
         static_cast<Qt::ConnectionType>(Qt::UniqueConnection));
 #else
     Q_UNUSED(window);
@@ -87,13 +99,6 @@ void WindowChrome::refreshTitleBarMetrics()
 #else
     setTitleBarLeadingInset(0);
 #endif
-}
-
-void WindowChrome::handleWindowVisibleChanged(bool visible)
-{
-    if (visible) {
-        refreshTitleBarMetrics();
-    }
 }
 
 bool WindowChrome::nativeEventFilter(const QByteArray& eventType, void* message, qintptr* result)
@@ -198,6 +203,15 @@ void WindowChrome::extendDwmFrame() const
 void WindowChrome::applyMacOs(QWindow* window)
 {
     Q_UNUSED(window);
+}
+
+void WindowChrome::observeMacOsFullScreen(QWindow* window)
+{
+    Q_UNUSED(window);
+}
+
+void WindowChrome::stopObservingMacOsFullScreen()
+{
 }
 #endif
 

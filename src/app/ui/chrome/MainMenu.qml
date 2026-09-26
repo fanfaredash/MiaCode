@@ -24,6 +24,7 @@ Item {
     property bool chartCommandsEnabled: true
     property bool toolCommandsEnabled: true
     property bool normalizationEnabled: true
+    property bool nativeMenuMode: false
     // Re-read each time the menu opens rather than kept live: the list only
     // changes when a document is opened, and a menu nobody is looking at has no
     // reason to hold a copy.
@@ -58,6 +59,10 @@ Item {
 
     function topMenus() {
         return [fileMenu, editMenu, adjustMenu, toolsMenu, previewMenu, extrasMenu]
+    }
+
+    function nativeMenus() {
+        return root.topMenus()
     }
 
     function closeActiveMenu() {
@@ -362,6 +367,7 @@ Item {
             }
             AppMenuAction {
                 text: qsTrId("qml.close_document")
+                shortcut: root.nativeMenuMode ? StandardKey.Close : ""
                 shortcutText: root.shortcuts.standardDisplayText(StandardKey.Close)
                 enabled: root.commandsEnabled && root.documentAvailable
                 onTriggered: root.commands.closeDocumentRequested()
@@ -489,36 +495,57 @@ Item {
             Repeater {
                 model: adjustMenu.transformRows.filter(row => row.section === 0)
                 delegate: AppMenuItem {
+                    id: transformItem
                     required property var modelData
                     objectName: "adjustTransform_" + modelData.id
-                    text: modelData.label
-                    shortcutText: root.shortcuts.displayText(modelData.id)
-                    enabled: root.commandsEnabled && root.chartCommandsEnabled
-                    onTriggered: root.commands.chartTransformRequested(modelData.id)
+                    action: AppMenuAction {
+                        text: transformItem.modelData.label
+                        shortcut: root.nativeMenuMode && root.shortcuts.revision >= 0
+                            ? root.shortcuts.sequence(transformItem.modelData.id)
+                            : ""
+                        shortcutText: root.shortcuts.displayText(transformItem.modelData.id)
+                        enabled: root.commandsEnabled && root.chartCommandsEnabled
+                        onTriggered: root.commands.chartTransformRequested(
+                                         transformItem.modelData.id)
+                    }
                 }
             }
             AppMenuSeparator {}
             Repeater {
                 model: adjustMenu.transformRows.filter(row => row.section === 1)
                 delegate: AppMenuItem {
+                    id: transformItem
                     required property var modelData
                     objectName: "adjustTransform_" + modelData.id
-                    text: modelData.label
-                    shortcutText: root.shortcuts.displayText(modelData.id)
-                    enabled: root.commandsEnabled && root.chartCommandsEnabled
-                    onTriggered: root.commands.chartTransformRequested(modelData.id)
+                    action: AppMenuAction {
+                        text: transformItem.modelData.label
+                        shortcut: root.nativeMenuMode && root.shortcuts.revision >= 0
+                            ? root.shortcuts.sequence(transformItem.modelData.id)
+                            : ""
+                        shortcutText: root.shortcuts.displayText(transformItem.modelData.id)
+                        enabled: root.commandsEnabled && root.chartCommandsEnabled
+                        onTriggered: root.commands.chartTransformRequested(
+                                         transformItem.modelData.id)
+                    }
                 }
             }
             AppMenuSeparator {}
             Repeater {
                 model: adjustMenu.transformRows.filter(row => row.section === 2)
                 delegate: AppMenuItem {
+                    id: transformItem
                     required property var modelData
                     objectName: "adjustTransform_" + modelData.id
-                    text: modelData.label
-                    shortcutText: root.shortcuts.displayText(modelData.id)
-                    enabled: root.commandsEnabled && root.chartCommandsEnabled
-                    onTriggered: root.commands.chartTransformRequested(modelData.id)
+                    action: AppMenuAction {
+                        text: transformItem.modelData.label
+                        shortcut: root.nativeMenuMode && root.shortcuts.revision >= 0
+                            ? root.shortcuts.sequence(transformItem.modelData.id)
+                            : ""
+                        shortcutText: root.shortcuts.displayText(transformItem.modelData.id)
+                        enabled: root.commandsEnabled && root.chartCommandsEnabled
+                        onTriggered: root.commands.chartTransformRequested(
+                                         transformItem.modelData.id)
+                    }
                 }
             }
             AppMenuAction {
@@ -535,12 +562,19 @@ Item {
                 Repeater {
                     model: adjustMenu.transformRows.filter(row => row.section === 3)
                     delegate: AppMenuItem {
+                        id: transformItem
                         required property var modelData
                         objectName: "adjustTransform_" + modelData.id
-                        text: modelData.label
-                        shortcutText: root.shortcuts.displayText(modelData.id)
-                        enabled: root.commandsEnabled && root.chartCommandsEnabled
-                        onTriggered: root.commands.chartTransformRequested(modelData.id)
+                        action: AppMenuAction {
+                            text: transformItem.modelData.label
+                            shortcut: root.nativeMenuMode && root.shortcuts.revision >= 0
+                                ? root.shortcuts.sequence(transformItem.modelData.id)
+                                : ""
+                            shortcutText: root.shortcuts.displayText(transformItem.modelData.id)
+                            enabled: root.commandsEnabled && root.chartCommandsEnabled
+                            onTriggered: root.commands.chartTransformRequested(
+                                             transformItem.modelData.id)
+                        }
                     }
                 }
             }
@@ -550,18 +584,22 @@ Item {
         AppMenu {
             id: previewMenu
             title: qsTrId("metadata.preview_p")
-            // Display-only spellings: ShortcutBindings.qml owns these two
-            // bindings, and a `shortcut:` here would be the second claim on the
-            // same sequence — the very ambiguity that killed them in the File
-            // menu. The rows exist so the binding is discoverable, as in v1.
+            // The native menu owns these bindings on macOS so Cocoa can render
+            // their symbols. Other platforms keep ShortcutBindings as owner.
             AppMenuAction {
                 text: qsTrId("action.preview_speed_down")
+                shortcut: root.nativeMenuMode && root.shortcuts.revision >= 0
+                    ? root.shortcuts.sequence("preview.speed_down", "Ctrl+O")
+                    : ""
                 shortcutText: root.shortcuts.displayText("preview.speed_down", "Ctrl+O")
                 enabled: root.commandsEnabled && root.chartCommandsEnabled
                 onTriggered: root.commands.previewRateStepRequested(-1)
             }
             AppMenuAction {
                 text: qsTrId("action.preview_speed_up")
+                shortcut: root.nativeMenuMode && root.shortcuts.revision >= 0
+                    ? root.shortcuts.sequence("preview.speed_up", "Ctrl+P")
+                    : ""
                 shortcutText: root.shortcuts.displayText("preview.speed_up", "Ctrl+P")
                 enabled: root.commandsEnabled && root.chartCommandsEnabled
                 onTriggered: root.commands.previewRateStepRequested(1)

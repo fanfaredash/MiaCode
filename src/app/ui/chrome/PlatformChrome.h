@@ -11,6 +11,7 @@ class PlatformChrome final : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool customTitleBar READ customTitleBar CONSTANT)
+    Q_PROPERTY(bool nativeMenuBar READ nativeMenuBar CONSTANT)
     Q_PROPERTY(bool embeddedMenuInTitleBar READ embeddedMenuInTitleBar CONSTANT)
     Q_PROPERTY(bool captionButtons READ captionButtons CONSTANT)
     Q_PROPERTY(bool expandClientArea READ expandClientArea CONSTANT)
@@ -32,7 +33,16 @@ public:
 #endif
     }
 
-    bool embeddedMenuInTitleBar() const { return customTitleBar(); }
+    bool nativeMenuBar() const
+    {
+#ifdef Q_OS_MACOS
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    bool embeddedMenuInTitleBar() const { return customTitleBar() && !nativeMenuBar(); }
 
     bool captionButtons() const
     {
@@ -45,16 +55,12 @@ public:
 
     bool expandClientArea() const
     {
-#ifdef Q_OS_MACOS
-        return true;
-#else
         return false;
-#endif
     }
 
     bool hideBeforeChromeAttach() const
     {
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
         return true;
 #else
         return false;
@@ -63,11 +69,7 @@ public:
 
     bool attachChromeAfterShow() const
     {
-#ifdef Q_OS_MACOS
-        return true;
-#else
         return false;
-#endif
     }
 };
 } // namespace miacode::ui

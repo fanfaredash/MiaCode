@@ -689,6 +689,7 @@ set(MIACODE_UI_QML_FILES
     src/app/ui/chrome/WindowCaptionButtons.qml
     src/app/ui/chrome/WindowResizeBorder.qml
     src/app/ui/chrome/MainMenu.qml
+    src/app/ui/chrome/NativeMenuBar.qml
     src/app/ui/chrome/ShortcutBindings.qml
     src/app/ui/chrome/MainMenuCommands.qml
     src/app/ui/chrome/MainToolBar.qml

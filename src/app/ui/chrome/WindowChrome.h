@@ -16,6 +16,7 @@ class WindowChrome final : public QObject, public QAbstractNativeEventFilter
 {
     Q_OBJECT
     Q_PROPERTY(qreal titleBarLeadingInset READ titleBarLeadingInset NOTIFY titleBarLeadingInsetChanged FINAL)
+    Q_PROPERTY(qreal titleBarHeight READ titleBarHeight NOTIFY titleBarHeightChanged FINAL)
 
 public:
     explicit WindowChrome(QObject* parent = nullptr);
@@ -25,20 +26,31 @@ public:
     // Remeasure traffic-light clearance after native layout is ready.
     Q_INVOKABLE void refreshTitleBarMetrics();
     qreal titleBarLeadingInset() const { return titleBarLeadingInset_; }
+    qreal titleBarHeight() const { return titleBarHeight_; }
 
     bool nativeEventFilter(const QByteArray& eventType, void* message, qintptr* result) override;
 
 signals:
     void titleBarLeadingInsetChanged();
+    void titleBarHeightChanged();
 
 private:
     void extendDwmFrame() const;
     void applyMacOs(QWindow* window);
+    void observeMacOsFullScreen(QWindow* window);
+    void stopObservingMacOsFullScreen();
     void setTitleBarLeadingInset(qreal inset);
-    void handleWindowVisibleChanged(bool visible);
+    void setTitleBarHeight(qreal height);
 
     QPointer<QWindow> window_;
     quintptr nativeHandle_ = 0;
     qreal titleBarLeadingInset_ = 0;
+    qreal titleBarHeight_ = 0;
+    qreal windowedTitleBarLeadingInset_ = 0;
+    qreal windowedTitleBarHeight_ = 0;
+    void* macWillEnterFullScreenObserver_ = nullptr;
+    void* macDidEnterFullScreenObserver_ = nullptr;
+    void* macWillExitFullScreenObserver_ = nullptr;
+    void* macDidExitFullScreenObserver_ = nullptr;
 };
 } // namespace miacode::ui

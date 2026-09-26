@@ -24,6 +24,8 @@ Item {
     // Transforms edit the chart, so they are inert without one.
     property bool chartCommandsEnabled: true
     property bool playbackCommandsEnabled: true
+    property bool menuOwnsChartTransformShortcuts: false
+    property bool menuOwnsPreviewRateShortcuts: false
 
     // A transform acts on the editor's selection, which only the editor knows.
     // Routing it through the backend meant reading a hidden widget's cursor
@@ -39,7 +41,9 @@ Item {
             sequence: root.shortcuts.revision >= 0
                 ? root.shortcuts.sequence(modelData)
                 : ""
-            enabled: root.chartCommandsEnabled && sequence !== ""
+            enabled: root.chartCommandsEnabled
+                     && !root.menuOwnsChartTransformShortcuts
+                     && sequence !== ""
             context: Qt.WindowShortcut
             onActivated: root.chartTransformRequested(modelData)
         }
@@ -89,7 +93,9 @@ Item {
         sequence: root.shortcuts.revision >= 0
             ? root.shortcuts.sequence("preview.speed_down", "Ctrl+O")
             : ""
-        enabled: root.playbackCommandsEnabled && sequence !== ""
+        enabled: root.playbackCommandsEnabled
+                 && !root.menuOwnsPreviewRateShortcuts
+                 && sequence !== ""
         context: Qt.WindowShortcut
         onActivated: root.previewSession.adjustRate(-1)
     }
@@ -98,7 +104,9 @@ Item {
         sequence: root.shortcuts.revision >= 0
             ? root.shortcuts.sequence("preview.speed_up", "Ctrl+P")
             : ""
-        enabled: root.playbackCommandsEnabled && sequence !== ""
+        enabled: root.playbackCommandsEnabled
+                 && !root.menuOwnsPreviewRateShortcuts
+                 && sequence !== ""
         context: Qt.WindowShortcut
         onActivated: root.previewSession.adjustRate(1)
     }

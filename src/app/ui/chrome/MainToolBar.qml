@@ -23,9 +23,16 @@ Rectangle {
     property bool bottomPanelEnabled: true
     property bool canUndo: false
     property bool canRedo: false
+    property bool integratedInTitleBar: false
+    property real titleBarLeadingInset: 0
+
+    readonly property real leadingActionsRight: leftActions.x + leftActions.width
+    readonly property real trailingActionsWidth: width - rightActions.x
 
     implicitHeight: 32
-    color: Theme.surfaceColor(Theme.colors.background.activityBar)
+    color: root.integratedInTitleBar
+           ? "transparent"
+           : Theme.surfaceColor(Theme.colors.background.activityBar)
 
     component ToolBarButton: IconButton {
         stateColors: Theme.colors.activityState
@@ -34,13 +41,18 @@ Rectangle {
     WindowGestureArea {
         anchors.fill: parent
         hostWindow: root.hostWindow
+        visible: !root.integratedInTitleBar
         z: 0
     }
 
     Row {
         id: leftActions
         anchors.left: parent.left
-        anchors.leftMargin: 8
+        anchors.leftMargin: root.integratedInTitleBar
+                            ? (root.titleBarLeadingInset > 0
+                               ? root.titleBarLeadingInset
+                               : Theme.chromePadding)
+                            : 8
         anchors.verticalCenter: parent.verticalCenter
         spacing: 5
         z: 1
